@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import InventarioRegistro, LineaPedido, Pedido, Proveedor, User
+from app.models import HistorialPrecio, Ingrediente, InventarioRegistro, LineaPedido, Pedido, Proveedor, User
+from app.services.stock import get_saldo_materia_prima, registrar_movimiento
 from app.permissions import require_permission
 from app.schemas import (
     LineaPedidoIn,
@@ -180,19 +181,35 @@ def recibir_pedido(
     p.estado = "recibido"
     p.fecha_recepcion = date.today()
     for linea in p.lineas:
-        cantidad = (
+        cantidad_recibida = (
             linea.cantidad_recibida
             if linea.cantidad_recibida is not None
             else linea.cantidad_pedida
         )
-        registro = InventarioRegistro(
+        saldo_actual = get_saldo_materia_prima(db, linea.ingrediente_id)
+        nuevo_saldo = saldo_actual + cantidad_recibida
+        db.add(InventarioRegistro(
             ingrediente_id=linea.ingrediente_id,
-            cantidad=cantidad,
+            cantidad=nuevo_saldo,
             unidad=linea.unidad,
             fecha_registro=date.today(),
-            notas=f"Pedido #{pedido_id} recibido",
+            notas=f"Pedido #{pedido_id} recibido (+{cantidad_recibida})",
+        ))
+        registrar_movimiento(
+            db, "materia_prima", linea.ingrediente_id, +cantidad_recibida,
+            linea.unidad, "recepcion", f"pedido:{pedido_id}", nuevo_saldo, user.id,
         )
-        db.add(registro)
+        if linea.precio_unitario:
+            ing = db.query(Ingrediente).filter(Ingrediente.id == linea.ingrediente_id).first()
+            if ing and ing.precio_compra != linea.precio_unitario:
+                db.add(HistorialPrecio(
+                    ingrediente_id=ing.id,
+                    precio_anterior=ing.precio_compra,
+                    precio_nuevo=linea.precio_unitario,
+                    fecha_cambio=date.today(),
+                ))
+                ing.precio_compra = linea.precio_unitario
+                ing.fecha_actualizacion = date.today()
     db.commit()
     p = _load_pedido(db, pedido_id)
     return _pedido_out(p)

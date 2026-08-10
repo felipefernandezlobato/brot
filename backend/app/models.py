@@ -615,3 +615,25 @@ class LineaEntregaB2B(Base):
 
     entrega: Mapped["EntregaB2B"] = relationship(back_populates="lineas")
     producto: Mapped["ProductoCatalogo"] = relationship()
+
+
+# ============================================================
+# Stock Movement Ledger
+# ============================================================
+
+
+class MovimientoStock(Base):
+    __tablename__ = "movimientos_stock"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tipo_stock: Mapped[str] = mapped_column(sa.String(20))
+    referencia_producto_id: Mapped[int] = mapped_column(sa.Integer)
+    cantidad: Mapped[float] = mapped_column(sa.Float)
+    unidad: Mapped[str] = mapped_column(sa.String(20))
+    tipo_movimiento: Mapped[str] = mapped_column(sa.String(30))
+    referencia_origen: Mapped[Optional[str]] = mapped_column(sa.String(100), nullable=True)
+    saldo_despues: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
+    fecha: Mapped[date] = mapped_column(sa.Date, default=date.today)
+    notas: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
+    registrado_por: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    registrado_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))

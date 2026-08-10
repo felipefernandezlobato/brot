@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Ingrediente, MermaRegistro, User
+from app.models import Ingrediente, MermaRegistro, ProductoCongelado, User
 from app.permissions import require_permission
 from app.schemas import MermaRegistroCreate, MermaRegistroOut, MermaRegistroUpdate
 from app.services.costes import costo_por_unidad_uso
+from app.services.stock import deducir_congelado_fifo, deducir_materia_prima
 
 router = APIRouter(prefix="/api/mermas", tags=["mermas"])
 
@@ -145,6 +146,21 @@ def create_merma(
 
     merma = MermaRegistro(**dump)
     db.add(merma)
+    db.flush()
+
+    ref = f"merma:{merma.id}"
+    if data.ingrediente_id:
+        deducir_materia_prima(
+            db, data.ingrediente_id, data.cantidad,
+            ing.unidad_uso, ref, user.id,
+        )
+    elif data.receta_id:
+        prod_cong = db.query(ProductoCongelado).filter(
+            ProductoCongelado.receta_id == data.receta_id
+        ).first()
+        if prod_cong:
+            deducir_congelado_fifo(db, prod_cong.id, data.cantidad, ref, user.id)
+
     db.commit()
     db.refresh(merma)
     return merma

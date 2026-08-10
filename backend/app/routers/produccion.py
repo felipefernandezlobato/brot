@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Receta, RegistroProduccion, TareaProduccion, User
+from app.models import MovimientoStock, Receta, RegistroProduccion, TareaProduccion, User
+from app.services.stock import deducir_por_receta, registrar_produccion_stock
 from app.permissions import require_permission
 from app.schemas import (
     RegistroExtraCreate,
@@ -185,6 +186,26 @@ def get_dia(
 # ==============================================================
 
 
+def _aplicar_efectos_stock(db: Session, reg: RegistroProduccion, user_id: int):
+    if not reg.completada or not reg.cantidad_real or reg.cantidad_real <= 0:
+        return
+    receta_id = reg.receta_id or (reg.tarea.receta_id if reg.tarea else None)
+    if not receta_id:
+        return
+    ref = f"registro_produccion:{reg.id}"
+    ya_existe = db.query(MovimientoStock).filter(
+        MovimientoStock.referencia_origen == ref
+    ).first()
+    if ya_existe:
+        return
+    receta = db.query(Receta).filter(Receta.id == receta_id).first()
+    if not receta or not receta.porciones_por_lote:
+        return
+    lotes = reg.cantidad_real / receta.porciones_por_lote
+    deducir_por_receta(db, receta_id, lotes, ref, user_id)
+    registrar_produccion_stock(db, receta_id, reg.cantidad_real, ref, user_id)
+
+
 @router.post("/registro", response_model=RegistroProduccionOut, status_code=201)
 def upsert_registro(
     data: RegistroProduccionCreate,
@@ -208,6 +229,7 @@ def upsert_registro(
         existing.cantidad_real = data.cantidad_real
         existing.duracion_real = data.duracion_real
         existing.notas = data.notas
+        _aplicar_efectos_stock(db, existing, user.id)
         db.commit()
         db.refresh(existing)
         return _registro_to_out(existing)
@@ -222,6 +244,8 @@ def upsert_registro(
         registrado_por=user.id,
     )
     db.add(reg)
+    db.flush()
+    _aplicar_efectos_stock(db, reg, user.id)
     db.commit()
     db.refresh(reg)
     return _registro_to_out(reg)
@@ -248,6 +272,8 @@ def create_extra(
         registrado_por=user.id,
     )
     db.add(reg)
+    db.flush()
+    _aplicar_efectos_stock(db, reg, user.id)
     db.commit()
     db.refresh(reg)
     return _registro_to_out(reg)

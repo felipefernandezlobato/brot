@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import ClienteB2B, EntregaB2B, LineaEntregaB2B, ProductoCatalogo, User
+from app.services.stock import deducir_congelado_por_catalogo
 from app.permissions import require_permission
 from app.schemas import (
     ClienteB2BCreate,
@@ -202,6 +203,11 @@ def create_entrega_b2b(
             precio_unitario=l.precio_unitario,
         )
         db.add(linea)
+        if data.estado == "entregado":
+            deducir_congelado_por_catalogo(
+                db, l.producto_id, l.cantidad,
+                f"entrega_b2b:{entrega.id}", "entrega_b2b", user.id,
+            )
     db.commit()
     db.refresh(entrega, ["lineas"])
     return _entrega_out(entrega)
@@ -271,10 +277,22 @@ def update_estado_entrega_b2b(
     user: User = require_permission("entregas_b2b", "edit"),
     db: Session = Depends(get_db),
 ):
-    entrega = db.query(EntregaB2B).filter(EntregaB2B.id == entrega_id).first()
+    entrega = (
+        db.query(EntregaB2B)
+        .options(joinedload(EntregaB2B.lineas))
+        .filter(EntregaB2B.id == entrega_id)
+        .first()
+    )
     if not entrega:
         raise HTTPException(status_code=404, detail="Entrega B2B no encontrada")
+    was_entregado = entrega.estado == "entregado"
     entrega.estado = body.estado
+    if body.estado == "entregado" and not was_entregado:
+        for l in entrega.lineas:
+            deducir_congelado_por_catalogo(
+                db, l.producto_id, l.cantidad,
+                f"entrega_b2b:{entrega.id}", "entrega_b2b", user.id,
+            )
     db.commit()
     db.refresh(entrega)
     return {"id": entrega.id, "estado": entrega.estado}

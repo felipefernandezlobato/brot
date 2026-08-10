@@ -940,3 +940,19 @@ class EntregaB2BOut(BaseModel):
     notas: Optional[str] = None
     created_at: datetime
     lineas: list[LineaEntregaB2BOut] = []
+
+
+# --- Movimientos Stock ---
+class MovimientoStockOut(BaseModel):
+    id: int
+    tipo_stock: str
+    referencia_producto_id: int
+    cantidad: float
+    unidad: str
+    tipo_movimiento: str
+    referencia_origen: Optional[str] = None
+    saldo_despues: Optional[float] = None
+    fecha: date
+    notas: Optional[str] = None
+    registrado_por: Optional[int] = None
+    registrado_at: datetime
