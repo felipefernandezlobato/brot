@@ -4,19 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Inicio", icon: "🏠" },
-  { href: "/ingredientes", label: "Ingredientes", icon: "🧂" },
-  { href: "/stock", label: "Stock", icon: "📦" },
-  { href: "/escandallos", label: "Escandallos", icon: "📋" },
-  { href: "/proveedores", label: "Proveedores", icon: "🏪" },
-  { href: "/pedidos", label: "Pedidos", icon: "🛒" },
-  { href: "/mermas", label: "Mermas", icon: "♻️" },
-  { href: "/produccion", label: "Producción", icon: "🏭" },
-  { href: "/congelados", label: "Congelados", icon: "❄️" },
-  { href: "/entregas", label: "Entregas B2B", icon: "🚚" },
-  { href: "/protocolos", label: "Protocolos", icon: "✅" },
-  { href: "/competencia", label: "Competencia", icon: "🏷️", admin: true },
-  { href: "/admin", label: "Admin", icon: "⚙️", admin: true },
+  { href: "/", label: "Inicio" },
+  { href: "/ingredientes", label: "Ingredientes" },
+  { href: "/stock", label: "Stock" },
+  { href: "/escandallos", label: "Escandallos" },
+  { href: "/proveedores", label: "Proveedores" },
+  { href: "/pedidos", label: "Pedidos" },
+  { href: "/mermas", label: "Mermas" },
+  { href: "/produccion", label: "Producción" },
+  { href: "/congelados", label: "Congelados" },
+  { href: "/entregas", label: "Entregas B2B" },
+  { href: "/protocolos", label: "Protocolos" },
+  { href: "/competencia", label: "Competencia", admin: true },
+  { href: "/admin", label: "Admin", admin: true },
 ];
 
 export function Sidebar({ role }: { role: string }) {
@@ -48,7 +48,6 @@ export function Sidebar({ role }: { role: string }) {
                   : "text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
-              <span>{item.icon}</span>
               {item.label}
             </Link>
           );

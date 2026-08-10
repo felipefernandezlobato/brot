@@ -44,7 +44,6 @@ export default function AdminLayout({
   if (!user || user.role !== "admin") {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-        <div className="text-4xl">🔒</div>
         <p className="text-xl font-medium text-text">Acceso denegado</p>
         <p className="text-sm text-warm-gray">
           Solo los administradores pueden acceder a esta sección.

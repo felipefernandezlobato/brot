@@ -194,7 +194,7 @@ export default function CongeladosPage() {
       {alertas.length > 0 && (
         <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
           <p className="text-sm font-medium text-amber-800 mb-2">
-            ⚠️ Alertas de vencimiento ({alertas.length})
+            Alertas de vencimiento ({alertas.length})
           </p>
           <ul className="space-y-1">
             {alertas.map((a) => (

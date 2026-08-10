@@ -105,7 +105,7 @@ export default function StockPage() {
             onClick={() => router.push("/stock/alertas")}
             className="border border-amber-500 text-amber-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-amber-50 transition-colors min-h-[44px] whitespace-nowrap"
           >
-            🔔 Alertas {sinStock + stockBajo > 0 && `(${sinStock + stockBajo})`}
+            Alertas {sinStock + stockBajo > 0 && `(${sinStock + stockBajo})`}
           </button>
           <PermissionGate module="inventario" action="write">
             <button

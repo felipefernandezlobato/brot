@@ -249,7 +249,6 @@ export default function ImportarPage() {
           className="hidden"
           onChange={handleInputChange}
         />
-        <div className="text-4xl select-none">📂</div>
         <div className="text-center">
           <p className="text-sm font-medium text-text">
             Arrastra un CSV aquí o haz clic para seleccionar

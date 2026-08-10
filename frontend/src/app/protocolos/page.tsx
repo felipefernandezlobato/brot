@@ -38,11 +38,11 @@ interface ProtocoloHoy {
 
 type TabKey = "apertura" | "cierre" | "semanal" | "mensual";
 
-const TABS: { key: TabKey; label: string; icon: string }[] = [
-  { key: "apertura", label: "Apertura", icon: "🌅" },
-  { key: "cierre", label: "Cierre", icon: "🌙" },
-  { key: "semanal", label: "Semanal", icon: "📆" },
-  { key: "mensual", label: "Mensual", icon: "📅" },
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "apertura", label: "Apertura" },
+  { key: "cierre", label: "Cierre" },
+  { key: "semanal", label: "Semanal" },
+  { key: "mensual", label: "Mensual" },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -318,7 +318,6 @@ export default function ProtocolosPage() {
                   : "border-transparent text-warm-gray hover:text-text"
               }`}
             >
-              <span>{tab.icon}</span>
               {tab.label}
             </button>
           ))}
@@ -356,7 +355,6 @@ export default function ProtocolosPage() {
               className="flex items-center justify-between bg-white border border-cream-dark rounded-xl px-4 py-3 mb-4 hover:bg-cream transition-colors group"
             >
               <div className="flex items-center gap-3">
-                <span className="text-xl">🌡️</span>
                 <div>
                   <p className="text-sm font-medium text-text">
                     Registro de temperaturas

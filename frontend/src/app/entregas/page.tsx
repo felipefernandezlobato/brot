@@ -268,7 +268,7 @@ export default function EntregasPage() {
                                 onClick={() => setChangingEstadoId(null)}
                                 className="px-2 py-0.5 rounded-full text-xs text-warm-gray hover:text-text"
                               >
-                                ✕
+                                ×
                               </button>
                             </div>
                           ) : (
@@ -358,7 +358,7 @@ export default function EntregasPage() {
                           onClick={() => setChangingEstadoId(null)}
                           className="px-2 py-0.5 rounded-full text-xs text-warm-gray"
                         >
-                          ✕
+                          ×
                         </button>
                       </div>
                     ) : (

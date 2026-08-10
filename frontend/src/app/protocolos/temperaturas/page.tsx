@@ -219,7 +219,7 @@ export default function TemperaturasPage() {
                       </div>
                       {isAlert && (
                         <span className="text-xs font-semibold text-red-600 flex-shrink-0">
-                          ⚠️ Alta
+                          Alta
                         </span>
                       )}
                       <div className="flex items-center gap-1 flex-shrink-0">

@@ -117,7 +117,6 @@ export default function AlertasStockPage() {
         </div>
       ) : alertas.length === 0 ? (
         <div className="bg-white rounded-xl border border-cream-dark p-8 text-center">
-          <p className="text-4xl mb-3">✅</p>
           <p className="text-text font-medium">Todo en orden</p>
           <p className="text-warm-gray text-sm mt-1">
             No hay ingredientes con stock bajo o sin stock.

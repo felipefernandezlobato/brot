@@ -4,18 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Inicio", icon: "🏠" },
-  { href: "/ingredientes", label: "Ingredientes", icon: "🧂" },
-  { href: "/stock", label: "Stock", icon: "📦" },
-  { href: "/escandallos", label: "Escandallos", icon: "📋" },
-  { href: "/proveedores", label: "Proveedores", icon: "🏪" },
-  { href: "/pedidos", label: "Pedidos", icon: "🛒" },
-  { href: "/mermas", label: "Mermas", icon: "♻️" },
-  { href: "/produccion", label: "Producción", icon: "🏭" },
-  { href: "/congelados", label: "Congelados", icon: "❄️" },
-  { href: "/entregas", label: "Entregas", icon: "🚚" },
-  { href: "/protocolos", label: "Protocolos", icon: "✅" },
-  { href: "/admin", label: "Admin", icon: "⚙️", admin: true },
+  { href: "/", label: "Inicio" },
+  { href: "/ingredientes", label: "Ingredientes" },
+  { href: "/stock", label: "Stock" },
+  { href: "/escandallos", label: "Escandallos" },
+  { href: "/proveedores", label: "Proveedores" },
+  { href: "/pedidos", label: "Pedidos" },
+  { href: "/mermas", label: "Mermas" },
+  { href: "/produccion", label: "Producción" },
+  { href: "/congelados", label: "Congelados" },
+  { href: "/entregas", label: "Entregas" },
+  { href: "/protocolos", label: "Protocolos" },
+  { href: "/admin", label: "Admin", admin: true },
 ];
 
 export function BottomNav({ role }: { role: string }) {
@@ -38,8 +38,7 @@ export function BottomNav({ role }: { role: string }) {
                 active ? "text-brot" : "text-warm-gray"
               }`}
             >
-              <span className="text-lg">{item.icon}</span>
-              <span className="text-[10px] mt-0.5">{item.label}</span>
+              <span className="text-[10px]">{item.label}</span>
             </Link>
           );
         })}

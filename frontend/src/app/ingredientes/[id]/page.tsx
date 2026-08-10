@@ -200,7 +200,7 @@ export default function IngredienteDetailPage() {
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-cream-dark bg-white text-warm-gray hover:border-brot hover:text-brot transition-colors min-h-[44px] text-sm font-medium"
             title="Editar"
           >
-            ✏️ Editar
+            Editar
           </button>
         )}
       </div>
