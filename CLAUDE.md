@@ -401,16 +401,36 @@ GET  /api/export/csv
 
 ## Deploy
 
-- **Vercel:** Auto-deploys frontend on git push to `main`
-  - Env var: `NEXT_PUBLIC_API_URL` = Render backend URL
-- **Render:** Auto-deploys backend on git push to `main`
-  - Env vars: `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS`
-  - Start command: `bash start.sh`
-- **Neon:** Create database `brot` in existing or new Neon project
+**Production URLs:**
+- Frontend: https://brot.vercel.app
+- Backend: https://brot-api.onrender.com
+
+**Database:** Neon PostgreSQL (project: `BROT`, region: `aws-eu-central-1`)
+- Connection: `postgresql://neondb_owner:npg_l2UDXiHuW7KJ@ep-noisy-star-b2b44bno.c-6.eu-central-1.aws.neon.tech/neondb?sslmode=require`
+
+**Deploy Checklist:**
+1. `git push` — triggers Vercel auto-deploy for frontend
+2. Render auto-deploys backend on push to `main`
+3. Wait ~2-3 min, then verify: `curl -s -o /dev/null -w "%{http_code}" https://brot-api.onrender.com/api/auth/users` (expect 200)
+
+**Environment variables (already configured):**
+- Render: `DATABASE_URL` (Neon URL), `SECRET_KEY`, `CORS_ORIGINS` (https://brot.vercel.app)
+- Vercel: `NEXT_PUBLIC_API_URL` = `https://brot-api.onrender.com`
+
+**Render config:** Root directory `backend`, build `pip install -r requirements.txt`, start `bash start.sh`
+
+Render start command runs `alembic upgrade head` + uvicorn — migrations auto-apply on every deploy.
 
 ---
 
 ## Local Development
+
+Two options for local dev:
+1. **Connect to Neon (recommended)** — same data as production:
+   ```bash
+   DATABASE_URL="postgresql://neondb_owner:npg_l2UDXiHuW7KJ@ep-noisy-star-b2b44bno.c-6.eu-central-1.aws.neon.tech/neondb?sslmode=require" uvicorn app.main:app --reload --port 8003
+   ```
+2. **Use local SQLite** — no env var needed, isolated dev database (data lost on restart if in-memory)
 
 ```bash
 # Backend
@@ -418,7 +438,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-DATABASE_URL="postgresql://..." uvicorn app.main:app --reload --port 8003
+DATABASE_URL="postgresql://neondb_owner:npg_l2UDXiHuW7KJ@ep-noisy-star-b2b44bno.c-6.eu-central-1.aws.neon.tech/neondb?sslmode=require" uvicorn app.main:app --reload --port 8003
 
 # Frontend
 cd frontend
