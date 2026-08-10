@@ -216,36 +216,44 @@ def get_log(
     return [_log_to_out(log) for log in q.order_by(LogProduccion.target_date).all()]
 
 
-@router.post("/log", response_model=LogProduccionOut, status_code=201)
+@router.post("/log", status_code=201)
 def create_log(
-    data: LogProduccionCreate,
+    data: LogProduccionCreate | list[LogProduccionCreate],
     user: User = require_permission("produccion", "create"),
     db: Session = Depends(get_db),
 ):
-    # Enforce unique (producto_id, target_date)
-    existing = (
-        db.query(LogProduccion)
-        .filter(
-            LogProduccion.producto_id == data.producto_id,
-            LogProduccion.target_date == data.target_date,
+    items = data if isinstance(data, list) else [data]
+    results = []
+    for item in items:
+        if item.actual_qty is None and item.duration_minutes_machine is None and item.duration_minutes_human is None:
+            continue
+        existing = (
+            db.query(LogProduccion)
+            .filter(
+                LogProduccion.producto_id == item.producto_id,
+                LogProduccion.target_date == item.target_date,
+            )
+            .first()
         )
-        .first()
-    )
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail="Ya existe un registro para este producto y fecha",
-        )
-
-    p = db.query(ProductoProduccion).filter(ProductoProduccion.id == data.producto_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-
-    log = LogProduccion(**data.model_dump())
-    db.add(log)
+        if existing:
+            for field, val in item.model_dump(exclude_unset=True).items():
+                if field not in ("producto_id", "target_date"):
+                    setattr(existing, field, val)
+            results.append(existing)
+        else:
+            p = db.query(ProductoProduccion).filter(ProductoProduccion.id == item.producto_id).first()
+            if not p:
+                continue
+            log = LogProduccion(**item.model_dump())
+            log.recorded_by = user.id
+            db.add(log)
+            results.append(log)
     db.commit()
-    db.refresh(log)
-    return _log_to_out(log)
+    for r in results:
+        db.refresh(r)
+    if isinstance(data, list):
+        return [_log_to_out(r) for r in results]
+    return _log_to_out(results[0]) if results else {"ok": True}
 
 
 @router.put("/log/{log_id}", response_model=LogProduccionOut)

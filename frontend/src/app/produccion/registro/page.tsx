@@ -171,6 +171,7 @@ export default function RegistroProduccionPage() {
     try {
       const payload = items.map((item) => ({
         producto_id: item.producto_id,
+        target_date: fecha,
         actual_qty: item.cantidad_real !== "" ? Number(item.cantidad_real) : null,
         duration_minutes_machine:
           item.tiempo_maquina !== "" ? Number(item.tiempo_maquina) : null,

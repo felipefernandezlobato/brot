@@ -410,7 +410,7 @@ class LogProduccionCreate(BaseModel):
     duration_minutes_human: Optional[int] = None
     is_unplanned: bool = False
     notes: Optional[str] = None
-    recorded_by: int
+    recorded_by: Optional[int] = None
 
 
 class LogProduccionUpdate(BaseModel):
