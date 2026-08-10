@@ -38,13 +38,17 @@ from app.routers import (  # noqa: E402
     catalogo,
     catalogo_admin,
     categorias,
+    competencia,
     congelados,
+    entregas_b2b,
     ingredientes,
     mermas,
+    pedidos,
     pedidos_clientes,
     pedidos_clientes_admin,
     permisos,
     produccion,
+    proveedores,
     recetas,
     recurrentes,
 )
@@ -63,6 +67,11 @@ app.include_router(pedidos_clientes.router)
 app.include_router(pedidos_clientes_admin.router)
 app.include_router(recurrentes.router)
 app.include_router(produccion.router)
+app.include_router(proveedores.router)
+app.include_router(pedidos.router)
+app.include_router(entregas_b2b.clientes_router)
+app.include_router(entregas_b2b.router)
+app.include_router(competencia.router)
 
 
 @app.get("/api/health")
