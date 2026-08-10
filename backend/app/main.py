@@ -32,7 +32,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.routers import auth, auth_cliente, categorias, ingredientes, mermas, permisos, recetas  # noqa: E402
+from app.routers import (  # noqa: E402
+    auth,
+    auth_cliente,
+    catalogo,
+    catalogo_admin,
+    categorias,
+    congelados,
+    ingredientes,
+    mermas,
+    pedidos_clientes,
+    pedidos_clientes_admin,
+    permisos,
+    produccion,
+    recetas,
+    recurrentes,
+)
 
 app.include_router(auth.router)
 app.include_router(auth_cliente.router)
@@ -41,6 +56,13 @@ app.include_router(categorias.router)
 app.include_router(ingredientes.router)
 app.include_router(recetas.router)
 app.include_router(mermas.router)
+app.include_router(congelados.router)
+app.include_router(catalogo.router)
+app.include_router(catalogo_admin.router)
+app.include_router(pedidos_clientes.router)
+app.include_router(pedidos_clientes_admin.router)
+app.include_router(recurrentes.router)
+app.include_router(produccion.router)
 
 
 @app.get("/api/health")

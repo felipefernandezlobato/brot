@@ -497,6 +497,7 @@ class StockCongeladoOut(BaseModel):
     ubicacion: Optional[str] = None
     notas: Optional[str] = None
     is_active: bool
+    producto_nombre: Optional[str] = None
 
 
 # ============================================================
