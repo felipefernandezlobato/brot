@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brot: #004225;
+  --color-brot-dark: #00331C;
+  --color-brot-light: #005C34;
+  --color-cream: #F5F0E8;
+  --color-cream-dark: #E8DFD3;
+  --color-warm-gray: #6B5E52;
+  --color-text: #1A1A1A;
+  --font-garamond: var(--font-eb-garamond);
+  --font-sans: var(--font-dm-sans);
+}
+
+html {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-cream);
+}
+
+input, select, textarea {
+  font-size: max(16px, 1rem);
+}
