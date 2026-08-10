@@ -8,30 +8,27 @@ import { PermissionGate } from "@/components/PermissionGate";
 interface Proveedor {
   id: number;
   nombre: string;
-  contacto: string | null;
+  notas: string | null;
+  lead_time_dias: number;
+  ciclo_pedido_dias: number | null;
   telefono: string | null;
   email: string | null;
-  direccion: string | null;
-  notas: string | null;
-  activo: boolean;
 }
 
 interface ProveedorForm {
   nombre: string;
-  contacto: string;
+  notas: string;
+  lead_time_dias: string;
   telefono: string;
   email: string;
-  direccion: string;
-  notas: string;
 }
 
 const EMPTY_FORM: ProveedorForm = {
   nombre: "",
-  contacto: "",
+  notas: "",
+  lead_time_dias: "",
   telefono: "",
   email: "",
-  direccion: "",
-  notas: "",
 };
 
 export default function ProveedoresPage() {
@@ -73,7 +70,6 @@ export default function ProveedoresPage() {
     const q = buscar.toLowerCase();
     return (
       p.nombre.toLowerCase().includes(q) ||
-      (p.contacto ?? "").toLowerCase().includes(q) ||
       (p.email ?? "").toLowerCase().includes(q)
     );
   });
@@ -91,11 +87,10 @@ export default function ProveedoresPage() {
         method: "POST",
         body: JSON.stringify({
           nombre: createForm.nombre.trim(),
-          contacto: createForm.contacto || null,
+          notas: createForm.notas || null,
+          lead_time_dias: parseInt(createForm.lead_time_dias) || 0,
           telefono: createForm.telefono || null,
           email: createForm.email || null,
-          direccion: createForm.direccion || null,
-          notas: createForm.notas || null,
         }),
       });
       toast("Proveedor creado");
@@ -115,11 +110,10 @@ export default function ProveedoresPage() {
     setEditId(p.id);
     setEditForm({
       nombre: p.nombre,
-      contacto: p.contacto ?? "",
+      notas: p.notas ?? "",
+      lead_time_dias: String(p.lead_time_dias),
       telefono: p.telefono ?? "",
       email: p.email ?? "",
-      direccion: p.direccion ?? "",
-      notas: p.notas ?? "",
     });
   };
 
@@ -132,11 +126,10 @@ export default function ProveedoresPage() {
         method: "PUT",
         body: JSON.stringify({
           nombre: editForm.nombre.trim(),
-          contacto: editForm.contacto || null,
+          notas: editForm.notas || null,
+          lead_time_dias: parseInt(editForm.lead_time_dias) || 0,
           telefono: editForm.telefono || null,
           email: editForm.email || null,
-          direccion: editForm.direccion || null,
-          notas: editForm.notas || null,
         }),
       });
       toast("Proveedor actualizado");
@@ -217,21 +210,22 @@ export default function ProveedoresPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-text mb-1">
-                Contacto
+                Lead time (dias)
               </label>
               <input
-                type="text"
-                value={createForm.contacto}
+                type="number"
+                value={createForm.lead_time_dias}
                 onChange={(e) =>
-                  setCreateForm((f) => ({ ...f, contacto: e.target.value }))
+                  setCreateForm((f) => ({ ...f, lead_time_dias: e.target.value }))
                 }
-                placeholder="Nombre de contacto"
+                placeholder="Ej: 3"
+                min="0"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-text mb-1">
-                Teléfono
+                Telefono
               </label>
               <input
                 type="tel"
@@ -254,20 +248,6 @@ export default function ProveedoresPage() {
                   setCreateForm((f) => ({ ...f, email: e.target.value }))
                 }
                 placeholder="proveedor@ejemplo.com"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-text mb-1">
-                Dirección
-              </label>
-              <input
-                type="text"
-                value={createForm.direccion}
-                onChange={(e) =>
-                  setCreateForm((f) => ({ ...f, direccion: e.target.value }))
-                }
-                placeholder="Dirección del proveedor"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
               />
             </div>
@@ -312,7 +292,7 @@ export default function ProveedoresPage() {
       <div className="mb-4">
         <input
           type="search"
-          placeholder="Buscar por nombre, contacto o email..."
+          placeholder="Buscar por nombre o email..."
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
           className="w-full px-4 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
@@ -355,23 +335,24 @@ export default function ProveedoresPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-text mb-1">
-                        Contacto
+                        Lead time (dias)
                       </label>
                       <input
-                        type="text"
-                        value={editForm.contacto}
+                        type="number"
+                        value={editForm.lead_time_dias}
                         onChange={(e) =>
                           setEditForm((f) => ({
                             ...f,
-                            contacto: e.target.value,
+                            lead_time_dias: e.target.value,
                           }))
                         }
+                        min="0"
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-text mb-1">
-                        Teléfono
+                        Telefono
                       </label>
                       <input
                         type="tel"
@@ -394,22 +375,6 @@ export default function ProveedoresPage() {
                         value={editForm.email}
                         onChange={(e) =>
                           setEditForm((f) => ({ ...f, email: e.target.value }))
-                        }
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-medium text-text mb-1">
-                        Dirección
-                      </label>
-                      <input
-                        type="text"
-                        value={editForm.direccion}
-                        onChange={(e) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            direccion: e.target.value,
-                          }))
                         }
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
                       />
@@ -454,17 +419,13 @@ export default function ProveedoresPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-text">{p.nombre}</p>
-                      {!p.activo && (
-                        <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
-                          Inactivo
-                        </span>
-                      )}
+                      <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+                        Lead time: {p.lead_time_dias}d
+                      </span>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-warm-gray">
-                      {p.contacto && <span>{p.contacto}</span>}
                       {p.telefono && <span>{p.telefono}</span>}
                       {p.email && <span>{p.email}</span>}
-                      {p.direccion && <span>{p.direccion}</span>}
                     </div>
                     {p.notas && (
                       <p className="mt-1 text-xs text-warm-gray italic line-clamp-1">

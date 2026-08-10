@@ -8,11 +8,14 @@ import { useToast } from "@/components/Toast";
 
 interface ProtocoloTemplate {
   id: number;
-  nombre: string;
-  tipo: string;
-  seccion: string;
-  orden: number;
-  activo: boolean;
+  checklist_type: string;
+  section: string;
+  task_name: string;
+  position: number;
+  day_of_week: number | null;
+  day_of_month: number | null;
+  shift: string | null;
+  is_active: boolean;
 }
 
 const TIPOS = ["apertura", "cierre", "semanal", "mensual"] as const;
@@ -26,11 +29,14 @@ const TIPO_LABELS: Record<Tipo, string> = {
 };
 
 const EMPTY_FORM: Omit<ProtocoloTemplate, "id"> = {
-  nombre: "",
-  tipo: "apertura",
-  seccion: "General",
-  orden: 0,
-  activo: true,
+  checklist_type: "apertura",
+  section: "General",
+  task_name: "",
+  position: 0,
+  day_of_week: null,
+  day_of_month: null,
+  shift: null,
+  is_active: true,
 };
 
 // ── Page ───────────────────────────────────────────────────────────────────
@@ -64,11 +70,14 @@ export default function AdminProtocolosPage() {
   const openEdit = (t: ProtocoloTemplate) => {
     setEditing(t);
     setForm({
-      nombre: t.nombre,
-      tipo: t.tipo,
-      seccion: t.seccion,
-      orden: t.orden,
-      activo: t.activo,
+      checklist_type: t.checklist_type,
+      section: t.section,
+      task_name: t.task_name,
+      position: t.position,
+      day_of_week: t.day_of_week,
+      day_of_month: t.day_of_month,
+      shift: t.shift,
+      is_active: t.is_active,
     });
     setShowForm(true);
   };
@@ -81,7 +90,7 @@ export default function AdminProtocolosPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nombre.trim()) return;
+    if (!form.task_name.trim()) return;
     setSaving(true);
     try {
       if (editing) {
@@ -107,7 +116,7 @@ export default function AdminProtocolosPage() {
   };
 
   const handleDelete = async (t: ProtocoloTemplate) => {
-    if (!confirm(`¿Eliminar la plantilla "${t.nombre}"?`)) return;
+    if (!confirm(`¿Eliminar la plantilla "${t.task_name}"?`)) return;
     try {
       await apiFetch(`/api/protocolos/templates/${t.id}`, {
         method: "DELETE",
@@ -123,7 +132,7 @@ export default function AdminProtocolosPage() {
     try {
       await apiFetch(`/api/protocolos/templates/${t.id}`, {
         method: "PUT",
-        body: JSON.stringify({ ...t, activo: !t.activo }),
+        body: JSON.stringify({ ...t, is_active: !t.is_active }),
       });
       load();
     } catch {
@@ -134,13 +143,13 @@ export default function AdminProtocolosPage() {
   const filtered =
     filtroTipo === "all"
       ? templates
-      : templates.filter((t) => t.tipo === filtroTipo);
+      : templates.filter((t) => t.checklist_type === filtroTipo);
 
   // Group by tipo
   const byTipo = filtered.reduce<Record<string, ProtocoloTemplate[]>>(
     (acc, t) => {
-      if (!acc[t.tipo]) acc[t.tipo] = [];
-      acc[t.tipo].push(t);
+      if (!acc[t.checklist_type]) acc[t.checklist_type] = [];
+      acc[t.checklist_type].push(t);
       return acc;
     },
     {}
@@ -202,9 +211,9 @@ export default function AdminProtocolosPage() {
               <input
                 type="text"
                 required
-                value={form.nombre}
+                value={form.task_name}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, nombre: e.target.value }))
+                  setForm((f) => ({ ...f, task_name: e.target.value }))
                 }
                 placeholder="Descripción de la tarea"
                 className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream focus:outline-none focus:ring-2 focus:ring-brot/30"
@@ -218,9 +227,9 @@ export default function AdminProtocolosPage() {
                   Tipo
                 </label>
                 <select
-                  value={form.tipo}
+                  value={form.checklist_type}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, tipo: e.target.value }))
+                    setForm((f) => ({ ...f, checklist_type: e.target.value }))
                   }
                   className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream focus:outline-none focus:ring-2 focus:ring-brot/30"
                 >
@@ -237,9 +246,9 @@ export default function AdminProtocolosPage() {
                 </label>
                 <input
                   type="text"
-                  value={form.seccion}
+                  value={form.section}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, seccion: e.target.value }))
+                    setForm((f) => ({ ...f, section: e.target.value }))
                   }
                   placeholder="General"
                   className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream focus:outline-none focus:ring-2 focus:ring-brot/30"
@@ -254,11 +263,11 @@ export default function AdminProtocolosPage() {
               </label>
               <input
                 type="number"
-                value={form.orden}
+                value={form.position}
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
-                    orden: parseInt(e.target.value) || 0,
+                    position: parseInt(e.target.value) || 0,
                   }))
                 }
                 className="w-28 px-3 py-2 border border-cream-dark rounded-lg bg-cream focus:outline-none focus:ring-2 focus:ring-brot/30"
@@ -270,9 +279,9 @@ export default function AdminProtocolosPage() {
               <input
                 type="checkbox"
                 id="activo-check"
-                checked={form.activo}
+                checked={form.is_active}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, activo: e.target.checked }))
+                  setForm((f) => ({ ...f, is_active: e.target.checked }))
                 }
                 className="w-4 h-4 accent-brot"
               />
@@ -334,33 +343,33 @@ export default function AdminProtocolosPage() {
             <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
               {tipoItems
                 .slice()
-                .sort((a, b) => a.orden - b.orden)
+                .sort((a, b) => a.position - b.position)
                 .map((t, idx) => (
                   <div
                     key={t.id}
                     className={`flex items-center gap-3 px-4 py-3 ${
                       idx < tipoItems.length - 1 ? "border-b border-cream" : ""
-                    } ${!t.activo ? "opacity-50" : ""}`}
+                    } ${!t.is_active ? "opacity-50" : ""}`}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-text">
-                        {t.nombre}
+                        {t.task_name}
                       </p>
                       <p className="text-xs text-warm-gray">
-                        {t.seccion} · orden {t.orden}
-                        {!t.activo && " · inactiva"}
+                        {t.section} · orden {t.position}
+                        {!t.is_active && " · inactiva"}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button
                         onClick={() => handleToggleActivo(t)}
                         className={`text-xs px-2 py-1 rounded transition-colors min-h-[30px] ${
-                          t.activo
+                          t.is_active
                             ? "text-brot hover:bg-cream"
                             : "text-warm-gray hover:bg-cream"
                         }`}
                       >
-                        {t.activo ? "Activa" : "Inactiva"}
+                        {t.is_active ? "Activa" : "Inactiva"}
                       </button>
                       <button
                         onClick={() => openEdit(t)}

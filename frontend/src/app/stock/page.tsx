@@ -7,6 +7,24 @@ import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
 import { Categoria } from "@/lib/types";
 
+interface StockActualRaw {
+  id: number;
+  ingrediente_id: number;
+  cantidad: number;
+  unidad: string;
+  fecha_registro: string;
+  notas: string | null;
+  ubicacion: string | null;
+}
+
+interface Ingrediente {
+  id: number;
+  nombre: string;
+  categoria_id: number;
+  categoria_nombre: string;
+  activo: boolean;
+}
+
 interface StockActual {
   ingrediente_id: number;
   ingrediente_nombre: string;
@@ -16,7 +34,7 @@ interface StockActual {
   unidad: string;
   ubicacion: string | null;
   fecha_registro: string;
-  nivel: "ok" | "bajo" | "sin_stock";
+  nivel: "ok" | "sin_stock";
 }
 
 export default function StockPage() {
@@ -28,15 +46,31 @@ export default function StockPage() {
   const [loading, setLoading] = useState(true);
   const [buscar, setBuscar] = useState("");
   const [categoriaId, setCategoriaId] = useState<number | null>(null);
-  const [filtroNivel, setFiltroNivel] = useState<"todos" | "ok" | "bajo" | "sin_stock">("todos");
+  const [filtroNivel, setFiltroNivel] = useState<"todos" | "ok" | "sin_stock">("todos");
 
   useEffect(() => {
     Promise.all([
-      apiFetch<StockActual[]>("/api/inventario/actual"),
+      apiFetch<StockActualRaw[]>("/api/inventario/actual"),
+      apiFetch<Ingrediente[]>("/api/ingredientes"),
       apiFetch<Categoria[]>("/api/categorias?tipo=ingrediente"),
     ])
-      .then(([stockData, cats]) => {
-        setStock(stockData);
+      .then(([stockData, ingredientes, cats]) => {
+        const ingMap = new Map(ingredientes.map((i) => [i.id, i]));
+        const enriched: StockActual[] = stockData.map((s) => {
+          const ing = ingMap.get(s.ingrediente_id);
+          return {
+            ingrediente_id: s.ingrediente_id,
+            ingrediente_nombre: ing?.nombre ?? `Ingrediente ${s.ingrediente_id}`,
+            categoria_id: ing?.categoria_id ?? null,
+            categoria_nombre: ing?.categoria_nombre ?? null,
+            cantidad: s.cantidad,
+            unidad: s.unidad,
+            ubicacion: s.ubicacion,
+            fecha_registro: s.fecha_registro,
+            nivel: s.cantidad === 0 ? "sin_stock" as const : "ok" as const,
+          };
+        });
+        setStock(enriched);
         setCategorias(cats);
       })
       .catch(() => toast("Error al cargar el stock", "error"))
@@ -64,12 +98,6 @@ export default function StockPage() {
             Sin stock
           </span>
         );
-      case "bajo":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-            Stock bajo
-          </span>
-        );
       case "ok":
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
@@ -83,15 +111,12 @@ export default function StockPage() {
     switch (nivel) {
       case "sin_stock":
         return "bg-red-50";
-      case "bajo":
-        return "bg-amber-50";
       default:
         return "";
     }
   };
 
   const sinStock = stock.filter((s) => s.nivel === "sin_stock").length;
-  const stockBajo = stock.filter((s) => s.nivel === "bajo").length;
 
   return (
     <div>
@@ -105,7 +130,7 @@ export default function StockPage() {
             onClick={() => router.push("/stock/alertas")}
             className="border border-amber-500 text-amber-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-amber-50 transition-colors min-h-[44px] whitespace-nowrap"
           >
-            Alertas {sinStock + stockBajo > 0 && `(${sinStock + stockBajo})`}
+            Alertas {sinStock > 0 && `(${sinStock})`}
           </button>
           <PermissionGate module="inventario" action="write">
             <button
@@ -119,20 +144,12 @@ export default function StockPage() {
       </div>
 
       {/* Summary cards */}
-      {!loading && (sinStock > 0 || stockBajo > 0) && (
+      {!loading && sinStock > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-          {sinStock > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-              <p className="text-2xl font-bold text-red-700">{sinStock}</p>
-              <p className="text-sm text-red-600 mt-0.5">Sin stock</p>
-            </div>
-          )}
-          {stockBajo > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <p className="text-2xl font-bold text-amber-700">{stockBajo}</p>
-              <p className="text-sm text-amber-600 mt-0.5">Stock bajo</p>
-            </div>
-          )}
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-2xl font-bold text-red-700">{sinStock}</p>
+            <p className="text-sm text-red-600 mt-0.5">Sin stock</p>
+          </div>
           <div className="bg-green-50 border border-green-200 rounded-xl p-4">
             <p className="text-2xl font-bold text-green-700">
               {stock.filter((s) => s.nivel === "ok").length}
@@ -156,11 +173,10 @@ export default function StockPage() {
       {/* Filters */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide flex-wrap">
         {/* Level filter */}
-        {(["todos", "sin_stock", "bajo", "ok"] as const).map((nivel) => {
+        {(["todos", "sin_stock", "ok"] as const).map((nivel) => {
           const labels: Record<string, string> = {
             todos: "Todos",
             sin_stock: "Sin stock",
-            bajo: "Stock bajo",
             ok: "OK",
           };
           return (

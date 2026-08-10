@@ -29,6 +29,14 @@ interface CalendarioDia {
   items: CalendarioItem[];
 }
 
+interface CalendarioRaw {
+  fecha: string;
+  day_of_week: number;
+  producto_id: number;
+  planned_qty: number | null;
+  actual_qty: number | null;
+}
+
 function getMonday(d: Date): Date {
   const date = new Date(d);
   const day = date.getDay();
@@ -83,10 +91,30 @@ export default function ProduccionCalendarioPage() {
     try {
       const desde = formatDate(weekStart);
       const hasta = formatDate(weekEnd);
-      const data = await apiFetch<CalendarioDia[]>(
+      const raw = await apiFetch<CalendarioRaw[]>(
         `/api/produccion/calendario?fecha_desde=${desde}&fecha_hasta=${hasta}`
       );
-      setCalendario(data);
+      const productos = await apiFetch<{ id: number; nombre: string }[]>(
+        "/api/produccion/productos"
+      );
+      const prodMap = new Map(productos.map((p) => [p.id, p.nombre]));
+      const grouped = new Map<string, CalendarioDia>();
+      for (const row of raw) {
+        if (!grouped.has(row.fecha)) {
+          grouped.set(row.fecha, {
+            fecha: row.fecha,
+            dia_semana: row.day_of_week,
+            items: [],
+          });
+        }
+        grouped.get(row.fecha)!.items.push({
+          producto_id: row.producto_id,
+          producto_nombre: prodMap.get(row.producto_id) || `Producto ${row.producto_id}`,
+          cantidad_planificada: row.planned_qty || 0,
+          cantidad_real: row.actual_qty,
+        });
+      }
+      setCalendario(Array.from(grouped.values()));
     } catch {
       toast("Error al cargar el calendario", "error");
     } finally {
@@ -254,7 +282,7 @@ export default function ProduccionCalendarioPage() {
 
                   {/* Items */}
                   <div className="p-2 flex-1 space-y-1.5">
-                    {dayData && dayData.items.length > 0 ? (
+                    {dayData && dayData.items && dayData.items.length > 0 ? (
                       dayData.items.map((item) => (
                         <div
                           key={item.producto_id}
@@ -335,7 +363,7 @@ export default function ProduccionCalendarioPage() {
                       </button>
                     )}
                   </div>
-                  {dayData && dayData.items.length > 0 ? (
+                  {dayData && dayData.items && dayData.items.length > 0 ? (
                     <div className="p-3 space-y-2">
                       {dayData.items.map((item) => (
                         <div

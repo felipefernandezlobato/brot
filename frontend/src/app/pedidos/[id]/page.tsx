@@ -12,12 +12,12 @@ type EstadoPedido = "borrador" | "enviado" | "recibido";
 
 interface LineaPedido {
   id: number;
+  pedido_id: number;
   ingrediente_id: number;
-  ingrediente_nombre: string;
-  cantidad: number;
+  cantidad_pedida: number;
   unidad: string;
-  precio_unitario: number | null;
   cantidad_recibida: number | null;
+  precio_unitario: number | null;
 }
 
 interface PedidoOut {
@@ -27,8 +27,13 @@ interface PedidoOut {
   fecha: string;
   estado: EstadoPedido;
   notas: string | null;
-  total_estimado: number;
+  fecha_recepcion: string | null;
   lineas: LineaPedido[];
+}
+
+interface IngredienteRef {
+  id: number;
+  nombre: string;
 }
 
 const ESTADO_LABELS: Record<EstadoPedido, string> = {
@@ -61,6 +66,7 @@ export default function PedidoDetailPage() {
 
   const [pedido, setPedido] = useState<PedidoOut | null>(null);
   const [loading, setLoading] = useState(true);
+  const [ingredientesMap, setIngredientesMap] = useState<Record<number, string>>({});
 
   // Receive mode: quantity inputs per line
   const [receiveMode, setReceiveMode] = useState(false);
@@ -86,6 +92,13 @@ export default function PedidoDetailPage() {
 
   useEffect(() => {
     load();
+    apiFetch<IngredienteRef[]>("/api/ingredientes")
+      .then((ings) => {
+        const map: Record<number, string> = {};
+        ings.forEach((i) => (map[i.id] = i.nombre));
+        setIngredientesMap(map);
+      })
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -93,7 +106,7 @@ export default function PedidoDetailPage() {
     if (!pedido) return;
     const initial: Record<number, string> = {};
     pedido.lineas.forEach((l) => {
-      initial[l.id] = String(l.cantidad_recibida ?? l.cantidad);
+      initial[l.id] = String(l.cantidad_recibida ?? l.cantidad_pedida);
     });
     setCantidadesRecibidas(initial);
     setReceiveMode(true);
@@ -241,7 +254,12 @@ export default function PedidoDetailPage() {
           <div className="bg-cream rounded-lg p-4">
             <p className="text-xs text-warm-gray mb-1">Total estimado</p>
             <p className="font-medium text-text">
-              {formatARS(pedido.total_estimado)}
+              {formatARS(
+                pedido.lineas.reduce(
+                  (sum, l) => sum + l.cantidad_pedida * (l.precio_unitario ?? 0),
+                  0
+                )
+              )}
             </p>
           </div>
           <div className="bg-cream rounded-lg p-4">
@@ -294,7 +312,7 @@ export default function PedidoDetailPage() {
                 {pedido.lineas.map((l) => {
                   const subtotal =
                     l.precio_unitario !== null
-                      ? l.cantidad * l.precio_unitario
+                      ? l.cantidad_pedida * l.precio_unitario
                       : null;
                   return (
                     <tr
@@ -302,10 +320,10 @@ export default function PedidoDetailPage() {
                       className="border-b border-gray-50 last:border-0"
                     >
                       <td className="px-6 py-3 font-medium text-text">
-                        {l.ingrediente_nombre}
+                        {ingredientesMap[l.ingrediente_id] ?? `Ingrediente #${l.ingrediente_id}`}
                       </td>
                       <td className="px-6 py-3 text-right font-mono">
-                        {l.cantidad}
+                        {l.cantidad_pedida}
                       </td>
                       <td className="px-4 py-3 text-warm-gray">{l.unidad}</td>
                       <td className="px-6 py-3 text-right font-mono text-warm-gray">
@@ -353,7 +371,12 @@ export default function PedidoDetailPage() {
                     Total estimado
                   </td>
                   <td className="px-6 py-3 text-right font-medium text-brot font-mono">
-                    {formatARS(pedido.total_estimado)}
+                    {formatARS(
+                      pedido.lineas.reduce(
+                        (sum, l) => sum + l.cantidad_pedida * (l.precio_unitario ?? 0),
+                        0
+                      )
+                    )}
                   </td>
                 </tr>
               </tfoot>

@@ -10,19 +10,24 @@ import { Cliente } from "@/lib/types";
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface LineaPedido {
+  id: number;
+  pedido_cliente_id: number;
   producto_id: number;
-  producto_nombre: string;
   cantidad: number;
-  precio_unitario: number;
+  precio_unitario_snapshot: number;
+  subtotal: number;
 }
 
 interface Pedido {
   id: number;
+  cliente_id: number;
+  fecha_pedido: string;
   fecha_entrega: string;
   estado: string;
+  notas: string | null;
   total: number;
+  pedido_recurrente_id: number | null;
   lineas: LineaPedido[];
-  creado_en?: string;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -167,12 +172,10 @@ function MisPedidosList({ cliente }: { cliente: Cliente }) {
                           className="flex items-center justify-between py-2 text-sm gap-3"
                         >
                           <span className="text-text flex-1">
-                            {linea.cantidad}× {linea.producto_nombre}
+                            {linea.cantidad}× Producto #{linea.producto_id}
                           </span>
                           <span className="text-warm-gray shrink-0">
-                            {formatPrice(
-                              (linea.precio_unitario ?? 0) * linea.cantidad
-                            )}
+                            {formatPrice(linea.subtotal)}
                           </span>
                         </div>
                       ))}

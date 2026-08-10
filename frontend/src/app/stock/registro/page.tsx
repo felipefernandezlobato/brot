@@ -88,7 +88,7 @@ export default function RegistroStockPage() {
       unidad: r.unidad,
       notas: r.notas || undefined,
       ubicacion: r.ubicacion || undefined,
-      fecha: fecha,
+      fecha_registro: fecha,
     }));
 
     setSubmitting(true);

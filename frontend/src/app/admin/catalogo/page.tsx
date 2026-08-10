@@ -9,9 +9,12 @@ import { useToast } from "@/components/Toast";
 interface Producto {
   id: number;
   nombre: string;
-  descripcion?: string;
+  descripcion: string | null;
   precio: number;
+  categoria: string;
+  imagen_url: string | null;
   disponible: boolean;
+  posicion: number;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -29,7 +32,7 @@ function formatPrice(n: number): string {
 interface ProductoRowProps {
   producto: Producto;
   editId: number | null;
-  editForm: { nombre: string; descripcion: string; precio: string; disponible: boolean };
+  editForm: { nombre: string; descripcion: string; precio: string; categoria: string; imagen_url: string; disponible: boolean; posicion: string };
   deleteConfirm: number | null;
   saving: boolean;
   onStartEdit: (p: Producto) => void;
@@ -87,6 +90,38 @@ function ProductoRow({
             type="text"
             value={editForm.descripcion}
             onChange={(e) => onEditChange("descripcion", e.target.value)}
+            placeholder="Opcional"
+            className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+          />
+        </div>
+        <div className="flex gap-3 flex-wrap">
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-xs text-warm-gray mb-1">Categoría</label>
+            <input
+              type="text"
+              value={editForm.categoria}
+              onChange={(e) => onEditChange("categoria", e.target.value)}
+              placeholder="Ej: pan"
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+            />
+          </div>
+          <div className="w-24">
+            <label className="block text-xs text-warm-gray mb-1">Posición</label>
+            <input
+              type="number"
+              min="0"
+              value={editForm.posicion}
+              onChange={(e) => onEditChange("posicion", e.target.value)}
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs text-warm-gray mb-1">URL de imagen</label>
+          <input
+            type="text"
+            value={editForm.imagen_url}
+            onChange={(e) => onEditChange("imagen_url", e.target.value)}
             placeholder="Opcional"
             className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
           />
@@ -190,7 +225,10 @@ const emptyEditForm = {
   nombre: "",
   descripcion: "",
   precio: "",
+  categoria: "",
+  imagen_url: "",
   disponible: true,
+  posicion: "0",
 };
 
 export default function AdminCatalogoPage() {
@@ -227,7 +265,10 @@ export default function AdminCatalogoPage() {
       nombre: p.nombre,
       descripcion: p.descripcion ?? "",
       precio: String(p.precio),
+      categoria: p.categoria ?? "",
+      imagen_url: p.imagen_url ?? "",
       disponible: p.disponible,
+      posicion: String(p.posicion ?? 0),
     });
     setDeleteConfirm(null);
     setShowCreate(false);
@@ -245,9 +286,12 @@ export default function AdminCatalogoPage() {
         method: "PUT",
         body: JSON.stringify({
           nombre: editForm.nombre.trim(),
-          descripcion: editForm.descripcion.trim() || undefined,
+          descripcion: editForm.descripcion.trim() || null,
           precio: parseFloat(editForm.precio),
+          categoria: editForm.categoria.trim(),
+          imagen_url: editForm.imagen_url.trim() || null,
           disponible: editForm.disponible,
+          posicion: parseInt(editForm.posicion) || 0,
         }),
       });
       toast("Producto actualizado");
@@ -292,9 +336,12 @@ export default function AdminCatalogoPage() {
         method: "POST",
         body: JSON.stringify({
           nombre: createForm.nombre.trim(),
-          descripcion: createForm.descripcion.trim() || undefined,
+          descripcion: createForm.descripcion.trim() || null,
           precio: parseFloat(createForm.precio),
+          categoria: createForm.categoria.trim(),
+          imagen_url: createForm.imagen_url.trim() || null,
           disponible: createForm.disponible,
+          posicion: parseInt(createForm.posicion) || 0,
         }),
       });
       toast("Producto creado");
@@ -416,6 +463,45 @@ export default function AdminCatalogoPage() {
                 value={createForm.descripcion}
                 onChange={(e) => handleCreateChange("descripcion", e.target.value)}
                 placeholder="Breve descripción (opcional)"
+                className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+              />
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-xs font-medium text-warm-gray mb-1">
+                  Categoría <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={createForm.categoria}
+                  onChange={(e) => handleCreateChange("categoria", e.target.value)}
+                  placeholder="Ej: pan"
+                  className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+                />
+              </div>
+              <div className="w-24">
+                <label className="block text-xs font-medium text-warm-gray mb-1">
+                  Posición
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={createForm.posicion}
+                  onChange={(e) => handleCreateChange("posicion", e.target.value)}
+                  className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-warm-gray mb-1">
+                URL de imagen
+              </label>
+              <input
+                type="text"
+                value={createForm.imagen_url}
+                onChange={(e) => handleCreateChange("imagen_url", e.target.value)}
+                placeholder="URL de imagen (opcional)"
                 className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
               />
             </div>

@@ -21,20 +21,20 @@ interface ProductoProduccion {
   id: number;
   nombre: string;
   unidad: string;
-  activo: boolean;
+  is_active: boolean;
 }
 
 interface PlanCell {
   week_number: number;
   day_of_week: number;
-  cantidad_planificada: number;
+  planned_qty: number;
 }
 
 interface PlanEntry {
   producto_id: number;
   week_number: number;
   day_of_week: number;
-  cantidad_planificada: number;
+  planned_qty: number;
 }
 
 // key: `${week}-${day}-${productoId}`
@@ -62,7 +62,7 @@ export default function PlanProduccionPage() {
         apiFetch<ProductoProduccion[]>("/api/produccion/productos"),
         apiFetch<PlanEntry[]>("/api/produccion/plan"),
       ]);
-      setProductos(prods.filter((p) => p.activo));
+      setProductos(prods.filter((p) => p.is_active));
       const map = new Map<string, number>();
       planEntries.forEach((entry) => {
         const k = cellKey(
@@ -70,7 +70,7 @@ export default function PlanProduccionPage() {
           entry.day_of_week,
           entry.producto_id
         );
-        map.set(k, entry.cantidad_planificada);
+        map.set(k, entry.planned_qty ?? 0);
       });
       setPlanMap(map);
       setDirty(false);
@@ -138,7 +138,7 @@ export default function PlanProduccionPage() {
         payload.push({
           week_number: week,
           day_of_week: day,
-          cantidad_planificada: cantidad,
+          planned_qty: cantidad,
         });
       });
 
@@ -151,10 +151,10 @@ export default function PlanProduccionPage() {
               producto_id: p.id,
               week_number: week,
               day_of_week: day,
-              cantidad_planificada:
+              planned_qty:
                 planMap.get(cellKey(week, day, p.id)) ?? 0,
             }))
-            .filter((e) => e.cantidad_planificada > 0);
+            .filter((e) => e.planned_qty > 0);
           if (weekDayEntries.length > 0) {
             await apiFetch(
               `/api/produccion/plan?week_number=${week}&day_of_week=${day}`,

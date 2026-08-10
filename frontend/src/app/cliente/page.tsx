@@ -12,9 +12,12 @@ import { Cliente } from "@/lib/types";
 interface Producto {
   id: number;
   nombre: string;
-  descripcion?: string;
+  descripcion: string | null;
   precio: number;
+  categoria: string;
+  imagen_url: string | null;
   disponible: boolean;
+  posicion: number;
 }
 
 interface CartItem {
@@ -147,6 +150,8 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
           lineas: cart.map((c) => ({
             producto_id: c.producto.id,
             cantidad: c.cantidad,
+            precio_unitario_snapshot: c.producto.precio,
+            subtotal: c.producto.precio * c.cantidad,
           })),
         }),
       });

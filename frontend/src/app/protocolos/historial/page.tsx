@@ -7,19 +7,29 @@ import { useToast } from "@/components/Toast";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface PeriodCompletion {
+interface HistorialCompletion {
+  id: number;
   template_id: number;
-  template_nombre: string;
-  template_tipo: string;
-  template_seccion: string;
-  completado: boolean;
-  completado_por?: string;
-  completado_en?: string;
+  completed_by: number;
+  completed_at: string;
+  target_date: string;
+  target_period: string | null;
+  is_satisfactory: boolean;
+  review_note: string | null;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
 }
 
-interface HistorialResponse {
-  period: string;
-  items: PeriodCompletion[];
+interface ProtocoloTemplate {
+  id: number;
+  checklist_type: string;
+  section: string;
+  task_name: string;
+  position: number;
+  day_of_week: number | null;
+  day_of_month: number | null;
+  shift: string | null;
+  is_active: boolean;
 }
 
 type Mode = "day" | "week" | "month";
@@ -84,30 +94,39 @@ export default function HistorialPage() {
   const { toast } = useToast();
   const [mode, setMode] = useState<Mode>("day");
   const [date, setDate] = useState<Date>(new Date());
-  const [data, setData] = useState<HistorialResponse | null>(null);
+  const [completions, setCompletions] = useState<HistorialCompletion[]>([]);
+  const [templates, setTemplates] = useState<ProtocoloTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Build a lookup map for template info
+  const templateMap = new Map(templates.map((t) => [t.id, t]));
 
   useEffect(() => {
     setLoading(true);
-    setData(null);
     const param = periodParam(mode, date);
-    apiFetch<HistorialResponse>(
-      `/api/protocolos/historial?mode=${mode}&period=${param}`
-    )
-      .then(setData)
+    Promise.all([
+      apiFetch<HistorialCompletion[]>(
+        `/api/protocolos/historial?mode=${mode}&period=${param}`
+      ),
+      apiFetch<ProtocoloTemplate[]>("/api/protocolos/templates"),
+    ])
+      .then(([hist, tmpls]) => {
+        setCompletions(hist);
+        setTemplates(tmpls);
+      })
       .catch(() => toast("Error al cargar historial", "error"))
       .finally(() => setLoading(false));
   }, [mode, date, toast]);
 
-  const items = data?.items ?? [];
-  const completados = items.filter((i) => i.completado).length;
-  const total = items.length;
+  const total = completions.length;
+  const completados = completions.filter((c) => c.is_satisfactory).length;
   const pct = total === 0 ? 0 : Math.round((completados / total) * 100);
 
-  // Group by tipo
-  const byTipo = items.reduce<Record<string, PeriodCompletion[]>>(
+  // Group by checklist_type via template lookup
+  const byTipo = completions.reduce<Record<string, HistorialCompletion[]>>(
     (acc, item) => {
-      const k = item.template_tipo;
+      const tmpl = templateMap.get(item.template_id);
+      const k = tmpl?.checklist_type ?? "desconocido";
       if (!acc[k]) acc[k] = [];
       acc[k].push(item);
       return acc;
@@ -231,7 +250,7 @@ export default function HistorialPage() {
 
           {/* By tipo */}
           {Object.entries(byTipo).map(([tipo, tipoItems]) => {
-            const done = tipoItems.filter((i) => i.completado).length;
+            const done = tipoItems.filter((i) => i.is_satisfactory).length;
             return (
               <div key={tipo} className="mb-5">
                 <div className="flex items-center justify-between mb-2 px-1">
@@ -243,50 +262,49 @@ export default function HistorialPage() {
                   </span>
                 </div>
                 <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
-                  {tipoItems.map((item, idx) => (
-                    <div
-                      key={item.template_id}
-                      className={`flex items-center gap-3 px-4 py-3 ${
-                        idx < tipoItems.length - 1
-                          ? "border-b border-cream"
-                          : ""
-                      }`}
-                    >
-                      <span
-                        className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                          item.completado
-                            ? "bg-brot text-white"
-                            : "bg-cream-dark text-warm-gray"
+                  {tipoItems.map((item, idx) => {
+                    const tmpl = templateMap.get(item.template_id);
+                    return (
+                      <div
+                        key={item.id}
+                        className={`flex items-center gap-3 px-4 py-3 ${
+                          idx < tipoItems.length - 1
+                            ? "border-b border-cream"
+                            : ""
                         }`}
                       >
-                        {item.completado ? "✓" : "○"}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={`text-sm ${
-                            item.completado
-                              ? "text-warm-gray line-through"
-                              : "text-text"
+                        <span
+                          className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                            item.is_satisfactory
+                              ? "bg-brot text-white"
+                              : "bg-cream-dark text-warm-gray"
                           }`}
                         >
-                          {item.template_nombre}
-                        </p>
-                        {item.completado && item.completado_por && (
-                          <p className="text-xs text-warm-gray">
-                            {item.completado_por}
+                          {item.is_satisfactory ? "✓" : "○"}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={`text-sm ${
+                              item.is_satisfactory
+                                ? "text-warm-gray line-through"
+                                : "text-text"
+                            }`}
+                          >
+                            {tmpl?.task_name ?? `Tarea #${item.template_id}`}
                           </p>
-                        )}
-                      </div>
-                      {item.completado && item.completado_en && (
+                          <p className="text-xs text-warm-gray">
+                            Usuario #{item.completed_by}
+                          </p>
+                        </div>
                         <span className="text-xs text-warm-gray flex-shrink-0">
-                          {new Date(item.completado_en).toLocaleTimeString(
+                          {new Date(item.completed_at).toLocaleTimeString(
                             "es-ES",
                             { hour: "2-digit", minute: "2-digit" }
                           )}
                         </span>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

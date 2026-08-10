@@ -10,16 +10,14 @@ type Motivo = "caducado" | "dañado" | "produccion" | "otro";
 
 interface PorMotivo {
   motivo: Motivo;
-  total_registros: number;
+  count: number;
   coste_total: number;
 }
 
 interface TopItem {
   nombre: string;
-  total_registros: number;
+  count: number;
   coste_total: number;
-  cantidad_total: number;
-  unidad: string;
 }
 
 interface Analisis {
@@ -187,7 +185,7 @@ export default function MermasAnalisisPage() {
                               {formatARS(pm.coste_total)}
                             </span>
                             <span className="text-xs text-warm-gray ml-2">
-                              {pm.total_registros} reg.
+                              {pm.count} reg.
                             </span>
                           </div>
                         </div>
@@ -255,9 +253,6 @@ export default function MermasAnalisisPage() {
                           Ítem
                         </th>
                         <th className="text-right px-4 py-3 font-medium text-warm-gray">
-                          Cantidad total
-                        </th>
-                        <th className="text-right px-4 py-3 font-medium text-warm-gray">
                           Registros
                         </th>
                         <th className="text-right px-4 py-3 font-medium text-warm-gray">
@@ -281,14 +276,8 @@ export default function MermasAnalisisPage() {
                           <td className="px-4 py-3 font-medium text-text">
                             {item.nombre}
                           </td>
-                          <td className="px-4 py-3 text-right text-text">
-                            {item.cantidad_total}{" "}
-                            <span className="text-warm-gray text-xs">
-                              {item.unidad}
-                            </span>
-                          </td>
                           <td className="px-4 py-3 text-right text-warm-gray">
-                            {item.total_registros}
+                            {item.count}
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-red-700">
                             {item.coste_total > 0
@@ -314,8 +303,7 @@ export default function MermasAnalisisPage() {
                             <p className="font-medium text-text">{item.nombre}</p>
                           </div>
                           <p className="text-xs text-warm-gray mt-0.5 ml-7">
-                            {item.cantidad_total} {item.unidad} ·{" "}
-                            {item.total_registros} reg.
+                            {item.count} reg.
                           </p>
                         </div>
                         <p className="text-sm font-medium text-red-700 shrink-0">

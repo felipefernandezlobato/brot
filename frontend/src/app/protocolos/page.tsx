@@ -9,21 +9,27 @@ import { useToast } from "@/components/Toast";
 
 interface ProtocoloTemplate {
   id: number;
-  nombre: string;
-  tipo: string;
-  seccion: string;
-  orden: number;
+  checklist_type: string;
+  section: string;
+  task_name: string;
+  position: number;
+  day_of_week: number | null;
+  day_of_month: number | null;
+  shift: string | null;
+  is_active: boolean;
 }
 
 interface ProtocoloCompletion {
   id: number;
   template_id: number;
+  completed_by: number;
+  completed_at: string;
   target_date: string;
-  target_period?: string;
-  completado_por: string;
-  completado_en: string;
-  revisado: boolean;
-  revisado_por?: string;
+  target_period: string | null;
+  is_satisfactory: boolean;
+  review_note: string | null;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
 }
 
 interface ProtocoloItem {
@@ -32,8 +38,14 @@ interface ProtocoloItem {
 }
 
 interface ProtocoloHoy {
+  fecha: string;
   apertura: ProtocoloItem[];
   cierre: ProtocoloItem[];
+}
+
+interface PeriodResponse {
+  period: string;
+  items: ProtocoloItem[];
 }
 
 type TabKey = "apertura" | "cierre" | "semanal" | "mensual";
@@ -50,7 +62,7 @@ const TABS: { key: TabKey; label: string }[] = [
 function groupBySection(items: ProtocoloItem[]): Map<string, ProtocoloItem[]> {
   const groups = new Map<string, ProtocoloItem[]>();
   for (const item of items) {
-    const key = item.template.seccion || "General";
+    const key = item.template.section || "General";
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(item);
   }
@@ -129,13 +141,13 @@ function ChecklistSection({
                     done ? "line-through text-warm-gray" : "text-text"
                   }`}
                 >
-                  {item.template.nombre}
+                  {item.template.task_name}
                 </p>
                 {done && item.completion && (
                   <p className="text-xs text-warm-gray mt-0.5">
-                    {item.completion.completado_por} ·{" "}
-                    {formatTime(item.completion.completado_en)}
-                    {item.completion.revisado && (
+                    Usuario #{item.completion.completed_by} ·{" "}
+                    {formatTime(item.completion.completed_at)}
+                    {item.completion.is_satisfactory && (
                       <span className="ml-1.5 text-green-600">· ✓ Revisado</span>
                     )}
                   </p>
@@ -143,7 +155,7 @@ function ChecklistSection({
               </div>
 
               {/* Admin review button */}
-              {isAdmin && done && item.completion && !item.completion.revisado && (
+              {isAdmin && done && item.completion && !item.completion.is_satisfactory && (
                 <button
                   onClick={() => onReview(item.completion!.id)}
                   className="flex-shrink-0 px-2 py-1 rounded text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors min-h-[30px]"
@@ -169,12 +181,16 @@ export default function ProtocolosPage() {
   const [mensual, setMensual] = useState<ProtocoloItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userId, setUserId] = useState<number | null>(null);
 
   const today = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
-    apiFetch<{ role: string }>("/api/auth/me")
-      .then((u) => setIsAdmin(u.role === "admin"))
+    apiFetch<{ id: number; role: string }>("/api/auth/me")
+      .then((u) => {
+        setIsAdmin(u.role === "admin");
+        setUserId(u.id);
+      })
       .catch(() => {});
   }, []);
 
@@ -183,12 +199,12 @@ export default function ProtocolosPage() {
     try {
       const [hoyData, semanalData, mensualData] = await Promise.all([
         apiFetch<ProtocoloHoy>("/api/protocolos/hoy"),
-        apiFetch<ProtocoloItem[]>("/api/protocolos/semanal"),
-        apiFetch<ProtocoloItem[]>("/api/protocolos/mensual"),
+        apiFetch<PeriodResponse>("/api/protocolos/semanal"),
+        apiFetch<PeriodResponse>("/api/protocolos/mensual"),
       ]);
       setHoy(hoyData);
-      setSemanal(semanalData);
-      setMensual(mensualData);
+      setSemanal(semanalData.items);
+      setMensual(mensualData.items);
     } catch {
       toast("Error al cargar protocolos", "error");
     } finally {
@@ -245,14 +261,19 @@ export default function ProtocolosPage() {
       const fakeCompletion: ProtocoloCompletion = {
         id: -tid,
         template_id: tid,
+        completed_by: userId ?? 0,
+        completed_at: new Date().toISOString(),
         target_date: today,
-        completado_por: "…",
-        completado_en: new Date().toISOString(),
-        revisado: false,
+        target_period: null,
+        is_satisfactory: false,
+        review_note: null,
+        reviewed_by: null,
+        reviewed_at: null,
       };
       applyUpdate(activeTab, tid, fakeCompletion);
       const body: Record<string, unknown> = {
         template_id: tid,
+        completed_by: userId, // TODO: handle null userId gracefully
         target_date: today,
       };
       if (activeTab === "semanal" || activeTab === "mensual") {

@@ -123,7 +123,7 @@ export default function NuevoPedidoPage() {
         notas: notas || null,
         lineas: lineas.map((l) => ({
           ingrediente_id: l.ingrediente_id,
-          cantidad: parseFloat(l.cantidad) || 0,
+          cantidad_pedida: parseFloat(l.cantidad) || 0,
           unidad: l.unidad,
           precio_unitario: parseFloat(l.precio_unitario) || null,
         })),

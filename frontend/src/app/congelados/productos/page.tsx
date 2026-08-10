@@ -7,7 +7,10 @@ import { useToast } from "@/components/Toast";
 interface ProductoCongelado {
   id: number;
   nombre: string;
+  categoria: string;
   unidad: string;
+  is_active: boolean;
+  position: number;
 }
 
 interface ProductoRowProps {
@@ -157,7 +160,7 @@ export default function ProductosCongeladosPage() {
     try {
       await apiFetch<ProductoCongelado>("/api/congelados/productos", {
         method: "POST",
-        body: JSON.stringify({ nombre: newNombre.trim(), unidad: newUnidad.trim() }),
+        body: JSON.stringify({ nombre: newNombre.trim(), unidad: newUnidad.trim(), is_active: true }),
       });
       toast("Producto creado");
       setNewNombre("");

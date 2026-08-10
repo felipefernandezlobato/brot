@@ -20,17 +20,21 @@ interface ProductoProduccion {
   id: number;
   nombre: string;
   unidad: string;
-  activo: boolean;
+  is_active: boolean;
 }
 
 interface LogEntryApi {
   id: number;
   producto_id: number;
-  producto_nombre: string;
-  cantidad_planificada: number;
-  cantidad_real: number | null;
-  tiempo_maquina: number | null;
-  tiempo_humano: number | null;
+  target_date: string;
+  planned_qty: number | null;
+  actual_qty: number | null;
+  duration_minutes_machine: number | null;
+  duration_minutes_human: number | null;
+  is_unplanned: boolean;
+  notes: string | null;
+  recorded_by: number;
+  recorded_at: string;
 }
 
 function formatDate(d: Date): string {
@@ -72,20 +76,63 @@ export default function RegistroProduccionPage() {
   const loadLog = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiFetch<LogEntryApi[]>(
-        `/api/produccion/log?fecha=${fecha}`
-      );
-      setItems(
-        data.map((entry) => ({
-          id: entry.id,
-          producto_id: entry.producto_id,
-          producto_nombre: entry.producto_nombre,
-          cantidad_planificada: entry.cantidad_planificada,
-          cantidad_real: entry.cantidad_real?.toString() ?? "",
-          tiempo_maquina: entry.tiempo_maquina?.toString() ?? "",
-          tiempo_humano: entry.tiempo_humano?.toString() ?? "",
-        }))
-      );
+      const [logData, calData, prods] = await Promise.all([
+        apiFetch<LogEntryApi[]>(`/api/produccion/log?fecha=${fecha}`),
+        apiFetch<{ producto_id: number; planned_qty: number | null; actual_qty: number | null }[]>(
+          `/api/produccion/calendario?fecha_desde=${fecha}&fecha_hasta=${fecha}`
+        ),
+        apiFetch<ProductoProduccion[]>("/api/produccion/productos"),
+      ]);
+      const prodMap = new Map(prods.map((p) => [p.id, p.nombre]));
+      const logMap = new Map(logData.map((e) => [e.producto_id, e]));
+      const seen = new Set<number>();
+      const merged: LogItem[] = [];
+      for (const cal of calData) {
+        seen.add(cal.producto_id);
+        const log = logMap.get(cal.producto_id);
+        merged.push({
+          id: log?.id,
+          producto_id: cal.producto_id,
+          producto_nombre: prodMap.get(cal.producto_id) || `Producto ${cal.producto_id}`,
+          cantidad_planificada: cal.planned_qty || 0,
+          cantidad_real: log?.actual_qty?.toString() ?? "",
+          tiempo_maquina: log?.duration_minutes_machine?.toString() ?? "",
+          tiempo_humano: log?.duration_minutes_human?.toString() ?? "",
+        });
+      }
+      for (const log of logData) {
+        if (!seen.has(log.producto_id)) {
+          merged.push({
+            id: log.id,
+            producto_id: log.producto_id,
+            producto_nombre: prodMap.get(log.producto_id) || `Producto ${log.producto_id}`,
+            cantidad_planificada: log.planned_qty || 0,
+            cantidad_real: log.actual_qty?.toString() ?? "",
+            tiempo_maquina: log.duration_minutes_machine?.toString() ?? "",
+            tiempo_humano: log.duration_minutes_human?.toString() ?? "",
+          });
+        }
+      }
+      const draftKey = `brot_produccion_draft_${fecha}`;
+      const draft = sessionStorage.getItem(draftKey);
+      if (draft) {
+        try {
+          const saved = JSON.parse(draft) as LogItem[];
+          const draftMap = new Map(saved.map((s) => [s.producto_id, s]));
+          for (const item of merged) {
+            const d = draftMap.get(item.producto_id);
+            if (d) {
+              item.cantidad_real = d.cantidad_real;
+              item.tiempo_maquina = d.tiempo_maquina;
+              item.tiempo_humano = d.tiempo_humano;
+            }
+          }
+          const unplanned = saved.filter((s) => s.noplanificado && !merged.some((m) => m.producto_id === s.producto_id));
+          merged.push(...unplanned);
+        } catch {}
+      }
+      setItems(merged);
+      setProductos(prods.filter((p) => p.is_active));
     } catch {
       toast("Error al cargar el registro de producción", "error");
     } finally {
@@ -99,9 +146,15 @@ export default function RegistroProduccionPage() {
 
   useEffect(() => {
     apiFetch<ProductoProduccion[]>("/api/produccion/productos")
-      .then((data) => setProductos(data.filter((p) => p.activo)))
+      .then((data) => setProductos(data.filter((p) => p.is_active)))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!loading && items.length > 0) {
+      sessionStorage.setItem(`brot_produccion_draft_${fecha}`, JSON.stringify(items));
+    }
+  }, [items, fecha, loading]);
 
   function updateItem(
     idx: number,
@@ -118,16 +171,17 @@ export default function RegistroProduccionPage() {
     try {
       const payload = items.map((item) => ({
         producto_id: item.producto_id,
-        cantidad_real: item.cantidad_real !== "" ? Number(item.cantidad_real) : null,
-        tiempo_maquina:
+        actual_qty: item.cantidad_real !== "" ? Number(item.cantidad_real) : null,
+        duration_minutes_machine:
           item.tiempo_maquina !== "" ? Number(item.tiempo_maquina) : null,
-        tiempo_humano:
+        duration_minutes_human:
           item.tiempo_humano !== "" ? Number(item.tiempo_humano) : null,
       }));
       await apiFetch(`/api/produccion/log?fecha=${fecha}`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      sessionStorage.removeItem(`brot_produccion_draft_${fecha}`);
       toast("Registro guardado correctamente");
     } catch (err: unknown) {
       toast(

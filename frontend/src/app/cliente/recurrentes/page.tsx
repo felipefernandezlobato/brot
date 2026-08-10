@@ -12,17 +12,29 @@ import { Cliente } from "@/lib/types";
 interface Producto {
   id: number;
   nombre: string;
+  descripcion: string | null;
   precio: number;
+  categoria: string;
+  imagen_url: string | null;
   disponible: boolean;
+  posicion: number;
+}
+
+interface LineaRecurrente {
+  id: number;
+  pedido_recurrente_id: number;
+  producto_id: number;
+  cantidad_default: number;
 }
 
 interface PedidoRecurrente {
   id: number;
-  producto_id: number;
-  producto_nombre?: string;
-  cantidad: number;
-  dia_semana: "miercoles" | "sabado";
+  cliente_id: number;
+  dia_entrega: string;
   activo: boolean;
+  fecha_inicio: string;
+  notas: string | null;
+  lineas: LineaRecurrente[];
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -92,9 +104,14 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
       await apiClienteFetch("/api/cliente/recurrentes", {
         method: "POST",
         body: JSON.stringify({
-          producto_id: Number(newProductoId),
-          cantidad: Number(newCantidad),
-          dia_semana: newDia,
+          dia_entrega: newDia,
+          activo: true,
+          lineas: [
+            {
+              producto_id: Number(newProductoId),
+              cantidad_default: Number(newCantidad),
+            },
+          ],
         }),
       });
       toast("Pedido recurrente creado");
@@ -112,7 +129,7 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
 
   const startEdit = (rec: PedidoRecurrente) => {
     setEditId(rec.id);
-    setEditCantidad(String(rec.cantidad));
+    setEditCantidad(String(rec.lineas[0]?.cantidad_default ?? 1));
     setEditActivo(rec.activo);
     setDeleteConfirm(null);
   };
@@ -121,11 +138,16 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
     if (editId === null) return;
     setSaving(true);
     try {
+      const rec = recurrentes.find((r) => r.id === editId);
       await apiClienteFetch(`/api/cliente/recurrentes/${editId}`, {
         method: "PUT",
         body: JSON.stringify({
-          cantidad: Number(editCantidad),
+          dia_entrega: rec?.dia_entrega,
           activo: editActivo,
+          lineas: rec?.lineas.map((l) => ({
+            producto_id: l.producto_id,
+            cantidad_default: Number(editCantidad),
+          })) ?? [],
         }),
       });
       toast("Pedido recurrente actualizado");
@@ -158,8 +180,8 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
     }
   };
 
-  const miercoles = recurrentes.filter((r) => r.dia_semana === "miercoles");
-  const sabados = recurrentes.filter((r) => r.dia_semana === "sabado");
+  const miercoles = recurrentes.filter((r) => r.dia_entrega === "miercoles");
+  const sabados = recurrentes.filter((r) => r.dia_entrega === "sabado");
 
   const renderRow = (rec: PedidoRecurrente) => {
     if (editId === rec.id) {
@@ -213,7 +235,10 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
       return (
         <div key={rec.id} className="px-4 py-3 flex items-center gap-3 flex-wrap bg-red-50">
           <span className="text-sm flex-1">
-            ¿Eliminar <strong>{rec.producto_nombre ?? `Producto #${rec.producto_id}`}</strong>?
+            ¿Eliminar pedido recurrente <strong>#{rec.id}</strong> ({rec.lineas.map((l) => {
+              const prod = productos.find((p) => p.id === l.producto_id);
+              return prod?.nombre ?? `Producto #${l.producto_id}`;
+            }).join(", ")})?
           </span>
           <button
             onClick={() => handleDelete(rec.id)}
@@ -235,17 +260,21 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
     return (
       <div key={rec.id} className="px-4 py-3 flex items-center gap-3">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-text">
-            {rec.producto_nombre ?? `Producto #${rec.producto_id}`}
-          </p>
-          <p className="text-xs text-warm-gray">
-            Cantidad: {rec.cantidad}
-            {!rec.activo && (
-              <span className="ml-2 bg-cream px-1.5 py-0.5 rounded text-warm-gray">
+          {rec.lineas.map((l) => {
+            const prod = productos.find((p) => p.id === l.producto_id);
+            return (
+              <p key={l.id} className="text-sm font-medium text-text">
+                {prod?.nombre ?? `Producto #${l.producto_id}`} — Cantidad: {l.cantidad_default}
+              </p>
+            );
+          })}
+          {!rec.activo && (
+            <p className="text-xs text-warm-gray">
+              <span className="bg-cream px-1.5 py-0.5 rounded text-warm-gray">
                 Pausado
               </span>
-            )}
-          </p>
+            </p>
+          )}
         </div>
         {!rec.activo && (
           <span className="text-xs text-warm-gray bg-cream px-2 py-1 rounded-full">

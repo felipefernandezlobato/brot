@@ -98,14 +98,23 @@ export default function NuevaMermaPage() {
     if (!validate()) return;
     setSaving(true);
     try {
+      const cantidad = Number(form.cantidad);
+      const unidad =
+        form.modo === "ingrediente" && selectedIngredient
+          ? selectedIngredient.unidad_uso
+          : form.unidad;
+      const costeUnitario =
+        form.modo === "ingrediente" && selectedIngredient
+          ? selectedIngredient.costo_por_unidad_uso
+          : 0;
       const body: Record<string, unknown> = {
-        cantidad: Number(form.cantidad),
-        unidad:
-          form.modo === "ingrediente" && selectedIngredient
-            ? selectedIngredient.unidad_uso
-            : form.unidad,
+        cantidad,
+        unidad,
         motivo: form.motivo,
         notas: form.notas.trim() || null,
+        fecha: new Date().toISOString().slice(0, 10),
+        coste_unitario: costeUnitario,
+        coste_total: costeUnitario * cantidad,
       };
       if (form.modo === "ingrediente") {
         body.ingrediente_id = Number(form.ingrediente_id);

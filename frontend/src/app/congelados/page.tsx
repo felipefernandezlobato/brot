@@ -9,24 +9,36 @@ import { formatDate } from "@/lib/format";
 interface ProductoCongelado {
   id: number;
   nombre: string;
+  categoria: string;
   unidad: string;
+  is_active: boolean;
+  position: number;
 }
 
 interface StockCongelado {
   id: number;
-  producto_id: number;
+  producto_congelado_id: number;
   producto_nombre: string;
   cantidad: number;
   fecha_entrada: string;
-  fecha_vencimiento: string;
+  fecha_vencimiento: string | null;
+  lote: string | null;
+  ubicacion: string | null;
   notas: string | null;
+  is_active: boolean;
 }
 
 interface AlertaVencimiento {
   id: number;
+  producto_congelado_id: number;
   producto_nombre: string;
-  fecha_vencimiento: string;
-  dias_restantes: number;
+  cantidad: number;
+  fecha_entrada: string;
+  fecha_vencimiento: string | null;
+  lote: string | null;
+  ubicacion: string | null;
+  notas: string | null;
+  is_active: boolean;
 }
 
 function expiryClass(fecha: string): string {
@@ -53,12 +65,21 @@ function expiryBadge(fecha: string): string | null {
 }
 
 const EMPTY_FORM = {
-  producto_id: "",
+  producto_congelado_id: "",
   cantidad: "",
   fecha_entrada: new Date().toISOString().slice(0, 10),
   fecha_vencimiento: "",
   notas: "",
 };
+
+function getDiasRestantes(fecha_vencimiento: string | null): number | null {
+  if (!fecha_vencimiento) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const exp = new Date(fecha_vencimiento + "T00:00:00");
+  const diffMs = exp.getTime() - today.getTime();
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+}
 
 export default function CongeladosPage() {
   const { toast } = useToast();
@@ -101,13 +122,13 @@ export default function CongeladosPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.producto_id || !form.cantidad || !form.fecha_vencimiento) return;
+    if (!form.producto_congelado_id || !form.cantidad || !form.fecha_vencimiento) return;
     setSaving(true);
     try {
       await apiFetch("/api/congelados", {
         method: "POST",
         body: JSON.stringify({
-          producto_id: Number(form.producto_id),
+          producto_congelado_id: Number(form.producto_congelado_id),
           cantidad: Number(form.cantidad),
           fecha_entrada: form.fecha_entrada,
           fecha_vencimiento: form.fecha_vencimiento,
@@ -127,23 +148,23 @@ export default function CongeladosPage() {
   const startEdit = (entry: StockCongelado) => {
     setEditId(entry.id);
     setEditForm({
-      producto_id: String(entry.producto_id),
+      producto_congelado_id: String(entry.producto_congelado_id),
       cantidad: String(entry.cantidad),
       fecha_entrada: entry.fecha_entrada,
-      fecha_vencimiento: entry.fecha_vencimiento,
+      fecha_vencimiento: entry.fecha_vencimiento ?? "",
       notas: entry.notas ?? "",
     });
     setDeleteConfirm(null);
   };
 
   const handleSaveEdit = async () => {
-    if (!editId || !editForm.producto_id || !editForm.cantidad || !editForm.fecha_vencimiento) return;
+    if (!editId || !editForm.producto_congelado_id || !editForm.cantidad || !editForm.fecha_vencimiento) return;
     setSaving(true);
     try {
       await apiFetch(`/api/congelados/${editId}`, {
         method: "PUT",
         body: JSON.stringify({
-          producto_id: Number(editForm.producto_id),
+          producto_congelado_id: Number(editForm.producto_congelado_id),
           cantidad: Number(editForm.cantidad),
           fecha_entrada: editForm.fecha_entrada,
           fecha_vencimiento: editForm.fecha_vencimiento,
@@ -197,18 +218,23 @@ export default function CongeladosPage() {
             Alertas de vencimiento ({alertas.length})
           </p>
           <ul className="space-y-1">
-            {alertas.map((a) => (
-              <li key={a.id} className="text-xs text-amber-700">
-                <span className="font-medium">{a.producto_nombre}</span>
-                {" — "}
-                {a.dias_restantes < 0
-                  ? `Vencido hace ${Math.abs(a.dias_restantes)} día${Math.abs(a.dias_restantes) !== 1 ? "s" : ""}`
-                  : a.dias_restantes === 0
-                  ? "Vence hoy"
-                  : `Vence en ${a.dias_restantes} día${a.dias_restantes !== 1 ? "s" : ""}`}{" "}
-                ({formatDate(a.fecha_vencimiento)})
-              </li>
-            ))}
+            {alertas.map((a) => {
+              const dias = getDiasRestantes(a.fecha_vencimiento);
+              return (
+                <li key={a.id} className="text-xs text-amber-700">
+                  <span className="font-medium">{a.producto_nombre}</span>
+                  {" — "}
+                  {dias === null
+                    ? "Sin fecha de vencimiento"
+                    : dias < 0
+                    ? `Vencido hace ${Math.abs(dias)} día${Math.abs(dias) !== 1 ? "s" : ""}`
+                    : dias === 0
+                    ? "Vence hoy"
+                    : `Vence en ${dias} día${dias !== 1 ? "s" : ""}`}{" "}
+                  {a.fecha_vencimiento && `(${formatDate(a.fecha_vencimiento)})`}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -243,8 +269,8 @@ export default function CongeladosPage() {
                         <tr key={entry.id} className="border-b border-cream-dark bg-cream/30">
                           <td className="px-4 py-2">
                             <select
-                              value={editForm.producto_id}
-                              onChange={(e) => setEditForm({ ...editForm, producto_id: e.target.value })}
+                              value={editForm.producto_congelado_id}
+                              onChange={(e) => setEditForm({ ...editForm, producto_congelado_id: e.target.value })}
                               className="w-full px-2 py-1.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
                             >
                               <option value="">— Producto —</option>
@@ -334,7 +360,7 @@ export default function CongeladosPage() {
                         </tr>
                       );
                     }
-                    const badge = expiryBadge(entry.fecha_vencimiento);
+                    const badge = entry.fecha_vencimiento ? expiryBadge(entry.fecha_vencimiento) : null;
                     return (
                       <tr
                         key={entry.id}
@@ -344,15 +370,21 @@ export default function CongeladosPage() {
                         <td className="px-4 py-3 text-right text-text">{entry.cantidad}</td>
                         <td className="px-4 py-3 text-warm-gray">{formatDate(entry.fecha_entrada)}</td>
                         <td className="px-4 py-3">
-                          <span className={expiryClass(entry.fecha_vencimiento)}>
-                            {formatDate(entry.fecha_vencimiento)}
-                          </span>
-                          {badge && (
-                            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
-                              badge === "Vencido" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
-                            }`}>
-                              {badge}
-                            </span>
+                          {entry.fecha_vencimiento ? (
+                            <>
+                              <span className={expiryClass(entry.fecha_vencimiento)}>
+                                {formatDate(entry.fecha_vencimiento)}
+                              </span>
+                              {badge && (
+                                <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
+                                  badge === "Vencido" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                                }`}>
+                                  {badge}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-warm-gray">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-warm-gray text-sm">{entry.notas ?? "—"}</td>
@@ -382,7 +414,7 @@ export default function CongeladosPage() {
             {/* Mobile cards */}
             <div className="md:hidden divide-y divide-cream-dark">
               {stock.map((entry) => {
-                const badge = expiryBadge(entry.fecha_vencimiento);
+                const badge = entry.fecha_vencimiento ? expiryBadge(entry.fecha_vencimiento) : null;
                 if (deleteConfirm === entry.id) {
                   return (
                     <div key={entry.id} className="px-4 py-3 bg-red-50 flex items-center gap-3 flex-wrap">
@@ -414,15 +446,21 @@ export default function CongeladosPage() {
                           Entrada: {formatDate(entry.fecha_entrada)}
                         </p>
                         <div className="flex items-center gap-1 mt-1">
-                          <span className={`text-xs ${expiryClass(entry.fecha_vencimiento)}`}>
-                            Vence: {formatDate(entry.fecha_vencimiento)}
-                          </span>
-                          {badge && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                              badge === "Vencido" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
-                            }`}>
-                              {badge}
-                            </span>
+                          {entry.fecha_vencimiento ? (
+                            <>
+                              <span className={`text-xs ${expiryClass(entry.fecha_vencimiento)}`}>
+                                Vence: {formatDate(entry.fecha_vencimiento)}
+                              </span>
+                              {badge && (
+                                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                  badge === "Vencido" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                                }`}>
+                                  {badge}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-xs text-warm-gray">Sin vencimiento</span>
                           )}
                         </div>
                       </div>
@@ -462,8 +500,8 @@ export default function CongeladosPage() {
                 Producto <span className="text-red-500">*</span>
               </label>
               <select
-                value={form.producto_id}
-                onChange={(e) => setForm({ ...form, producto_id: e.target.value })}
+                value={form.producto_congelado_id}
+                onChange={(e) => setForm({ ...form, producto_congelado_id: e.target.value })}
                 required
                 className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[42px]"
               >

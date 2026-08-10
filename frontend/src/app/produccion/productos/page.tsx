@@ -8,23 +8,24 @@ import { useToast } from "@/components/Toast";
 interface ProductoProduccion {
   id: number;
   nombre: string;
+  categoria: string;
   unidad: string;
-  activo: boolean;
-  notas: string | null;
+  shelf_life_days: number;
+  default_qty: number | null;
+  is_active: boolean;
+  position: number;
 }
 
 interface ProductoForm {
   nombre: string;
   unidad: string;
-  notas: string;
-  activo: boolean;
+  is_active: boolean;
 }
 
 const EMPTY_FORM: ProductoForm = {
   nombre: "",
   unidad: "unidad",
-  notas: "",
-  activo: true,
+  is_active: true,
 };
 
 const UNIDADES = ["unidad", "kg", "g", "litro", "ml", "bandeja", "caja"];
@@ -67,7 +68,7 @@ export default function ProductosProduccionPage() {
   const filtrados = productos.filter((p) => {
     const matchBuscar =
       buscar === "" || p.nombre.toLowerCase().includes(buscar.toLowerCase());
-    const matchActivo = !soloActivos || p.activo;
+    const matchActivo = !soloActivos || p.is_active;
     return matchBuscar && matchActivo;
   });
 
@@ -82,8 +83,7 @@ export default function ProductosProduccionPage() {
     setForm({
       nombre: p.nombre,
       unidad: p.unidad,
-      notas: p.notas ?? "",
-      activo: p.activo,
+      is_active: p.is_active,
     });
     setErrors({});
     setEditId(p.id);
@@ -116,8 +116,7 @@ export default function ProductosProduccionPage() {
       const body = {
         nombre: form.nombre.trim(),
         unidad: form.unidad,
-        notas: form.notas.trim() || null,
-        activo: form.activo,
+        is_active: form.is_active,
       };
       if (modal === "create") {
         await apiFetch("/api/produccion/productos", {
@@ -233,7 +232,7 @@ export default function ProductosProduccionPage() {
                       Unidad
                     </th>
                     <th className="text-left px-4 py-3 font-medium text-warm-gray">
-                      Notas
+                      Categoría
                     </th>
                     <th className="text-right px-4 py-3 font-medium text-warm-gray">
                       Acciones
@@ -252,7 +251,7 @@ export default function ProductosProduccionPage() {
                     >
                       <td className="px-4 py-3">
                         <span className="font-medium text-text">{p.nombre}</span>
-                        {!p.activo && (
+                        {!p.is_active && (
                           <span className="ml-2 text-xs text-warm-gray bg-cream px-1.5 py-0.5 rounded">
                             Inactivo
                           </span>
@@ -260,7 +259,7 @@ export default function ProductosProduccionPage() {
                       </td>
                       <td className="px-4 py-3 text-warm-gray">{p.unidad}</td>
                       <td className="px-4 py-3 text-warm-gray text-sm">
-                        {p.notas ?? "—"}
+                        {p.categoria ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
@@ -292,10 +291,10 @@ export default function ProductosProduccionPage() {
                       <p className="font-medium text-text">{p.nombre}</p>
                       <p className="text-xs text-warm-gray mt-0.5">
                         {p.unidad}
-                        {!p.activo && " · Inactivo"}
+                        {!p.is_active && " · Inactivo"}
                       </p>
-                      {p.notas && (
-                        <p className="text-xs text-warm-gray mt-0.5">{p.notas}</p>
+                      {p.categoria && (
+                        <p className="text-xs text-warm-gray mt-0.5">{p.categoria}</p>
                       )}
                     </div>
                     <div className="flex gap-2 shrink-0">
@@ -383,37 +382,23 @@ export default function ProductosProduccionPage() {
                 )}
               </div>
 
-              {/* Notas */}
-              <div>
-                <label className="block text-sm font-medium text-text mb-1">
-                  Notas
-                </label>
-                <textarea
-                  value={form.notas}
-                  onChange={(e) => setField("notas", e.target.value)}
-                  placeholder="Observaciones opcionales..."
-                  rows={2}
-                  className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
-                />
-              </div>
-
               {/* Activo */}
               <label className="flex items-center gap-3 cursor-pointer min-h-[44px]">
                 <div className="relative">
                   <input
                     type="checkbox"
-                    checked={form.activo}
-                    onChange={(e) => setField("activo", e.target.checked)}
+                    checked={form.is_active}
+                    onChange={(e) => setField("is_active", e.target.checked)}
                     className="sr-only"
                   />
                   <div
                     className={`w-11 h-6 rounded-full transition-colors ${
-                      form.activo ? "bg-brot" : "bg-gray-200"
+                      form.is_active ? "bg-brot" : "bg-gray-200"
                     }`}
                   >
                     <div
                       className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                        form.activo ? "translate-x-5" : "translate-x-0"
+                        form.is_active ? "translate-x-5" : "translate-x-0"
                       }`}
                     />
                   </div>

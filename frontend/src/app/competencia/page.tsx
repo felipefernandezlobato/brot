@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { formatARS } from "@/lib/format";
-import { Categoria } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 
 // ---- Types ----
@@ -19,8 +18,6 @@ interface CompetenciaEntry {
 interface CompararRow {
   receta_id: number;
   receta_nombre: string;
-  categoria_id: number;
-  categoria_nombre: string;
   pvp: number | null;
   competidores: CompetenciaEntry[];
 }
@@ -207,20 +204,14 @@ function PriceCell({
 export default function CompetenciaPage() {
   const { toast } = useToast();
   const [rows, setRows] = useState<CompararRow[]>([]);
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [categoriaFiltro, setCategoriaFiltro] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
   const loadData = useCallback(() => {
     setLoading(true);
-    Promise.all([
-      apiFetch<CompararRow[]>("/api/competencia/comparar"),
-      apiFetch<Categoria[]>("/api/categorias?tipo=receta"),
-    ])
-      .then(([comparar, cats]) => {
+    apiFetch<CompararRow[]>("/api/competencia/comparar")
+      .then((comparar) => {
         setRows(comparar);
-        setCategorias(cats);
       })
       .catch(() => toast("Error al cargar datos", "error"))
       .finally(() => setLoading(false));
@@ -229,10 +220,6 @@ export default function CompetenciaPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  const filteredRows = categoriaFiltro
-    ? rows.filter((r) => r.categoria_id === categoriaFiltro)
-    : rows;
 
   const competidores = allCompetidores(rows);
 
@@ -268,42 +255,13 @@ export default function CompetenciaPage() {
         </span>
       </div>
 
-      {/* Category filter chips */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        <button
-          onClick={() => setCategoriaFiltro(null)}
-          className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-            categoriaFiltro === null
-              ? "bg-brot text-white"
-              : "bg-white text-warm-gray border border-gray-200 hover:bg-cream"
-          }`}
-        >
-          Todas
-        </button>
-        {categorias.map((c) => (
-          <button
-            key={c.id}
-            onClick={() =>
-              setCategoriaFiltro(c.id === categoriaFiltro ? null : c.id)
-            }
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-              categoriaFiltro === c.id
-                ? "bg-brot text-white"
-                : "bg-white text-warm-gray border border-gray-200 hover:bg-cream"
-            }`}
-          >
-            {c.nombre}
-          </button>
-        ))}
-      </div>
-
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-warm-gray text-sm">
             Cargando...
           </div>
-        ) : filteredRows.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="p-8 text-center text-warm-gray text-sm">
             No hay datos de competencia registrados.
           </div>
@@ -314,7 +272,7 @@ export default function CompetenciaPage() {
                 <tr className="border-b border-gray-100 text-warm-gray text-xs uppercase tracking-wide">
                   <th className="text-left px-3 py-3 min-w-[160px]">Receta</th>
                   <th className="text-right px-3 py-3 min-w-[110px]">
-                    Nuestro PVP
+                    PVP B2B
                   </th>
                   {competidores.map((name) => (
                     <th
@@ -327,7 +285,7 @@ export default function CompetenciaPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => {
+                {rows.map((row) => {
                   const competidorMap = new Map(
                     row.competidores.map((c) => [c.competidor_nombre, c.precio])
                   );
@@ -339,9 +297,6 @@ export default function CompetenciaPage() {
                       <td className="px-3 py-3">
                         <div className="font-medium text-text">
                           {row.receta_nombre}
-                        </div>
-                        <div className="text-xs text-warm-gray">
-                          {row.categoria_nombre}
                         </div>
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-sm font-semibold text-text">

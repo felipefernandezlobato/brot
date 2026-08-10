@@ -10,17 +10,21 @@ import { useToast } from "@/components/Toast";
 interface Frigorifico {
   id: number;
   nombre: string;
-  temp_max: number;
+  tipo: string;
+  max_temp: number;
+  position: number;
+  is_active: boolean;
 }
 
 interface HistorialTemp {
   id: number;
   frigorifico_id: number;
-  frigorifico_nombre: string;
-  value: number;
-  turno: string;
+  recorded_by: number;
   recorded_at: string;
-  recorded_by: string;
+  target_date: string;
+  shift: string;
+  value: number;
+  is_alert: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -33,10 +37,10 @@ function getShift(): "manana" | "tarde" {
 
 function TempBar({
   value,
-  tempMax,
+  maxTemp,
 }: {
   value: number;
-  tempMax: number;
+  maxTemp: number;
 }) {
   // Display range: –25°C to +15°C
   const minDisplay = -25;
@@ -46,7 +50,7 @@ function TempBar({
     2,
     Math.min(100, ((value - minDisplay) / range) * 100)
   );
-  const isHot = value > tempMax;
+  const isHot = value > maxTemp;
 
   return (
     <div className="flex flex-col items-center gap-1" style={{ width: 26 }}>
@@ -86,9 +90,12 @@ export default function TemperaturasPage() {
   const [historial, setHistorial] = useState<HistorialTemp[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<number | null>(null);
 
-  const shift = getShift();
-  const shiftLabel = shift === "manana" ? "Mañana" : "Tarde";
+  const currentShift = getShift();
+  const shiftLabel = currentShift === "manana" ? "Mañana" : "Tarde";
+
+  const today = new Date().toISOString().split("T")[0];
 
   const loadHistorial = () =>
     apiFetch<HistorialTemp[]>("/api/temperaturas/historial").then(setHistorial);
@@ -97,13 +104,15 @@ export default function TemperaturasPage() {
     Promise.all([
       apiFetch<Frigorifico[]>("/api/temperaturas/frigorificos"),
       apiFetch<HistorialTemp[]>("/api/temperaturas/historial"),
+      apiFetch<{ id: number }>("/api/auth/me"),
     ])
-      .then(([frigs, hist]) => {
+      .then(([frigs, hist, user]) => {
         setFrigorificos(frigs);
         const init: Record<number, string> = {};
         frigs.forEach((f) => (init[f.id] = ""));
         setValues(init);
         setHistorial(hist);
+        setUserId(user.id);
       })
       .catch(() => toast("Error al cargar datos", "error"))
       .finally(() => setLoading(false));
@@ -113,10 +122,17 @@ export default function TemperaturasPage() {
     e.preventDefault();
     const records = frigorificos
       .filter((f) => values[f.id]?.trim() !== "")
-      .map((f) => ({
-        frigorifico_id: f.id,
-        value: parseFloat(values[f.id]),
-      }));
+      .map((f) => {
+        const val = parseFloat(values[f.id]);
+        return {
+          frigorifico_id: f.id,
+          recorded_by: userId, // TODO: handle null userId gracefully
+          target_date: today,
+          shift: currentShift,
+          value: val,
+          is_alert: val > f.max_temp,
+        };
+      });
 
     if (records.length === 0) {
       toast("Ingresa al menos una temperatura", "error");
@@ -125,7 +141,7 @@ export default function TemperaturasPage() {
 
     setSaving(true);
     try {
-      await apiFetch(`/api/temperaturas/${shift}`, {
+      await apiFetch(`/api/temperaturas/${currentShift}`, {
         method: "POST",
         body: JSON.stringify(records),
       });
@@ -142,18 +158,21 @@ export default function TemperaturasPage() {
   };
 
   // Build chart: last 7 distinct dates, all entries per date
+  // Build a lookup for frigorifico names
+  const frigoNombreMap = new Map(frigorificos.map((f) => [f.id, f.nombre]));
+
   const byDate = historial.reduce<Record<string, HistorialTemp[]>>(
     (acc, item) => {
-      const date = item.recorded_at.split("T")[0];
-      if (!acc[date]) acc[date] = [];
-      acc[date].push(item);
+      const d = item.target_date;
+      if (!acc[d]) acc[d] = [];
+      acc[d].push(item);
       return acc;
     },
     {}
   );
   const chartDates = Object.keys(byDate).sort().slice(-7);
 
-  const fridgeMaxMap = new Map(frigorificos.map((f) => [f.id, f.temp_max]));
+  const fridgeMaxMap = new Map(frigorificos.map((f) => [f.id, f.max_temp]));
 
   return (
     <div>
@@ -199,7 +218,7 @@ export default function TemperaturasPage() {
                 {frigorificos.map((f) => {
                   const raw = values[f.id] ?? "";
                   const val = parseFloat(raw);
-                  const isAlert = raw.trim() !== "" && !isNaN(val) && val > f.temp_max;
+                  const isAlert = raw.trim() !== "" && !isNaN(val) && val > f.max_temp;
                   return (
                     <div
                       key={f.id}
@@ -214,7 +233,7 @@ export default function TemperaturasPage() {
                           {f.nombre}
                         </p>
                         <p className="text-xs text-warm-gray">
-                          Máx: {f.temp_max}°C
+                          Máx: {f.max_temp}°C
                         </p>
                       </div>
                       {isAlert && (
@@ -281,7 +300,7 @@ export default function TemperaturasPage() {
                             <TempBar
                               key={item.id}
                               value={item.value}
-                              tempMax={
+                              maxTemp={
                                 fridgeMaxMap.get(item.frigorifico_id) ?? 8
                               }
                             />
@@ -304,7 +323,7 @@ export default function TemperaturasPage() {
                       key={f.id}
                       className="text-xs text-warm-gray bg-cream rounded-full px-2.5 py-1"
                     >
-                      {f.nombre} · máx {f.temp_max}°C
+                      {f.nombre} · máx {f.max_temp}°C
                     </span>
                   ))}
                 </div>

@@ -1,31 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 
-interface VolumenCliente {
-  cliente_id: number;
+interface VolumenItem {
   cliente_nombre: string;
-  total_entregas: number;
-  total_productos?: number;
-  importe_total?: number;
-}
-
-interface VolumenProducto {
-  producto_id?: number;
   producto_nombre: string;
-  cantidad_total: number;
-  unidad?: string;
-  importe_total?: number;
+  total_cantidad: number;
+  total_valor: number;
 }
 
-interface VolumenResponse {
-  fecha_desde?: string;
-  fecha_hasta?: string;
-  total_entregas?: number;
-  por_cliente?: VolumenCliente[];
-  por_producto?: VolumenProducto[];
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
 }
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
@@ -37,6 +24,8 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+type Vista = "todo" | "por_cliente" | "por_producto";
+
 export default function VolumenPage() {
   const { toast } = useToast();
 
@@ -45,18 +34,19 @@ export default function VolumenPage() {
 
   const [fechaDesde, setFechaDesde] = useState(firstOfMonth);
   const [fechaHasta, setFechaHasta] = useState(today);
-  const [data, setData] = useState<VolumenResponse | null>(null);
+  const [data, setData] = useState<VolumenItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [vista, setVista] = useState<Vista>("todo");
 
   const handleFetch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fechaDesde || !fechaHasta) return;
     setLoading(true);
-    setData(null);
+    setData([]);
     setSearched(false);
     try {
-      const result = await apiFetch<VolumenResponse>(
+      const result = await apiFetch<VolumenItem[]>(
         `/api/entregas-b2b/volumen?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`
       );
       setData(result);
@@ -68,23 +58,52 @@ export default function VolumenPage() {
     }
   };
 
-  const porCliente = data?.por_cliente ?? [];
-  const porProducto = data?.por_producto ?? [];
-  const showSummary = data !== null && data.total_entregas != null;
-  const showClientes = porCliente.length > 0;
-  const showProductos = porProducto.length > 0;
-  const showEmpty =
-    searched && !loading && data !== null && !showSummary && !showClientes && !showProductos;
-  const showPlaceholder = !loading && !searched;
+  const totales = useMemo(() => {
+    const totalCantidad = data.reduce((sum, item) => sum + item.total_cantidad, 0);
+    const totalValor = data.reduce((sum, item) => sum + item.total_valor, 0);
+    return { totalCantidad, totalValor };
+  }, [data]);
+
+  const porCliente = useMemo(() => {
+    const map = new Map<string, { total_cantidad: number; total_valor: number }>();
+    for (const item of data) {
+      const existing = map.get(item.cliente_nombre);
+      if (existing) {
+        existing.total_cantidad += item.total_cantidad;
+        existing.total_valor += item.total_valor;
+      } else {
+        map.set(item.cliente_nombre, { total_cantidad: item.total_cantidad, total_valor: item.total_valor });
+      }
+    }
+    return Array.from(map.entries())
+      .map(([nombre, vals]) => ({ cliente_nombre: nombre, ...vals }))
+      .sort((a, b) => b.total_valor - a.total_valor);
+  }, [data]);
+
+  const porProducto = useMemo(() => {
+    const map = new Map<string, { total_cantidad: number; total_valor: number }>();
+    for (const item of data) {
+      const existing = map.get(item.producto_nombre);
+      if (existing) {
+        existing.total_cantidad += item.total_cantidad;
+        existing.total_valor += item.total_valor;
+      } else {
+        map.set(item.producto_nombre, { total_cantidad: item.total_cantidad, total_valor: item.total_valor });
+      }
+    }
+    return Array.from(map.entries())
+      .map(([nombre, vals]) => ({ producto_nombre: nombre, ...vals }))
+      .sort((a, b) => b.total_valor - a.total_valor);
+  }, [data]);
 
   return (
     <div>
       <div className="mb-6">
         <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
-          Análisis de Volumen
+          Analisis de Volumen
         </h2>
         <p className="text-sm text-warm-gray mt-1">
-          Consulta los totales de entregas B2B por período.
+          Consulta los totales de entregas B2B por periodo.
         </p>
       </div>
 
@@ -133,151 +152,183 @@ export default function VolumenPage() {
         <div className="text-center text-warm-gray py-12">Cargando datos...</div>
       ) : null}
 
-      {data != null && (
+      {searched && !loading && (
         <div className="space-y-6">
-          {/* Summary stat */}
-          {data.total_entregas != null && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <StatCard label="Total entregas" value={data.total_entregas} />
-            </div>
-          )}
-
-          {/* Por cliente */}
-          {porCliente.length > 0 && (
-            <div>
-              <h3 className="font-medium text-text mb-3">Por cliente</h3>
-              <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-cream-dark bg-cream/50">
-                        <th className="text-left px-4 py-3 font-medium text-warm-gray">Cliente</th>
-                        <th className="text-right px-4 py-3 font-medium text-warm-gray">Entregas</th>
-                        {porCliente[0]?.total_productos != null && (
-                          <th className="text-right px-4 py-3 font-medium text-warm-gray">Productos</th>
-                        )}
-                        {porCliente[0]?.importe_total != null && (
-                          <th className="text-right px-4 py-3 font-medium text-warm-gray">Importe</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {porCliente.map((row, idx) => (
-                        <tr
-                          key={row.cliente_id ?? idx}
-                          className={idx < porCliente.length - 1 ? "border-b border-cream-dark" : ""}
-                        >
-                          <td className="px-4 py-3 font-medium text-text">{row.cliente_nombre}</td>
-                          <td className="px-4 py-3 text-right text-text">{row.total_entregas}</td>
-                          {row.total_productos != null && (
-                            <td className="px-4 py-3 text-right text-text">{row.total_productos}</td>
-                          )}
-                          {row.importe_total != null && (
-                            <td className="px-4 py-3 text-right font-medium text-brot">
-                              {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(row.importe_total)}
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {/* Mobile */}
-                <div className="md:hidden divide-y divide-cream-dark">
-                  {porCliente.map((row, idx) => (
-                    <div key={row.cliente_id ?? idx} className="px-4 py-3 flex items-center justify-between gap-2">
-                      <p className="font-medium text-text">{row.cliente_nombre}</p>
-                      <div className="text-right text-sm">
-                        <p className="text-text">{row.total_entregas} entregas</p>
-                        {row.total_productos != null && (
-                          <p className="text-warm-gray text-xs">{row.total_productos} productos</p>
-                        )}
-                        {row.importe_total != null && (
-                          <p className="text-brot font-medium">
-                            {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(row.importe_total)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Por producto */}
-          {porProducto.length > 0 && (
-            <div>
-              <h3 className="font-medium text-text mb-3">Por producto</h3>
-              <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-cream-dark bg-cream/50">
-                        <th className="text-left px-4 py-3 font-medium text-warm-gray">Producto</th>
-                        <th className="text-right px-4 py-3 font-medium text-warm-gray">Cantidad</th>
-                        {porProducto[0]?.unidad && (
-                          <th className="text-left px-4 py-3 font-medium text-warm-gray">Unidad</th>
-                        )}
-                        {porProducto[0]?.importe_total != null && (
-                          <th className="text-right px-4 py-3 font-medium text-warm-gray">Importe</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {porProducto.map((row, idx) => (
-                        <tr
-                          key={row.producto_id ?? idx}
-                          className={idx < porProducto.length - 1 ? "border-b border-cream-dark" : ""}
-                        >
-                          <td className="px-4 py-3 font-medium text-text">{row.producto_nombre}</td>
-                          <td className="px-4 py-3 text-right text-text">{row.cantidad_total}</td>
-                          {row.unidad && (
-                            <td className="px-4 py-3 text-warm-gray">{row.unidad}</td>
-                          )}
-                          {row.importe_total != null && (
-                            <td className="px-4 py-3 text-right font-medium text-brot">
-                              {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(row.importe_total)}
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {/* Mobile */}
-                <div className="md:hidden divide-y divide-cream-dark">
-                  {porProducto.map((row, idx) => (
-                    <div key={row.producto_id ?? idx} className="px-4 py-3 flex items-center justify-between gap-2">
-                      <p className="font-medium text-text">{row.producto_nombre}</p>
-                      <div className="text-right text-sm">
-                        <p className="text-text">
-                          {row.cantidad_total}
-                          {row.unidad ? ` ${row.unidad}` : ""}
-                        </p>
-                        {row.importe_total != null && (
-                          <p className="text-brot font-medium">
-                            {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(row.importe_total)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Fallback: no structured data but we got something */}
-          {porCliente.length === 0 && porProducto.length === 0 && data.total_entregas == null && (
+          {data.length === 0 ? (
             <div className="bg-white rounded-xl border border-cream-dark p-6 text-center text-warm-gray text-sm">
-              No hay datos de volumen para el período seleccionado.
+              No hay datos de volumen para el periodo seleccionado.
             </div>
+          ) : (
+            <>
+              {/* Summary stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <StatCard label="Total cantidad" value={totales.totalCantidad} />
+                <StatCard label="Total valor" value={formatCurrency(totales.totalValor)} />
+                <StatCard label="Registros" value={data.length} />
+              </div>
+
+              {/* View toggle */}
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {([
+                  ["todo", "Detalle"],
+                  ["por_cliente", "Por cliente"],
+                  ["por_producto", "Por producto"],
+                ] as [Vista, string][]).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setVista(key)}
+                    className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap min-h-[36px] transition-colors ${
+                      vista === key
+                        ? "bg-brot text-white"
+                        : "bg-white border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Detail view - all items */}
+              {vista === "todo" && (
+                <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-cream-dark bg-cream/50">
+                          <th className="text-left px-4 py-3 font-medium text-warm-gray">Cliente</th>
+                          <th className="text-left px-4 py-3 font-medium text-warm-gray">Producto</th>
+                          <th className="text-right px-4 py-3 font-medium text-warm-gray">Cantidad</th>
+                          <th className="text-right px-4 py-3 font-medium text-warm-gray">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.map((row, idx) => (
+                          <tr
+                            key={idx}
+                            className={idx < data.length - 1 ? "border-b border-cream-dark" : ""}
+                          >
+                            <td className="px-4 py-3 font-medium text-text">{row.cliente_nombre}</td>
+                            <td className="px-4 py-3 text-text">{row.producto_nombre}</td>
+                            <td className="px-4 py-3 text-right text-text">{row.total_cantidad}</td>
+                            <td className="px-4 py-3 text-right font-medium text-brot">
+                              {formatCurrency(row.total_valor)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Mobile */}
+                  <div className="md:hidden divide-y divide-cream-dark">
+                    {data.map((row, idx) => (
+                      <div key={idx} className="px-4 py-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium text-text">{row.cliente_nombre}</p>
+                            <p className="text-xs text-warm-gray">{row.producto_nombre}</p>
+                          </div>
+                          <div className="text-right text-sm">
+                            <p className="text-text">{row.total_cantidad} uds</p>
+                            <p className="text-brot font-medium">{formatCurrency(row.total_valor)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* By client view */}
+              {vista === "por_cliente" && (
+                <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-cream-dark bg-cream/50">
+                          <th className="text-left px-4 py-3 font-medium text-warm-gray">Cliente</th>
+                          <th className="text-right px-4 py-3 font-medium text-warm-gray">Cantidad total</th>
+                          <th className="text-right px-4 py-3 font-medium text-warm-gray">Valor total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {porCliente.map((row, idx) => (
+                          <tr
+                            key={idx}
+                            className={idx < porCliente.length - 1 ? "border-b border-cream-dark" : ""}
+                          >
+                            <td className="px-4 py-3 font-medium text-text">{row.cliente_nombre}</td>
+                            <td className="px-4 py-3 text-right text-text">{row.total_cantidad}</td>
+                            <td className="px-4 py-3 text-right font-medium text-brot">
+                              {formatCurrency(row.total_valor)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Mobile */}
+                  <div className="md:hidden divide-y divide-cream-dark">
+                    {porCliente.map((row, idx) => (
+                      <div key={idx} className="px-4 py-3 flex items-center justify-between gap-2">
+                        <p className="font-medium text-text">{row.cliente_nombre}</p>
+                        <div className="text-right text-sm">
+                          <p className="text-text">{row.total_cantidad} uds</p>
+                          <p className="text-brot font-medium">{formatCurrency(row.total_valor)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* By product view */}
+              {vista === "por_producto" && (
+                <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-cream-dark bg-cream/50">
+                          <th className="text-left px-4 py-3 font-medium text-warm-gray">Producto</th>
+                          <th className="text-right px-4 py-3 font-medium text-warm-gray">Cantidad total</th>
+                          <th className="text-right px-4 py-3 font-medium text-warm-gray">Valor total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {porProducto.map((row, idx) => (
+                          <tr
+                            key={idx}
+                            className={idx < porProducto.length - 1 ? "border-b border-cream-dark" : ""}
+                          >
+                            <td className="px-4 py-3 font-medium text-text">{row.producto_nombre}</td>
+                            <td className="px-4 py-3 text-right text-text">{row.total_cantidad}</td>
+                            <td className="px-4 py-3 text-right font-medium text-brot">
+                              {formatCurrency(row.total_valor)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Mobile */}
+                  <div className="md:hidden divide-y divide-cream-dark">
+                    {porProducto.map((row, idx) => (
+                      <div key={idx} className="px-4 py-3 flex items-center justify-between gap-2">
+                        <p className="font-medium text-text">{row.producto_nombre}</p>
+                        <div className="text-right text-sm">
+                          <p className="text-text">{row.total_cantidad} uds</p>
+                          <p className="text-brot font-medium">{formatCurrency(row.total_valor)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
 
-      {!loading && !data && !searched && (
+      {!loading && !searched && (
         <div className="text-center text-warm-gray py-12 text-sm">
           Selecciona un rango de fechas y pulsa Consultar.
         </div>

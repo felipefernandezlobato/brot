@@ -7,21 +7,21 @@ import { useToast } from "@/components/Toast";
 interface ClienteB2B {
   id: number;
   nombre: string;
-  contacto: string | null;
-  telefono: string | null;
-  email: string | null;
   direccion: string | null;
+  telefono: string | null;
+  contacto: string | null;
   notas: string | null;
-  activo: boolean;
+  dia_entrega_preferido: string | null;
+  is_active: boolean;
 }
 
 const EMPTY_FORM = {
   nombre: "",
   contacto: "",
   telefono: "",
-  email: "",
   direccion: "",
   notas: "",
+  dia_entrega_preferido: "",
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -81,12 +81,12 @@ function ClienteForm({
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-warm-gray mb-1">Email</label>
+          <label className="block text-xs font-medium text-warm-gray mb-1">Día entrega preferido</label>
           <input
-            type="email"
-            value={form.email}
-            onChange={(e) => onChange({ ...form, email: e.target.value })}
-            placeholder="cliente@empresa.com"
+            type="text"
+            value={form.dia_entrega_preferido}
+            onChange={(e) => onChange({ ...form, dia_entrega_preferido: e.target.value })}
+            placeholder="Ej: Lunes, Miércoles"
             className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
           />
         </div>
@@ -172,9 +172,10 @@ export default function ClientesB2BPage() {
           nombre: newForm.nombre.trim(),
           contacto: newForm.contacto || null,
           telefono: newForm.telefono || null,
-          email: newForm.email || null,
           direccion: newForm.direccion || null,
           notas: newForm.notas || null,
+          dia_entrega_preferido: newForm.dia_entrega_preferido || null,
+          is_active: true,
         }),
       });
       toast("Cliente creado");
@@ -193,9 +194,9 @@ export default function ClientesB2BPage() {
       nombre: c.nombre,
       contacto: c.contacto ?? "",
       telefono: c.telefono ?? "",
-      email: c.email ?? "",
       direccion: c.direccion ?? "",
       notas: c.notas ?? "",
+      dia_entrega_preferido: c.dia_entrega_preferido ?? "",
     });
     setDeleteConfirm(null);
   };
@@ -211,9 +212,9 @@ export default function ClientesB2BPage() {
           nombre: editForm.nombre.trim(),
           contacto: editForm.contacto || null,
           telefono: editForm.telefono || null,
-          email: editForm.email || null,
           direccion: editForm.direccion || null,
           notas: editForm.notas || null,
+          dia_entrega_preferido: editForm.dia_entrega_preferido || null,
         }),
       });
       toast("Cliente actualizado");
@@ -309,7 +310,7 @@ export default function ClientesB2BPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-text">{c.nombre}</p>
-                      {!c.activo && (
+                      {!c.is_active && (
                         <span className="text-xs text-warm-gray bg-cream px-1.5 py-0.5 rounded">
                           Inactivo
                         </span>
@@ -318,7 +319,7 @@ export default function ClientesB2BPage() {
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-warm-gray">
                       {c.contacto && <span>{c.contacto}</span>}
                       {c.telefono && <span>{c.telefono}</span>}
-                      {c.email && <span>{c.email}</span>}
+                      {c.dia_entrega_preferido && <span>Entrega: {c.dia_entrega_preferido}</span>}
                     </div>
                     {c.direccion && (
                       <p className="text-xs text-warm-gray mt-0.5">{c.direccion}</p>

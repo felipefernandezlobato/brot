@@ -17,7 +17,15 @@ interface PedidoListItem {
   fecha: string;
   estado: EstadoPedido;
   notas: string | null;
-  total_estimado: number;
+  fecha_recepcion: string | null;
+  lineas: { id: number; cantidad_pedida: number; precio_unitario: number | null }[];
+}
+
+function calcTotalEstimado(lineas: PedidoListItem["lineas"]): number {
+  return lineas.reduce(
+    (sum, l) => sum + l.cantidad_pedida * (l.precio_unitario ?? 0),
+    0
+  );
 }
 
 const ESTADO_LABELS: Record<EstadoPedido, string> = {
@@ -168,7 +176,7 @@ export default function PedidosPage() {
                         <EstadoBadge estado={p.estado} />
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-text">
-                        {formatARS(p.total_estimado)}
+                        {formatARS(calcTotalEstimado(p.lineas))}
                       </td>
                     </tr>
                   ))}
@@ -197,7 +205,7 @@ export default function PedidosPage() {
                       </p>
                     </div>
                     <p className="text-sm font-medium text-text shrink-0">
-                      {formatARS(p.total_estimado)}
+                      {formatARS(calcTotalEstimado(p.lineas))}
                     </p>
                   </div>
                 </button>

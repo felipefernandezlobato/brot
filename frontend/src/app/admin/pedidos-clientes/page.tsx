@@ -7,22 +7,24 @@ import { useToast } from "@/components/Toast";
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface LineaPedido {
+  id: number;
+  pedido_cliente_id: number;
   producto_id: number;
-  producto_nombre: string;
   cantidad: number;
-  precio_unitario: number;
+  precio_unitario_snapshot: number;
+  subtotal: number;
 }
 
 interface PedidoCliente {
   id: number;
   cliente_id: number;
-  cliente_nombre: string;
-  cliente_email: string;
+  fecha_pedido: string;
   fecha_entrega: string;
   estado: string;
+  notas: string | null;
   total: number;
+  pedido_recurrente_id: number | null;
   lineas: LineaPedido[];
-  creado_en?: string;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -268,10 +270,7 @@ export default function AdminPedidosClientesPage() {
                         </span>
                       </div>
                       <p className="text-sm font-medium text-text">
-                        {pedido.cliente_nombre}
-                      </p>
-                      <p className="text-xs text-warm-gray">
-                        {pedido.cliente_email}
+                        Cliente #{pedido.cliente_id}
                       </p>
                       <p className="text-xs text-warm-gray capitalize mt-1">
                         Entrega: {formatDate(pedido.fecha_entrega)}
@@ -314,12 +313,10 @@ export default function AdminPedidosClientesPage() {
                               className="flex items-center justify-between py-1.5 text-sm gap-3"
                             >
                               <span className="text-text">
-                                {linea.cantidad}× {linea.producto_nombre}
+                                {linea.cantidad}× Producto #{linea.producto_id}
                               </span>
                               <span className="text-warm-gray shrink-0">
-                                {formatPrice(
-                                  (linea.precio_unitario ?? 0) * linea.cantidad
-                                )}
+                                {formatPrice(linea.subtotal)}
                               </span>
                             </div>
                           ))}

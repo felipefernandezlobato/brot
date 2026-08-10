@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
@@ -9,21 +9,24 @@ import { formatDate } from "@/lib/format";
 interface ClienteB2B {
   id: number;
   nombre: string;
-  contacto: string | null;
-  telefono: string | null;
-  email: string | null;
   direccion: string | null;
+  telefono: string | null;
+  contacto: string | null;
+  notas: string | null;
+  dia_entrega_preferido: string | null;
+  is_active: boolean;
 }
 
 type EstadoEntrega = "pendiente" | "en_camino" | "entregado" | "cancelado";
 
 interface EntregaB2B {
   id: number;
-  cliente_id: number;
-  cliente_nombre: string;
-  fecha: string;
+  cliente_b2b_id: number;
+  fecha_entrega: string;
   estado: EstadoEntrega;
   notas: string | null;
+  created_at: string;
+  lineas: { id: number; entrega_id: number; producto_id: number; cantidad: number; precio_unitario: number }[];
 }
 
 const ESTADOS: EstadoEntrega[] = ["pendiente", "en_camino", "entregado", "cancelado"];
@@ -43,8 +46,8 @@ const ESTADO_CLASS: Record<EstadoEntrega, string> = {
 };
 
 const EMPTY_FORM = {
-  cliente_id: "",
-  fecha: new Date().toISOString().slice(0, 10),
+  cliente_b2b_id: "",
+  fecha_entrega: new Date().toISOString().slice(0, 10),
   notas: "",
 };
 
@@ -81,20 +84,26 @@ export default function EntregasPage() {
     load();
   }, [load]);
 
+  const clienteMap = useMemo(
+    () => new Map(clientes.map((c) => [c.id, c.nombre])),
+    [clientes]
+  );
+  const getClienteNombre = (id: number) => clienteMap.get(id) ?? "—";
+
   const filtradas = entregas.filter(
     (e) => filtroEstado === "todos" || e.estado === filtroEstado
   );
 
   const handleCreate = async (ev: React.FormEvent) => {
     ev.preventDefault();
-    if (!form.cliente_id || !form.fecha) return;
+    if (!form.cliente_b2b_id || !form.fecha_entrega) return;
     setSaving(true);
     try {
       await apiFetch<EntregaB2B>("/api/entregas-b2b", {
         method: "POST",
         body: JSON.stringify({
-          cliente_id: Number(form.cliente_id),
-          fecha: form.fecha,
+          cliente_b2b_id: Number(form.cliente_b2b_id),
+          fecha_entrega: form.fecha_entrega,
           notas: form.notas || null,
         }),
       });
@@ -218,7 +227,7 @@ export default function EntregasPage() {
                       return (
                         <tr key={entrega.id} className="border-b border-cream-dark bg-red-50">
                           <td colSpan={4} className="px-4 py-3 text-sm">
-                            ¿Eliminar entrega de <strong>{entrega.cliente_nombre}</strong> del {formatDate(entrega.fecha)}?
+                            ¿Eliminar entrega de <strong>{getClienteNombre(entrega.cliente_b2b_id)}</strong> del {formatDate(entrega.fecha_entrega)}?
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex gap-2 justify-end">
@@ -245,8 +254,8 @@ export default function EntregasPage() {
                         key={entrega.id}
                         className={idx < filtradas.length - 1 ? "border-b border-cream-dark" : ""}
                       >
-                        <td className="px-4 py-3 font-medium text-text">{entrega.cliente_nombre}</td>
-                        <td className="px-4 py-3 text-warm-gray">{formatDate(entrega.fecha)}</td>
+                        <td className="px-4 py-3 font-medium text-text">{getClienteNombre(entrega.cliente_b2b_id)}</td>
+                        <td className="px-4 py-3 text-warm-gray">{formatDate(entrega.fecha_entrega)}</td>
                         <td className="px-4 py-3">
                           {changingEstadoId === entrega.id ? (
                             <div className="flex gap-1 flex-wrap">
@@ -303,7 +312,7 @@ export default function EntregasPage() {
                   return (
                     <div key={entrega.id} className="px-4 py-3 bg-red-50 flex items-center gap-3 flex-wrap">
                       <span className="text-sm flex-1">
-                        ¿Eliminar entrega de <strong>{entrega.cliente_nombre}</strong>?
+                        ¿Eliminar entrega de <strong>{getClienteNombre(entrega.cliente_b2b_id)}</strong>?
                       </span>
                       <button
                         onClick={() => handleDelete(entrega.id)}
@@ -325,8 +334,8 @@ export default function EntregasPage() {
                   <div key={entrega.id} className="px-4 py-4">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div>
-                        <p className="font-medium text-text">{entrega.cliente_nombre}</p>
-                        <p className="text-xs text-warm-gray mt-0.5">{formatDate(entrega.fecha)}</p>
+                        <p className="font-medium text-text">{getClienteNombre(entrega.cliente_b2b_id)}</p>
+                        <p className="text-xs text-warm-gray mt-0.5">{formatDate(entrega.fecha_entrega)}</p>
                         {entrega.notas && (
                           <p className="text-xs text-warm-gray mt-0.5">{entrega.notas}</p>
                         )}
@@ -387,8 +396,8 @@ export default function EntregasPage() {
                 Cliente <span className="text-red-500">*</span>
               </label>
               <select
-                value={form.cliente_id}
-                onChange={(e) => setForm({ ...form, cliente_id: e.target.value })}
+                value={form.cliente_b2b_id}
+                onChange={(e) => setForm({ ...form, cliente_b2b_id: e.target.value })}
                 required
                 className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[42px]"
               >
@@ -407,8 +416,8 @@ export default function EntregasPage() {
               </label>
               <input
                 type="date"
-                value={form.fecha}
-                onChange={(e) => setForm({ ...form, fecha: e.target.value })}
+                value={form.fecha_entrega}
+                onChange={(e) => setForm({ ...form, fecha_entrega: e.target.value })}
                 required
                 className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
               />

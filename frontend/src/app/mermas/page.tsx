@@ -11,14 +11,18 @@ type Motivo = "caducado" | "dañado" | "produccion" | "otro";
 interface Merma {
   id: number;
   ingrediente_id: number | null;
-  ingrediente_nombre: string | null;
+  receta_id: number | null;
   nombre_libre: string | null;
   cantidad: number;
   unidad: string;
   motivo: Motivo;
   notas: string | null;
-  coste: number | null;
-  creado_en: string;
+  fecha: string;
+  ubicacion: string | null;
+  coste_unitario: number;
+  coste_total: number;
+  registered_by: number | null;
+  registered_at: string;
 }
 
 const MOTIVO_LABELS: Record<Motivo, string> = {
@@ -54,7 +58,7 @@ function getDefaultDates() {
 }
 
 function itemName(m: Merma): string {
-  return m.ingrediente_nombre ?? m.nombre_libre ?? "—";
+  return m.nombre_libre ?? "Ingrediente";
 }
 
 export default function MermasPage() {
@@ -99,7 +103,7 @@ export default function MermasPage() {
     }
   }
 
-  const costoTotal = mermas.reduce((sum, m) => sum + (m.coste ?? 0), 0);
+  const costoTotal = mermas.reduce((sum, m) => sum + (m.coste_total ?? 0), 0);
 
   return (
     <div>
@@ -244,16 +248,16 @@ export default function MermasPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {m.coste != null ? (
+                        {m.coste_total != null ? (
                           <span className="text-red-700 font-medium">
-                            {formatARS(m.coste)}
+                            {formatARS(m.coste_total)}
                           </span>
                         ) : (
                           <span className="text-warm-gray">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-warm-gray text-xs">
-                        {formatDateTime(m.creado_en)}
+                        {formatDateTime(m.registered_at)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
@@ -297,13 +301,13 @@ export default function MermasPage() {
                         </p>
                       )}
                       <p className="text-xs text-warm-gray mt-0.5">
-                        {formatDateTime(m.creado_en)}
+                        {formatDateTime(m.registered_at)}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      {m.coste != null ? (
+                      {m.coste_total != null ? (
                         <p className="text-sm font-medium text-red-700">
-                          {formatARS(m.coste)}
+                          {formatARS(m.coste_total)}
                         </p>
                       ) : (
                         <p className="text-sm text-warm-gray">—</p>
