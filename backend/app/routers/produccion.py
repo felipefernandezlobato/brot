@@ -6,377 +6,453 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import LogProduccion, PlanProduccion, ProductoProduccion, User
+from app.models import Receta, RegistroProduccion, TareaProduccion, User
 from app.permissions import require_permission
 from app.schemas import (
-    LogProduccionCreate,
-    LogProduccionOut,
-    LogProduccionUpdate,
-    PlanProduccionCreate,
-    PlanProduccionOut,
-    ProductoProduccionCreate,
-    ProductoProduccionOut,
-    ProductoProduccionUpdate,
+    RegistroExtraCreate,
+    RegistroProduccionCreate,
+    RegistroProduccionOut,
+    TareaProduccionCreate,
+    TareaProduccionOut,
+    TareaProduccionUpdate,
 )
 
 router = APIRouter(prefix="/api/produccion", tags=["produccion"])
 
-
-# ==============================================================
-# Helpers
-# ==============================================================
+DIAS = {1: "Lunes", 2: "Martes", 3: "Miercoles", 4: "Jueves", 5: "Viernes", 6: "Sabado"}
 
 
-def _producto_to_out(p: ProductoProduccion) -> dict:
+def _tarea_to_out(t: TareaProduccion) -> dict:
     return {
-        "id": p.id,
-        "nombre": p.nombre,
-        "categoria": p.categoria,
-        "unidad": p.unidad,
-        "shelf_life_days": p.shelf_life_days,
-        "default_qty": p.default_qty,
-        "is_active": p.is_active,
-        "position": p.position,
+        "id": t.id,
+        "dia_semana": t.dia_semana,
+        "hora": t.hora,
+        "titulo": t.titulo,
+        "descripcion": t.descripcion,
+        "duracion_minutos": t.duracion_minutos,
+        "cantidad_planificada": t.cantidad_planificada,
+        "unidad_cantidad": t.unidad_cantidad,
+        "receta_id": t.receta_id,
+        "receta_nombre": t.receta.nombre if t.receta else None,
+        "tipo": t.tipo,
+        "posicion": t.posicion,
+        "is_active": t.is_active,
     }
 
 
-def _plan_to_out(pl: PlanProduccion) -> dict:
+def _registro_to_out(r: RegistroProduccion) -> dict:
     return {
-        "id": pl.id,
-        "producto_id": pl.producto_id,
-        "week_number": pl.week_number,
-        "day_of_week": pl.day_of_week,
-        "planned_qty": pl.planned_qty,
+        "id": r.id,
+        "tarea_id": r.tarea_id,
+        "fecha": r.fecha.isoformat(),
+        "completada": r.completada,
+        "cantidad_real": r.cantidad_real,
+        "duracion_real": r.duracion_real,
+        "notas": r.notas,
+        "titulo_extra": r.titulo_extra,
+        "unidad_extra": r.unidad_extra,
+        "receta_id": r.receta_id,
+        "receta_nombre": r.receta.nombre if r.receta else None,
+        "registrado_por": r.registrado_por,
+        "registrado_at": r.registrado_at,
     }
 
 
-def _log_to_out(log: LogProduccion) -> dict:
-    return {
-        "id": log.id,
-        "producto_id": log.producto_id,
-        "target_date": log.target_date,
-        "planned_qty": log.planned_qty,
-        "actual_qty": log.actual_qty,
-        "duration_minutes_machine": log.duration_minutes_machine,
-        "duration_minutes_human": log.duration_minutes_human,
-        "is_unplanned": log.is_unplanned,
-        "notes": log.notes,
-        "recorded_by": log.recorded_by,
-        "recorded_at": log.recorded_at,
-    }
-
-
-def _date_to_week_number(d: date) -> int:
-    """Map a calendar date to a rotating cycle week (1–4) via ISO week number."""
-    return (d.isocalendar().week - 1) % 4 + 1
-
-
 # ==============================================================
-# Products  —  CRUD at /api/produccion/productos
+# Calendar — weekly plan grouped by day
 # ==============================================================
 
 
-@router.get("/productos", response_model=list[ProductoProduccionOut])
-def list_productos(
+@router.get("/productos-dropdown")
+def get_productos_dropdown(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    rows = (
-        db.query(ProductoProduccion)
-        .order_by(ProductoProduccion.position, ProductoProduccion.nombre)
+    """All recipes (escandallos) for the extras dropdown."""
+    recetas = (
+        db.query(Receta)
+        .filter(Receta.es_subreceta == False)
+        .order_by(Receta.nombre)
         .all()
     )
-    return [_producto_to_out(p) for p in rows]
+    return [
+        {"id": r.id, "nombre": r.nombre, "porciones_por_lote": r.porciones_por_lote}
+        for r in recetas
+    ]
 
 
-@router.get("/productos/{producto_id}", response_model=ProductoProduccionOut)
-def get_producto(
-    producto_id: int,
+@router.get("/calendario")
+def get_calendario(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    p = db.query(ProductoProduccion).filter(ProductoProduccion.id == producto_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-    return _producto_to_out(p)
+    tareas = (
+        db.query(TareaProduccion)
+        .filter(TareaProduccion.is_active == True)
+        .order_by(TareaProduccion.dia_semana, TareaProduccion.hora, TareaProduccion.posicion)
+        .all()
+    )
+    result: dict = {}
+    for dia_num, dia_nombre in DIAS.items():
+        result[str(dia_num)] = {"nombre": dia_nombre, "tareas": []}
+    for t in tareas:
+        key = str(t.dia_semana)
+        if key in result:
+            result[key]["tareas"].append(_tarea_to_out(t))
+    return result
 
 
-@router.post("/productos", response_model=ProductoProduccionOut, status_code=201)
-def create_producto(
-    data: ProductoProduccionCreate,
-    user: User = require_permission("produccion", "create"),
+# ==============================================================
+# Day view — planned tasks + registrations for a specific date
+# ==============================================================
+
+
+@router.get("/dia")
+def get_dia(
+    fecha: str = Query(..., description="ISO date YYYY-MM-DD"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    p = ProductoProduccion(**data.model_dump())
-    db.add(p)
+    try:
+        d = date.fromisoformat(fecha)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha invalido")
+
+    dow = d.isoweekday()
+    if dow > 6:
+        dow = 6
+
+    tareas = (
+        db.query(TareaProduccion)
+        .filter(TareaProduccion.dia_semana == dow, TareaProduccion.is_active == True)
+        .order_by(TareaProduccion.hora, TareaProduccion.posicion)
+        .all()
+    )
+
+    registros = (
+        db.query(RegistroProduccion)
+        .filter(RegistroProduccion.fecha == d)
+        .all()
+    )
+    reg_by_tarea = {r.tarea_id: r for r in registros if r.tarea_id is not None}
+    extras = [r for r in registros if r.tarea_id is None]
+
+    items = []
+    for t in tareas:
+        reg = reg_by_tarea.get(t.id)
+        items.append({
+            "tarea_id": t.id,
+            "hora": t.hora,
+            "titulo": t.titulo,
+            "descripcion": t.descripcion,
+            "duracion_planificada": t.duracion_minutos,
+            "cantidad_planificada": t.cantidad_planificada,
+            "unidad_cantidad": t.unidad_cantidad,
+            "receta_id": t.receta_id,
+            "receta_nombre": t.receta.nombre if t.receta else None,
+            "tipo": t.tipo,
+            "registro_id": reg.id if reg else None,
+            "completada": reg.completada if reg else False,
+            "cantidad_real": reg.cantidad_real if reg else None,
+            "duracion_real": reg.duracion_real if reg else None,
+            "notas": reg.notas if reg else None,
+        })
+
+    extras_out = []
+    for r in extras:
+        extras_out.append({
+            "registro_id": r.id,
+            "titulo": r.receta.nombre if r.receta else r.titulo_extra,
+            "receta_id": r.receta_id,
+            "unidad_cantidad": r.unidad_extra,
+            "completada": r.completada,
+            "cantidad_real": r.cantidad_real,
+            "duracion_real": r.duracion_real,
+            "notas": r.notas,
+        })
+
+    return {
+        "fecha": fecha,
+        "dia_semana": dow,
+        "dia_nombre": DIAS.get(dow, ""),
+        "tareas": items,
+        "extras": extras_out,
+    }
+
+
+# ==============================================================
+# Registration — log production for a planned task
+# ==============================================================
+
+
+@router.post("/registro", response_model=RegistroProduccionOut, status_code=201)
+def upsert_registro(
+    data: RegistroProduccionCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tarea = db.query(TareaProduccion).filter(TareaProduccion.id == data.tarea_id).first()
+    if not tarea:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+
+    existing = (
+        db.query(RegistroProduccion)
+        .filter(
+            RegistroProduccion.tarea_id == data.tarea_id,
+            RegistroProduccion.fecha == data.fecha,
+        )
+        .first()
+    )
+    if existing:
+        existing.completada = data.completada
+        existing.cantidad_real = data.cantidad_real
+        existing.duracion_real = data.duracion_real
+        existing.notas = data.notas
+        db.commit()
+        db.refresh(existing)
+        return _registro_to_out(existing)
+
+    reg = RegistroProduccion(
+        tarea_id=data.tarea_id,
+        fecha=data.fecha,
+        completada=data.completada,
+        cantidad_real=data.cantidad_real,
+        duracion_real=data.duracion_real,
+        notas=data.notas,
+        registrado_por=user.id,
+    )
+    db.add(reg)
     db.commit()
-    db.refresh(p)
-    return _producto_to_out(p)
+    db.refresh(reg)
+    return _registro_to_out(reg)
 
 
-@router.put("/productos/{producto_id}", response_model=ProductoProduccionOut)
-def update_producto(
-    producto_id: int,
-    data: ProductoProduccionUpdate,
-    user: User = require_permission("produccion", "edit"),
+@router.post("/registro/extra", response_model=RegistroProduccionOut, status_code=201)
+def create_extra(
+    data: RegistroExtraCreate,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    p = db.query(ProductoProduccion).filter(ProductoProduccion.id == producto_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-    for key, val in data.model_dump(exclude_unset=True).items():
-        setattr(p, key, val)
+    receta = db.query(Receta).filter(Receta.id == data.receta_id).first()
+    if not receta:
+        raise HTTPException(status_code=404, detail="Receta no encontrada")
+    reg = RegistroProduccion(
+        tarea_id=None,
+        fecha=data.fecha,
+        completada=True,
+        cantidad_real=data.cantidad_real,
+        duracion_real=data.duracion_real,
+        notas=data.notas,
+        receta_id=data.receta_id,
+        titulo_extra=receta.nombre,
+        registrado_por=user.id,
+    )
+    db.add(reg)
     db.commit()
-    db.refresh(p)
-    return _producto_to_out(p)
+    db.refresh(reg)
+    return _registro_to_out(reg)
 
 
-@router.delete("/productos/{producto_id}")
-def delete_producto(
-    producto_id: int,
-    user: User = require_permission("produccion", "delete"),
+@router.delete("/registro/{registro_id}")
+def delete_registro(
+    registro_id: int,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    p = db.query(ProductoProduccion).filter(ProductoProduccion.id == producto_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-    db.delete(p)
+    reg = db.query(RegistroProduccion).filter(RegistroProduccion.id == registro_id).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    db.delete(reg)
     db.commit()
     return {"ok": True}
 
 
 # ==============================================================
-# Plan  —  4-week rotating schedule
+# Analytics
 # ==============================================================
 
 
-@router.get("/plan", response_model=list[PlanProduccionOut])
-def get_plan(
-    week_number: Optional[int] = Query(None),
-    day_of_week: Optional[int] = Query(None),
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    q = db.query(PlanProduccion)
-    if week_number is not None:
-        q = q.filter(PlanProduccion.week_number == week_number)
-    if day_of_week is not None:
-        q = q.filter(PlanProduccion.day_of_week == day_of_week)
-    rows = q.order_by(PlanProduccion.week_number, PlanProduccion.day_of_week).all()
-    return [_plan_to_out(pl) for pl in rows]
-
-
-@router.post("/plan", response_model=PlanProduccionOut, status_code=201)
-def create_or_update_plan(
-    data: PlanProduccionCreate,
-    user: User = require_permission("produccion", "create"),
-    db: Session = Depends(get_db),
-):
-    """Upsert a plan entry — unique on (producto_id, week_number, day_of_week)."""
-    existing = (
-        db.query(PlanProduccion)
-        .filter(
-            PlanProduccion.producto_id == data.producto_id,
-            PlanProduccion.week_number == data.week_number,
-            PlanProduccion.day_of_week == data.day_of_week,
-        )
-        .first()
-    )
-    if existing:
-        existing.planned_qty = data.planned_qty
-        db.commit()
-        db.refresh(existing)
-        return _plan_to_out(existing)
-
-    p = db.query(ProductoProduccion).filter(ProductoProduccion.id == data.producto_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-
-    pl = PlanProduccion(**data.model_dump())
-    db.add(pl)
-    db.commit()
-    db.refresh(pl)
-    return _plan_to_out(pl)
-
-
-# ==============================================================
-# Log  —  actual production records
-# ==============================================================
-
-
-@router.get("/log", response_model=list[LogProduccionOut])
-def get_log(
-    fecha: Optional[str] = Query(None, description="ISO date YYYY-MM-DD"),
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    q = db.query(LogProduccion)
-    if fecha:
-        q = q.filter(LogProduccion.target_date == fecha)
-    return [_log_to_out(log) for log in q.order_by(LogProduccion.target_date).all()]
-
-
-@router.post("/log", status_code=201)
-def create_log(
-    data: LogProduccionCreate | list[LogProduccionCreate],
-    user: User = require_permission("produccion", "create"),
-    db: Session = Depends(get_db),
-):
-    items = data if isinstance(data, list) else [data]
-    results = []
-    for item in items:
-        if item.actual_qty is None and item.duration_minutes_machine is None and item.duration_minutes_human is None:
-            continue
-        existing = (
-            db.query(LogProduccion)
-            .filter(
-                LogProduccion.producto_id == item.producto_id,
-                LogProduccion.target_date == item.target_date,
-            )
-            .first()
-        )
-        if existing:
-            for field, val in item.model_dump(exclude_unset=True).items():
-                if field not in ("producto_id", "target_date"):
-                    setattr(existing, field, val)
-            results.append(existing)
-        else:
-            p = db.query(ProductoProduccion).filter(ProductoProduccion.id == item.producto_id).first()
-            if not p:
-                continue
-            log = LogProduccion(**item.model_dump())
-            log.recorded_by = user.id
-            db.add(log)
-            results.append(log)
-    db.commit()
-    for r in results:
-        db.refresh(r)
-    if isinstance(data, list):
-        return [_log_to_out(r) for r in results]
-    return _log_to_out(results[0]) if results else {"ok": True}
-
-
-@router.put("/log/{log_id}", response_model=LogProduccionOut)
-def update_log(
-    log_id: int,
-    data: LogProduccionUpdate,
-    user: User = require_permission("produccion", "edit"),
-    db: Session = Depends(get_db),
-):
-    log = db.query(LogProduccion).filter(LogProduccion.id == log_id).first()
-    if not log:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    for key, val in data.model_dump(exclude_unset=True).items():
-        setattr(log, key, val)
-    db.commit()
-    db.refresh(log)
-    return _log_to_out(log)
-
-
-# ==============================================================
-# Calendar  —  planned + actual for a date range
-# ==============================================================
-
-
-@router.get("/calendario")
-def get_calendario(
-    fecha_desde: str = Query(..., description="Start date YYYY-MM-DD"),
-    fecha_hasta: str = Query(..., description="End date YYYY-MM-DD"),
+@router.get("/analytics")
+def get_analytics(
+    desde: str = Query(..., description="Start date YYYY-MM-DD"),
+    hasta: str = Query(..., description="End date YYYY-MM-DD"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     try:
-        d_desde = date.fromisoformat(fecha_desde)
-        d_hasta = date.fromisoformat(fecha_hasta)
+        d_desde = date.fromisoformat(desde)
+        d_hasta = date.fromisoformat(hasta)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD")
+        raise HTTPException(status_code=400, detail="Formato de fecha invalido")
 
-    if d_desde > d_hasta:
-        raise HTTPException(
-            status_code=400,
-            detail="fecha_desde debe ser anterior o igual a fecha_hasta",
-        )
-
-    # Build list of dates in range
     all_dates: list[date] = []
     cur = d_desde
     while cur <= d_hasta:
-        all_dates.append(cur)
+        if cur.isoweekday() <= 6:
+            all_dates.append(cur)
         cur += timedelta(days=1)
 
-    date_strs = [d.isoformat() for d in all_dates]
-
-    # Fetch all logs for the range in one query
-    logs = (
-        db.query(LogProduccion)
-        .filter(LogProduccion.target_date.in_(date_strs))
+    registros = (
+        db.query(RegistroProduccion)
+        .filter(
+            RegistroProduccion.fecha >= d_desde,
+            RegistroProduccion.fecha <= d_hasta,
+            RegistroProduccion.tarea_id != None,
+        )
         .all()
     )
-    # Index by (target_date, producto_id) for planned entries
-    log_index: dict[tuple[str, int], LogProduccion] = {}
-    # Separate set of (target_date, producto_id) for unplanned logs
-    unplanned: list[LogProduccion] = []
-    for log in logs:
-        if log.is_unplanned:
-            unplanned.append(log)
-        else:
-            log_index[(log.target_date, log.producto_id)] = log
+    reg_set = {(r.tarea_id, r.fecha): r for r in registros}
 
-    result = []
+    tareas_by_day: dict[int, list[TareaProduccion]] = {}
+    all_tareas = (
+        db.query(TareaProduccion)
+        .filter(TareaProduccion.is_active == True, TareaProduccion.tipo == "produccion")
+        .all()
+    )
+    for t in all_tareas:
+        tareas_by_day.setdefault(t.dia_semana, []).append(t)
+
+    total_planned = 0
+    total_completed = 0
+    por_dia = []
+    tarea_stats: dict[int, dict] = {}
 
     for d in all_dates:
-        week_num = _date_to_week_number(d)
-        dow = d.weekday()  # 0 = Monday … 6 = Sunday
-        date_str = d.isoformat()
+        dow = d.isoweekday()
+        day_tareas = tareas_by_day.get(dow, [])
+        day_planned = len(day_tareas)
+        day_completed = 0
 
-        # Planned entries for this cycle slot (only active products)
-        plan_entries = (
-            db.query(PlanProduccion)
-            .join(ProductoProduccion, PlanProduccion.producto_id == ProductoProduccion.id)
-            .filter(
-                PlanProduccion.week_number == week_num,
-                PlanProduccion.day_of_week == dow,
-                ProductoProduccion.is_active == True,
-            )
-            .all()
-        )
-
-        seen_product_ids: set[int] = set()
-        for plan in plan_entries:
-            log = log_index.get((date_str, plan.producto_id))
-            result.append(
-                {
-                    "fecha": date_str,
-                    "week_number": week_num,
-                    "day_of_week": dow,
-                    "producto_id": plan.producto_id,
-                    "planned_qty": plan.planned_qty,
-                    "actual_qty": log.actual_qty if log else None,
-                    "log_id": log.id if log else None,
-                    "duration_minutes_machine": log.duration_minutes_machine if log else None,
-                    "duration_minutes_human": log.duration_minutes_human if log else None,
-                    "is_unplanned": False,
+        for t in day_tareas:
+            reg = reg_set.get((t.id, d))
+            if t.id not in tarea_stats:
+                tarea_stats[t.id] = {
+                    "tarea_id": t.id,
+                    "titulo": t.titulo,
+                    "cantidad_planificada": t.cantidad_planificada,
+                    "unidad_cantidad": t.unidad_cantidad,
+                    "duracion_planificada": t.duracion_minutos,
+                    "veces_planificada": 0,
+                    "veces_completada": 0,
+                    "cantidades": [],
+                    "duraciones": [],
                 }
-            )
-            seen_product_ids.add(plan.producto_id)
+            tarea_stats[t.id]["veces_planificada"] += 1
 
-        # All remaining logs for this date (not matched to a plan entry)
-        for log in logs:
-            if log.target_date == date_str and log.producto_id not in seen_product_ids:
-                result.append(
-                    {
-                        "fecha": date_str,
-                        "week_number": week_num,
-                        "day_of_week": dow,
-                        "producto_id": log.producto_id,
-                        "planned_qty": None,
-                        "actual_qty": log.actual_qty,
-                        "log_id": log.id,
-                        "duration_minutes_machine": log.duration_minutes_machine,
-                        "duration_minutes_human": log.duration_minutes_human,
-                        "is_unplanned": log.is_unplanned,
-                    }
-                )
-                seen_product_ids.add(log.producto_id)
+            if reg and reg.completada:
+                day_completed += 1
+                tarea_stats[t.id]["veces_completada"] += 1
+                if reg.cantidad_real is not None:
+                    tarea_stats[t.id]["cantidades"].append(reg.cantidad_real)
+                if reg.duracion_real is not None:
+                    tarea_stats[t.id]["duraciones"].append(reg.duracion_real)
 
-    return result
+        total_planned += day_planned
+        total_completed += day_completed
+
+        if day_planned > 0:
+            por_dia.append({
+                "fecha": d.isoformat(),
+                "dia_nombre": DIAS.get(dow, ""),
+                "planificadas": day_planned,
+                "completadas": day_completed,
+                "porcentaje": round(day_completed / day_planned * 100, 1),
+            })
+
+    por_tarea = []
+    for stats in tarea_stats.values():
+        cantidades = stats.pop("cantidades")
+        duraciones = stats.pop("duraciones")
+        stats["cantidad_promedio"] = round(sum(cantidades) / len(cantidades), 1) if cantidades else None
+        stats["duracion_promedio"] = round(sum(duraciones) / len(duraciones), 1) if duraciones else None
+        por_tarea.append(stats)
+
+    return {
+        "resumen": {
+            "total_planificadas": total_planned,
+            "total_completadas": total_completed,
+            "porcentaje_cumplimiento": round(total_completed / total_planned * 100, 1) if total_planned else 0,
+            "dias_registrados": len(por_dia),
+        },
+        "por_dia": por_dia,
+        "por_tarea": sorted(por_tarea, key=lambda x: x["titulo"]),
+    }
+
+
+# ==============================================================
+# Plan tasks — CRUD (admin-only for write)
+# ==============================================================
+
+
+@router.get("/tareas", response_model=list[TareaProduccionOut])
+def list_tareas(
+    dia_semana: Optional[int] = Query(None),
+    tipo: Optional[str] = Query(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    q = db.query(TareaProduccion)
+    if dia_semana is not None:
+        q = q.filter(TareaProduccion.dia_semana == dia_semana)
+    if tipo is not None:
+        q = q.filter(TareaProduccion.tipo == tipo)
+    rows = q.order_by(
+        TareaProduccion.dia_semana, TareaProduccion.hora, TareaProduccion.posicion,
+    ).all()
+    return [_tarea_to_out(t) for t in rows]
+
+
+@router.get("/tareas/{tarea_id}", response_model=TareaProduccionOut)
+def get_tarea(
+    tarea_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.query(TareaProduccion).filter(TareaProduccion.id == tarea_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    return _tarea_to_out(t)
+
+
+@router.post("/tareas", response_model=TareaProduccionOut, status_code=201)
+def create_tarea(
+    data: TareaProduccionCreate,
+    user: User = require_permission("produccion", "create"),
+    db: Session = Depends(get_db),
+):
+    t = TareaProduccion(**data.model_dump())
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return _tarea_to_out(t)
+
+
+@router.put("/tareas/{tarea_id}", response_model=TareaProduccionOut)
+def update_tarea(
+    tarea_id: int,
+    data: TareaProduccionUpdate,
+    user: User = require_permission("produccion", "edit"),
+    db: Session = Depends(get_db),
+):
+    t = db.query(TareaProduccion).filter(TareaProduccion.id == tarea_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    for key, val in data.model_dump(exclude_unset=True).items():
+        setattr(t, key, val)
+    db.commit()
+    db.refresh(t)
+    return _tarea_to_out(t)
+
+
+@router.delete("/tareas/{tarea_id}")
+def delete_tarea(
+    tarea_id: int,
+    user: User = require_permission("produccion", "delete"),
+    db: Session = Depends(get_db),
+):
+    t = db.query(TareaProduccion).filter(TareaProduccion.id == tarea_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    db.delete(t)
+    db.commit()
+    return {"ok": True}

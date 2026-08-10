@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import sqlalchemy as sa
@@ -16,7 +16,7 @@ class User(Base):
     pin_hash: Mapped[str] = mapped_column(sa.String(200))
     role: Mapped[str] = mapped_column(sa.String(20), default="staff")
     is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
 
 class Cliente(Base):
@@ -29,7 +29,7 @@ class Cliente(Base):
     telefono: Mapped[Optional[str]] = mapped_column(sa.String(50), nullable=True)
     direccion: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
 
 class Permission(Base):
@@ -107,8 +107,8 @@ class Receta(Base):
     es_subreceta: Mapped[bool] = mapped_column(default=False)
     unidad_rendimiento: Mapped[Optional[str]] = mapped_column(sa.String(20), nullable=True)
     notas: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
-    fecha_creacion: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    fecha_modificacion: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    fecha_creacion: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+    fecha_modificacion: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     categoria_rel: Mapped["Categoria"] = relationship(back_populates="recetas")
     lineas: Mapped[list["LineaReceta"]] = relationship(
@@ -293,7 +293,7 @@ class LogProduccion(Base):
     is_unplanned: Mapped[bool] = mapped_column(default=False, server_default=sa_text("false"))
     notes: Mapped[Optional[str]] = mapped_column(sa.String(500), nullable=True)
     recorded_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    recorded_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    recorded_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         UniqueConstraint("producto_id", "target_date", name="uq_log_produccion"),
@@ -301,6 +301,46 @@ class LogProduccion(Base):
 
     producto: Mapped["ProductoProduccion"] = relationship(back_populates="logs")
     user: Mapped["User"] = relationship(foreign_keys=[recorded_by])
+
+
+class TareaProduccion(Base):
+    __tablename__ = "tareas_produccion"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dia_semana: Mapped[int] = mapped_column(sa.Integer)
+    hora: Mapped[Optional[str]] = mapped_column(sa.String(5), nullable=True)
+    titulo: Mapped[str] = mapped_column(sa.String(200))
+    descripcion: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
+    duracion_minutos: Mapped[Optional[int]] = mapped_column(sa.Integer, nullable=True)
+    cantidad_planificada: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
+    unidad_cantidad: Mapped[Optional[str]] = mapped_column(sa.String(20), nullable=True)
+    receta_id: Mapped[Optional[int]] = mapped_column(ForeignKey("recetas.id"), nullable=True)
+    tipo: Mapped[str] = mapped_column(sa.String(20), default="produccion")
+    posicion: Mapped[int] = mapped_column(sa.Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
+
+    receta: Mapped[Optional["Receta"]] = relationship(foreign_keys=[receta_id])
+
+
+class RegistroProduccion(Base):
+    __tablename__ = "registros_produccion"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tarea_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tareas_produccion.id"), nullable=True)
+    fecha: Mapped[date] = mapped_column(sa.Date)
+    completada: Mapped[bool] = mapped_column(default=False, server_default=sa_text("false"))
+    cantidad_real: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
+    duracion_real: Mapped[Optional[int]] = mapped_column(sa.Integer, nullable=True)
+    notas: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
+    titulo_extra: Mapped[Optional[str]] = mapped_column(sa.String(200), nullable=True)
+    unidad_extra: Mapped[Optional[str]] = mapped_column(sa.String(20), nullable=True)
+    receta_id: Mapped[Optional[int]] = mapped_column(ForeignKey("recetas.id"), nullable=True)
+    registrado_por: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    registrado_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+
+    tarea: Mapped[Optional["TareaProduccion"]] = relationship()
+    receta: Mapped[Optional["Receta"]] = relationship(foreign_keys=[receta_id])
+    user: Mapped["User"] = relationship(foreign_keys=[registrado_por])
 
 
 # ============================================================
@@ -315,8 +355,11 @@ class ProductoCongelado(Base):
     nombre: Mapped[str] = mapped_column(sa.String(200))
     categoria: Mapped[str] = mapped_column(sa.String(50))
     unidad: Mapped[str] = mapped_column(sa.String(20))
+    receta_id: Mapped[Optional[int]] = mapped_column(ForeignKey("recetas.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
     position: Mapped[int] = mapped_column(sa.Integer, default=0)
+
+    receta: Mapped[Optional["Receta"]] = relationship(foreign_keys=[receta_id])
 
 
 class StockCongelado(Base):
@@ -356,7 +399,7 @@ class MermaRegistro(Base):
     coste_unitario: Mapped[float] = mapped_column(sa.Float, default=0)
     coste_total: Mapped[float] = mapped_column(sa.Float, default=0)
     registered_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
-    registered_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    registered_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
     ingrediente_rel: Mapped[Optional["Ingrediente"]] = relationship(foreign_keys=[ingrediente_id])
     receta_rel: Mapped[Optional["Receta"]] = relationship(foreign_keys=[receta_id])
@@ -391,7 +434,7 @@ class ProtocoloCompletion(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     template_id: Mapped[int] = mapped_column(ForeignKey("protocolo_templates.id"))
     completed_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    completed_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    completed_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
     target_date: Mapped[str] = mapped_column(sa.String(10))
     target_period: Mapped[Optional[str]] = mapped_column(sa.String(10), nullable=True)
     is_satisfactory: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
@@ -429,7 +472,7 @@ class LecturaTemperatura(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     frigorifico_id: Mapped[int] = mapped_column(ForeignKey("frigorificos.id"))
     recorded_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    recorded_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    recorded_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
     target_date: Mapped[str] = mapped_column(sa.String(10))
     shift: Mapped[str] = mapped_column(sa.String(20))
     value: Mapped[float] = mapped_column(sa.Float)
@@ -457,8 +500,11 @@ class ProductoCatalogo(Base):
     precio: Mapped[float] = mapped_column(sa.Float)
     categoria: Mapped[str] = mapped_column(sa.String(50))
     imagen_url: Mapped[Optional[str]] = mapped_column(sa.String(500), nullable=True)
+    receta_id: Mapped[Optional[int]] = mapped_column(ForeignKey("recetas.id"), nullable=True)
     disponible: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
     posicion: Mapped[int] = mapped_column(sa.Integer, default=0)
+
+    receta: Mapped[Optional["Receta"]] = relationship(foreign_keys=[receta_id])
 
 
 class PedidoRecurrente(Base):
@@ -494,7 +540,7 @@ class PedidoCliente(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id"))
-    fecha_pedido: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    fecha_pedido: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
     fecha_entrega: Mapped[date] = mapped_column(sa.Date)
     estado: Mapped[str] = mapped_column(sa.String(20), default="pendiente")
     notas: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
@@ -550,7 +596,7 @@ class EntregaB2B(Base):
     fecha_entrega: Mapped[date] = mapped_column(sa.Date)
     estado: Mapped[str] = mapped_column(sa.String(20), default="pendiente")
     notas: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
     cliente: Mapped["ClienteB2B"] = relationship()
     lineas: Mapped[list["LineaEntregaB2B"]] = relationship(

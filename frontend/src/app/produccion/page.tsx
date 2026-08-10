@@ -1,335 +1,421 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 
-const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const DIAS_FULL = [
-  "Lunes",
-  "Martes",
-  "Miércoles",
-  "Jueves",
-  "Viernes",
-  "Sábado",
-  "Domingo",
-];
-
-interface CalendarioItem {
-  producto_id: number;
-  producto_nombre: string;
-  cantidad_planificada: number;
+interface TareaDia {
+  tarea_id: number;
+  hora: string | null;
+  titulo: string;
+  descripcion: string | null;
+  duracion_planificada: number | null;
+  cantidad_planificada: number | null;
+  unidad_cantidad: string | null;
+  receta_id: number | null;
+  receta_nombre: string | null;
+  tipo: string;
+  registro_id: number | null;
+  completada: boolean;
   cantidad_real: number | null;
+  duracion_real: number | null;
+  notas: string | null;
 }
 
-interface CalendarioDia {
+interface ExtraDia {
+  registro_id: number;
+  titulo: string;
+  receta_id: number | null;
+  unidad_cantidad: string | null;
+  completada: boolean;
+  cantidad_real: number | null;
+  duracion_real: number | null;
+  notas: string | null;
+}
+
+interface DiaData {
   fecha: string;
   dia_semana: number;
-  items: CalendarioItem[];
+  dia_nombre: string;
+  tareas: TareaDia[];
+  extras: ExtraDia[];
 }
 
-interface CalendarioRaw {
-  fecha: string;
-  day_of_week: number;
-  producto_id: number;
-  planned_qty: number | null;
-  actual_qty: number | null;
+interface RecetaDropdown {
+  id: number;
+  nombre: string;
+  porciones_por_lote: number;
 }
 
-function getMonday(d: Date): Date {
-  const date = new Date(d);
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
+const TIPO_DOT: Record<string, string> = {
+  produccion: "bg-[#004225]",
+  limpieza: "bg-amber-500",
+  nota: "bg-blue-500",
+  entrega: "bg-purple-500",
+  admin: "bg-gray-500",
+};
 
-function formatDate(d: Date): string {
+function toLocalISO(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
-function formatDisplayDate(dateStr: string): string {
-  const [y, m, day] = dateStr.split("-");
-  return `${day}/${m}/${y}`;
+function displayDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
 }
 
-function getStatusColor(item: CalendarioItem): string {
-  if (item.cantidad_real === null || item.cantidad_real === undefined) {
-    return "bg-red-50 border-red-200 text-red-700";
-  }
-  if (item.cantidad_real >= item.cantidad_planificada) {
-    return "bg-green-50 border-green-200 text-green-700";
-  }
-  return "bg-yellow-50 border-yellow-200 text-yellow-700";
+function isDomingo(iso: string): boolean {
+  return new Date(iso + "T12:00:00").getDay() === 0;
 }
 
-function getStatusDot(item: CalendarioItem): string {
-  if (item.cantidad_real === null || item.cantidad_real === undefined) {
-    return "bg-red-400";
-  }
-  if (item.cantidad_real >= item.cantidad_planificada) {
-    return "bg-green-500";
-  }
-  return "bg-yellow-400";
-}
-
-export default function ProduccionCalendarioPage() {
-  const router = useRouter();
-  const { toast } = useToast();
-
-  const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
-  const [calendario, setCalendario] = useState<CalendarioDia[]>([]);
+export default function ProduccionHoy() {
+  const searchParams = useSearchParams();
+  const paramFecha = searchParams.get("fecha");
+  const [fecha, setFecha] = useState(() => paramFecha || toLocalISO(new Date()));
+  const [data, setData] = useState<DiaData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<number | null>(null);
+  const [showExtraForm, setShowExtraForm] = useState(false);
+  const [extraRecetaId, setExtraRecetaId] = useState("");
+  const [extraCantidad, setExtraCantidad] = useState("");
+  const [extraDuracion, setExtraDuracion] = useState("");
+  const [extraNotas, setExtraNotas] = useState("");
+  const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
+  const [recetas, setRecetas] = useState<RecetaDropdown[]>([]);
+  const { toast } = useToast();
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
+  const draftKey = `brot_produccion_dia_${fecha}`;
 
-  const loadCalendario = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const desde = formatDate(weekStart);
-      const hasta = formatDate(weekEnd);
-      const raw = await apiFetch<CalendarioRaw[]>(
-        `/api/produccion/calendario?fecha_desde=${desde}&fecha_hasta=${hasta}`
-      );
-      const productos = await apiFetch<{ id: number; nombre: string }[]>(
-        "/api/produccion/productos"
-      );
-      const prodMap = new Map(productos.map((p) => [p.id, p.nombre]));
-      const grouped = new Map<string, CalendarioDia>();
-      for (const row of raw) {
-        if (!grouped.has(row.fecha)) {
-          grouped.set(row.fecha, {
-            fecha: row.fecha,
-            dia_semana: row.day_of_week,
-            items: [],
-          });
-        }
-        grouped.get(row.fecha)!.items.push({
-          producto_id: row.producto_id,
-          producto_nombre: prodMap.get(row.producto_id) || `Producto ${row.producto_id}`,
-          cantidad_planificada: row.planned_qty || 0,
-          cantidad_real: row.actual_qty,
-        });
-      }
-      setCalendario(Array.from(grouped.values()));
+      const [d, recs] = await Promise.all([
+        apiFetch<DiaData>(`/api/produccion/dia?fecha=${fecha}`),
+        apiFetch<RecetaDropdown[]>("/api/produccion/productos-dropdown"),
+      ]);
+      setData(d);
+      setRecetas(recs);
     } catch {
-      toast("Error al cargar el calendario", "error");
+      toast("Error cargando datos", "error");
     } finally {
       setLoading(false);
     }
-  }, [weekStart]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fecha, toast]);
 
   useEffect(() => {
-    loadCalendario();
-  }, [loadCalendario]);
+    load();
+  }, [load]);
 
-  function prevWeek() {
-    setWeekStart((prev) => {
-      const d = new Date(prev);
-      d.setDate(d.getDate() - 7);
-      return d;
+  function changeDay(offset: number) {
+    const d = new Date(fecha + "T12:00:00");
+    d.setDate(d.getDate() + offset);
+    let next = toLocalISO(d);
+    if (isDomingo(next)) {
+      d.setDate(d.getDate() + (offset > 0 ? 1 : -1));
+      next = toLocalISO(d);
+    }
+    setFecha(next);
+    window.history.replaceState(null, "", `/produccion?fecha=${next}`);
+  }
+
+  function goToday() {
+    const today = toLocalISO(new Date());
+    setFecha(today);
+    window.history.replaceState(null, "", `/produccion?fecha=${today}`);
+  }
+
+  async function saveRegistro(tarea: TareaDia, updates: Partial<TareaDia>) {
+    const merged = { ...tarea, ...updates };
+    const key = `save-${tarea.tarea_id}`;
+    if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
+
+    debounceTimers.current[key] = setTimeout(async () => {
+      setSaving(tarea.tarea_id);
+      try {
+        await apiFetch("/api/produccion/registro", {
+          method: "POST",
+          body: JSON.stringify({
+            tarea_id: tarea.tarea_id,
+            fecha,
+            completada: merged.completada,
+            cantidad_real: merged.cantidad_real,
+            duracion_real: merged.duracion_real,
+            notas: merged.notas,
+          }),
+        });
+      } catch {
+        toast("Error al guardar", "error");
+      } finally {
+        setSaving(null);
+      }
+    }, 500);
+
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        tareas: prev.tareas.map((t) =>
+          t.tarea_id === tarea.tarea_id ? { ...t, ...updates } : t
+        ),
+      };
     });
   }
 
-  function nextWeek() {
-    setWeekStart((prev) => {
-      const d = new Date(prev);
-      d.setDate(d.getDate() + 7);
-      return d;
+  async function toggleComplete(tarea: TareaDia) {
+    const newVal = !tarea.completada;
+    await saveRegistro(tarea, { completada: newVal });
+  }
+
+  async function submitExtra() {
+    if (!extraRecetaId) return;
+    try {
+      await apiFetch("/api/produccion/registro/extra", {
+        method: "POST",
+        body: JSON.stringify({
+          fecha,
+          receta_id: parseInt(extraRecetaId),
+          cantidad_real: extraCantidad ? parseFloat(extraCantidad.replace(",", ".")) : null,
+          duracion_real: extraDuracion ? parseInt(extraDuracion) : null,
+          notas: extraNotas || null,
+        }),
+      });
+      setShowExtraForm(false);
+      setExtraRecetaId("");
+      setExtraCantidad("");
+      setExtraDuracion("");
+      setExtraNotas("");
+      toast("Produccion extra registrada", "success");
+      load();
+    } catch {
+      toast("Error al registrar", "error");
+    }
+  }
+
+  async function deleteExtra(id: number) {
+    if (!confirm("Eliminar este registro?")) return;
+    try {
+      await apiFetch(`/api/produccion/registro/${id}`, { method: "DELETE" });
+      toast("Eliminado", "success");
+      load();
+    } catch {
+      toast("Error al eliminar", "error");
+    }
+  }
+
+  function toggleNotes(tareaId: number) {
+    setExpandedNotes((prev) => {
+      const next = new Set(prev);
+      if (next.has(tareaId)) next.delete(tareaId);
+      else next.add(tareaId);
+      return next;
     });
   }
 
-  function goToToday() {
-    setWeekStart(getMonday(new Date()));
+  const isToday = fecha === toLocalISO(new Date());
+  const timedTareas = data?.tareas.filter((t) => t.hora !== null) || [];
+  const noteTareas = data?.tareas.filter((t) => t.hora === null) || [];
+  const completedCount = data?.tareas.filter((t) => t.completada).length || 0;
+  const totalCount = data?.tareas.length || 0;
+
+  if (loading) {
+    return <p className="text-center py-12 text-gray-500">Cargando...</p>;
   }
-
-  // Build a map from date string to CalendarioDia
-  const calMap = new Map<string, CalendarioDia>();
-  calendario.forEach((d) => calMap.set(d.fecha, d));
-
-  // Build the 7 days of the week
-  const weekDays: { date: Date; dateStr: string; dayData: CalendarioDia | null }[] =
-    Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(weekStart);
-      d.setDate(weekStart.getDate() + i);
-      const dateStr = formatDate(d);
-      return { date: d, dateStr, dayData: calMap.get(dateStr) ?? null };
-    });
-
-  const todayStr = formatDate(new Date());
 
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
-        <div>
-          <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
-            Producción
-          </h1>
-          <p className="text-sm text-warm-gray mt-0.5">
-            Semana del {formatDisplayDate(formatDate(weekStart))} al{" "}
-            {formatDisplayDate(formatDate(weekEnd))}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => router.push("/produccion/registro")}
-            className="bg-brot text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-brot-dark transition-colors min-h-[44px]"
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="font-[family-name:var(--font-garamond)] text-2xl text-gray-900">
+          Produccion
+        </h1>
+        <div className="flex gap-2">
+          <Link
+            href="/produccion/calendario"
+            className="text-sm text-[#004225] border border-[#004225]/30 px-3 py-2 rounded-lg hover:bg-[#004225]/5 transition-colors"
+            style={{ minHeight: 44, display: "flex", alignItems: "center" }}
           >
-            Registrar hoy
-          </button>
-          <button
-            onClick={() => router.push("/produccion/plan")}
-            className="border border-cream-dark bg-white text-text px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-cream transition-colors min-h-[44px]"
+            Calendario
+          </Link>
+          <Link
+            href="/produccion/analytics"
+            className="text-sm text-[#004225] border border-[#004225]/30 px-3 py-2 rounded-lg hover:bg-[#004225]/5 transition-colors"
+            style={{ minHeight: 44, display: "flex", alignItems: "center" }}
           >
-            Plan semanal
-          </button>
-          <button
-            onClick={() => router.push("/produccion/productos")}
-            className="border border-cream-dark bg-white text-text px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-cream transition-colors min-h-[44px]"
-          >
-            Productos
-          </button>
-          <button
-            onClick={() => router.push("/produccion/analytics")}
-            className="border border-cream-dark bg-white text-text px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-cream transition-colors min-h-[44px]"
-          >
-            Análisis
-          </button>
+            Analytics
+          </Link>
         </div>
       </div>
 
-      {/* Week navigator */}
+      {/* Day nav */}
       <div className="flex items-center gap-2 mb-4">
         <button
-          onClick={prevWeek}
-          className="p-2 rounded-lg border border-cream-dark bg-white hover:bg-cream transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-          aria-label="Semana anterior"
+          onClick={() => changeDay(-1)}
+          className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-lg"
+          style={{ touchAction: "manipulation" }}
         >
-          ‹
+          &lsaquo;
         </button>
         <button
-          onClick={goToToday}
-          className="px-3 py-2 rounded-lg border border-cream-dark bg-white text-sm text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
+          onClick={goToday}
+          className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+            isToday
+              ? "bg-[#004225] text-white"
+              : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+          }`}
+          style={{ touchAction: "manipulation", minHeight: 40 }}
         >
           Hoy
         </button>
         <button
-          onClick={nextWeek}
-          className="p-2 rounded-lg border border-cream-dark bg-white hover:bg-cream transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-          aria-label="Semana siguiente"
+          onClick={() => changeDay(1)}
+          className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-lg"
+          style={{ touchAction: "manipulation" }}
         >
-          ›
+          &rsaquo;
         </button>
-
-        {/* Legend */}
-        <div className="ml-auto flex items-center gap-3 text-xs text-warm-gray">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-            Cumplido
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />
-            Parcial
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />
-            Sin registrar
-          </span>
+        <div className="ml-2">
+          <p className="text-sm font-semibold text-gray-800">
+            {data?.dia_nombre} {displayDate(fecha)}
+          </p>
+          <p className="text-xs text-gray-400">
+            {completedCount}/{totalCount} completadas
+          </p>
         </div>
       </div>
 
-      {/* Calendar grid */}
-      {loading ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
-          Cargando...
+      {/* Progress bar */}
+      {totalCount > 0 && (
+        <div className="h-2 bg-gray-100 rounded-full mb-4 overflow-hidden">
+          <div
+            className="h-full bg-[#004225] rounded-full transition-all duration-300"
+            style={{ width: `${(completedCount / totalCount) * 100}%` }}
+          />
+        </div>
+      )}
+
+      {/* No tasks for Sunday */}
+      {!data || data.tareas.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
+          Sin tareas planificadas para este dia
         </div>
       ) : (
         <>
-          {/* Desktop: 7-column grid */}
-          <div className="hidden md:grid grid-cols-7 gap-2">
-            {weekDays.map(({ date, dateStr, dayData }, i) => {
-              const isToday = dateStr === todayStr;
+          {/* Timed tasks */}
+          <div className="space-y-2">
+            {timedTareas.map((tarea) => {
+              const dot = TIPO_DOT[tarea.tipo] || TIPO_DOT.produccion;
+              const notesOpen = expandedNotes.has(tarea.tarea_id);
+              const isSaving = saving === tarea.tarea_id;
               return (
                 <div
-                  key={dateStr}
-                  className={`bg-white rounded-xl border min-h-[200px] flex flex-col ${
-                    isToday
-                      ? "border-brot shadow-sm"
-                      : "border-cream-dark"
+                  key={tarea.tarea_id}
+                  className={`bg-white rounded-xl border p-3 transition-all ${
+                    tarea.completada
+                      ? "border-green-200 bg-green-50/50"
+                      : "border-gray-200"
                   }`}
                 >
-                  {/* Day header */}
-                  <div
-                    className={`px-3 py-2 border-b ${
-                      isToday
-                        ? "border-brot/20 bg-brot/5"
-                        : "border-cream-dark"
-                    }`}
-                  >
-                    <p
-                      className={`text-xs font-medium uppercase tracking-wide ${
-                        isToday ? "text-brot" : "text-warm-gray"
+                  {/* Row 1: checkbox + title + time */}
+                  <div className="flex items-start gap-3">
+                    <button
+                      onClick={() => toggleComplete(tarea)}
+                      className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                        tarea.completada
+                          ? "bg-[#004225] border-[#004225] text-white"
+                          : "border-gray-300 hover:border-[#004225]"
                       }`}
+                      style={{ touchAction: "manipulation" }}
                     >
-                      {DIAS[i]}
-                    </p>
-                    <p
-                      className={`text-sm font-semibold mt-0.5 ${
-                        isToday ? "text-brot" : "text-text"
-                      }`}
-                    >
-                      {date.getDate()}
-                    </p>
+                      {tarea.completada && (
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path d="M3 7L6 10L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                        <span className="text-xs text-gray-400 font-mono">
+                          {tarea.hora?.replace(":00", "h")}
+                        </span>
+                        <span className={`text-sm font-medium ${tarea.completada ? "text-gray-500 line-through" : "text-gray-900"}`}>
+                          {tarea.titulo}
+                        </span>
+                        {isSaving && <span className="text-[10px] text-gray-400">...</span>}
+                      </div>
+                      {tarea.descripcion && (
+                        <p className="text-xs text-gray-400 mt-0.5 whitespace-pre-line line-clamp-2 ml-4">
+                          {tarea.descripcion}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Items */}
-                  <div className="p-2 flex-1 space-y-1.5">
-                    {dayData && dayData.items && dayData.items.length > 0 ? (
-                      dayData.items.map((item) => (
-                        <div
-                          key={item.producto_id}
-                          className={`rounded-md border px-2 py-1.5 text-xs ${getStatusColor(item)}`}
-                        >
-                          <div className="flex items-start gap-1">
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full mt-0.5 shrink-0 ${getStatusDot(item)}`}
-                            />
-                            <div className="min-w-0">
-                              <p className="font-medium truncate">
-                                {item.producto_nombre}
-                              </p>
-                              <p className="text-[10px] opacity-80 mt-0.5">
-                                {item.cantidad_real !== null
-                                  ? `${item.cantidad_real}/${item.cantidad_planificada}`
-                                  : `0/${item.cantidad_planificada}`}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-warm-gray/60 text-center pt-4">
-                        Sin plan
-                      </p>
+                  {/* Row 2: inputs */}
+                  <div className="flex items-center gap-2 mt-2 ml-10">
+                    {tarea.cantidad_planificada !== null && (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          placeholder={String(tarea.cantidad_planificada)}
+                          value={tarea.cantidad_real ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value ? parseFloat(e.target.value.replace(",", ".")) : null;
+                            saveRegistro(tarea, { cantidad_real: val });
+                          }}
+                          className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                          style={{ minHeight: 36 }}
+                        />
+                        <span className="text-xs text-gray-400">
+                          /{tarea.cantidad_planificada} {tarea.unidad_cantidad}
+                        </span>
+                      </div>
                     )}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        placeholder={tarea.duracion_planificada ? String(tarea.duracion_planificada) : "-"}
+                        value={tarea.duracion_real ?? ""}
+                        onChange={(e) => {
+                          const val = e.target.value ? parseInt(e.target.value) : null;
+                          saveRegistro(tarea, { duracion_real: val });
+                        }}
+                        className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                        style={{ minHeight: 36 }}
+                      />
+                      <span className="text-xs text-gray-400">min</span>
+                    </div>
+                    <button
+                      onClick={() => toggleNotes(tarea.tarea_id)}
+                      className={`ml-auto px-2 py-1 rounded text-xs transition-colors ${
+                        tarea.notas
+                          ? "text-[#004225] bg-[#004225]/10"
+                          : "text-gray-400 hover:text-gray-600"
+                      }`}
+                      style={{ touchAction: "manipulation", minHeight: 36 }}
+                    >
+                      {tarea.notas ? "Notas" : "+ Nota"}
+                    </button>
                   </div>
 
-                  {/* Quick log link */}
-                  {isToday && (
-                    <div className="px-2 pb-2">
-                      <button
-                        onClick={() => router.push("/produccion/registro")}
-                        className="w-full text-xs text-brot hover:text-brot-dark py-1 text-center border border-brot/30 rounded-md hover:bg-brot/5 transition-colors"
-                      >
-                        Registrar
-                      </button>
+                  {/* Row 3: notes (expandable) */}
+                  {notesOpen && (
+                    <div className="mt-2 ml-10">
+                      <textarea
+                        value={tarea.notas || ""}
+                        onChange={(e) => saveRegistro(tarea, { notas: e.target.value || null })}
+                        placeholder="Agregar nota..."
+                        rows={2}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none resize-none"
+                      />
                     </div>
                   )}
                 </div>
@@ -337,75 +423,146 @@ export default function ProduccionCalendarioPage() {
             })}
           </div>
 
-          {/* Mobile: stacked cards */}
-          <div className="md:hidden space-y-3">
-            {weekDays.map(({ date, dateStr, dayData }, i) => {
-              const isToday = dateStr === todayStr;
-              return (
-                <div
-                  key={dateStr}
-                  className={`bg-white rounded-xl border ${
-                    isToday ? "border-brot" : "border-cream-dark"
-                  }`}
-                >
+          {/* Note tasks (no time slot) */}
+          {noteTareas.length > 0 && (
+            <div className="mt-4 space-y-1">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">
+                Recordatorios
+              </p>
+              {noteTareas.map((tarea) => {
+                const dot = TIPO_DOT[tarea.tipo] || TIPO_DOT.nota;
+                return (
                   <div
-                    className={`flex items-center justify-between px-4 py-3 border-b ${
-                      isToday ? "border-brot/20 bg-brot/5" : "border-cream-dark"
-                    }`}
+                    key={tarea.tarea_id}
+                    className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 px-3 py-2"
                   >
-                    <div>
-                      <span
-                        className={`text-sm font-semibold ${isToday ? "text-brot" : "text-text"}`}
-                      >
-                        {DIAS_FULL[i]}
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                    <span className="text-sm text-gray-700">{tarea.titulo}</span>
+                    {tarea.duracion_planificada && (
+                      <span className="text-xs text-gray-400 ml-auto">
+                        {tarea.duracion_planificada} min
                       </span>
-                      <span className="text-xs text-warm-gray ml-2">
-                        {date.getDate()}/{date.getMonth() + 1}
-                      </span>
-                    </div>
-                    {isToday && (
-                      <button
-                        onClick={() => router.push("/produccion/registro")}
-                        className="text-xs text-brot border border-brot/30 rounded-md px-2 py-1 hover:bg-brot/5"
-                      >
-                        Registrar
-                      </button>
                     )}
                   </div>
-                  {dayData && dayData.items && dayData.items.length > 0 ? (
-                    <div className="p-3 space-y-2">
-                      {dayData.items.map((item) => (
-                        <div
-                          key={item.producto_id}
-                          className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${getStatusColor(item)}`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`w-2 h-2 rounded-full shrink-0 ${getStatusDot(item)}`}
-                            />
-                            <span className="font-medium">
-                              {item.producto_nombre}
-                            </span>
-                          </div>
-                          <span className="text-xs opacity-80 shrink-0 ml-2">
-                            {item.cantidad_real !== null
-                              ? `${item.cantidad_real}/${item.cantidad_planificada}`
-                              : `0/${item.cantidad_planificada}`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="px-4 py-3 text-sm text-warm-gray">
-                      Sin producción planificada
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
+
+      {/* Extras section */}
+      {(data?.extras?.length ?? 0) > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">
+            Produccion extra
+          </p>
+          <div className="space-y-1">
+            {data!.extras.map((extra) => (
+              <div
+                key={extra.registro_id}
+                className="flex items-center gap-2 bg-white rounded-lg border border-dashed border-gray-300 px-3 py-2"
+              >
+                <span className="w-2 h-2 rounded-full shrink-0 bg-teal-500" />
+                <span className="text-sm text-gray-700 font-medium">{extra.titulo}</span>
+                {extra.cantidad_real !== null && (
+                  <span className="text-xs text-gray-500">
+                    {extra.cantidad_real} {extra.unidad_cantidad || ""}
+                  </span>
+                )}
+                {extra.duracion_real !== null && (
+                  <span className="text-xs text-gray-400">{extra.duracion_real} min</span>
+                )}
+                <button
+                  onClick={() => deleteExtra(extra.registro_id)}
+                  className="ml-auto text-xs text-red-400 hover:text-red-600"
+                  style={{ touchAction: "manipulation", minHeight: 36, minWidth: 36 }}
+                >
+                  x
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add extra button / form */}
+      <div className="mt-4">
+        {!showExtraForm ? (
+          <button
+            onClick={() => setShowExtraForm(true)}
+            className="w-full border-2 border-dashed border-gray-300 text-gray-400 rounded-xl py-3 text-sm hover:border-[#004225] hover:text-[#004225] transition-colors"
+            style={{ touchAction: "manipulation", minHeight: 48 }}
+          >
+            + Agregar produccion extra
+          </button>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-sm font-medium text-gray-700 mb-3">
+              Nueva produccion extra
+            </p>
+            <div className="space-y-2">
+              <select
+                value={extraRecetaId}
+                onChange={(e) => setExtraRecetaId(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                style={{ minHeight: 44 }}
+              >
+                <option value="">Seleccionar producto...</option>
+                {recetas.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.nombre}
+                  </option>
+                ))}
+              </select>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Cantidad"
+                  value={extraCantidad}
+                  onChange={(e) => setExtraCantidad(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                  style={{ minHeight: 44 }}
+                />
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="Minutos"
+                  value={extraDuracion}
+                  onChange={(e) => setExtraDuracion(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                  style={{ minHeight: 44 }}
+                />
+              </div>
+              <textarea
+                placeholder="Notas (opcional)"
+                value={extraNotas}
+                onChange={(e) => setExtraNotas(e.target.value)}
+                rows={2}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none resize-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={submitExtra}
+                  disabled={!extraRecetaId}
+                  className="flex-1 bg-[#004225] text-white py-2.5 rounded-lg text-sm font-medium hover:bg-[#003319] disabled:opacity-50 transition-colors"
+                  style={{ touchAction: "manipulation", minHeight: 44 }}
+                >
+                  Guardar
+                </button>
+                <button
+                  onClick={() => setShowExtraForm(false)}
+                  className="px-4 py-2.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                  style={{ touchAction: "manipulation", minHeight: 44 }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

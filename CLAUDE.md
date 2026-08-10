@@ -16,6 +16,7 @@
 ### Frontend
 - Next.js (App Router) + TypeScript + Tailwind CSS 4
 - React 19
+- Recharts (line charts for stock evolution)
 - Mobile-first, PWA-enabled
 - Deploy to Vercel (free tier)
 - Root directory: `frontend/`
@@ -292,6 +293,22 @@ Daily/weekly/monthly operational task tracking.
 - **Toast notifications:** Auto-dismiss 3s, stacked, bottom-right, green for success, red for error
 - **Loading state:** Simple `Cargando...` centered text
 - **Filters:** Client-side `.filter()` on fetched data, with search + category chips
+- **Stock/inventory input pattern (card grid):**
+  - Category filter chips at top, search bar + counter ("0 / 23") on same row
+  - Items grouped by category (header in green uppercase)
+  - Grid of cards: 1 col mobile, 2 tablet, 3 desktop
+  - Each card: product name (green), "hace Xd" subtitle, number input + unit
+  - Filled cards get highlighted border/bg (`border-brot/40 bg-brot/5`)
+  - Sticky submit bar at bottom with count + "Registrar Stock" button
+  - Draft persistence via sessionStorage
+- **History/historial pattern (pivot table + chart):**
+  - Two-level chart selector: category chips → expand to show individual items
+  - "Todos" button to select all items across categories
+  - Recharts LineChart for evolution over time
+  - Pivot table below: items as rows (sticky left), dates as columns (most recent left), horizontal scroll
+  - Compact text (`text-xs`), unit in own column, zebra striping, zero values in red
+  - Default date range: 90 days
+- **Tab navigation within pages:** Use `useState` + `window.history.replaceState()` for in-page tabs (e.g., Stock Actual | Registrar | Historial)
 
 ---
 

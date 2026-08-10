@@ -1,52 +1,48 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 
-interface CalendarioRaw {
+/* ─── Types ────────────────────────────────────────────────────────── */
+
+interface Resumen {
+  total_planificadas: number;
+  total_completadas: number;
+  porcentaje_cumplimiento: number;
+  dias_registrados: number;
+}
+
+interface DiaStat {
   fecha: string;
-  day_of_week: number;
-  producto_id: number;
-  planned_qty: number | null;
-  actual_qty: number | null;
+  dia_nombre: string;
+  planificadas: number;
+  completadas: number;
+  porcentaje: number;
 }
 
-interface Producto {
-  id: number;
-  nombre: string;
-  unidad: string;
+interface TareaStat {
+  tarea_id: number;
+  titulo: string;
+  cantidad_planificada: number | null;
+  unidad_cantidad: string | null;
+  duracion_planificada: number | null;
+  veces_planificada: number;
+  veces_completada: number;
+  cantidad_promedio: number | null;
+  duracion_promedio: number | null;
 }
 
-interface ProductRow {
-  producto_id: number;
-  nombre: string;
-  planificado: number;
-  producido: number;
-  diferencia: number;
-  cumplimiento: number | null;
+interface AnalyticsData {
+  resumen: Resumen;
+  por_dia: DiaStat[];
+  por_tarea: TareaStat[];
 }
 
-interface DayBar {
-  fecha: string;
-  label: string;
-  total: number;
-}
+/* ─── Helpers ──────────────────────────────────────────────────────── */
 
-type RangePreset = "this_week" | "last_week" | "this_month" | "last_month" | "custom";
-
-const PRESET_LABELS: Record<RangePreset, string> = {
-  this_week: "Esta semana",
-  last_week: "Semana pasada",
-  this_month: "Este mes",
-  last_month: "Mes pasado",
-  custom: "Personalizado",
-};
-
-const DAY_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-
-function formatDate(d: Date): string {
+function toLocalISO(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -54,473 +50,462 @@ function formatDate(d: Date): string {
 }
 
 function getMonday(d: Date): Date {
-  const date = new Date(d);
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
+  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = copy.getDay();
+  // Sunday = 0, Monday = 1, etc.
+  const diff = day === 0 ? 6 : day - 1;
+  copy.setDate(copy.getDate() - diff);
+  return copy;
 }
 
-function getRangeForPreset(preset: RangePreset): { desde: string; hasta: string } {
+function displayDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+type Preset = "esta_semana" | "semana_pasada" | "este_mes" | "mes_pasado" | "custom";
+
+function getPresetRange(preset: Exclude<Preset, "custom">): { desde: string; hasta: string } {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
   switch (preset) {
-    case "this_week": {
+    case "esta_semana": {
       const monday = getMonday(today);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      return { desde: formatDate(monday), hasta: formatDate(sunday) };
+      return { desde: toLocalISO(monday), hasta: toLocalISO(today) };
     }
-    case "last_week": {
+    case "semana_pasada": {
       const thisMonday = getMonday(today);
-      const lastMonday = new Date(thisMonday);
-      lastMonday.setDate(thisMonday.getDate() - 7);
-      const lastSunday = new Date(lastMonday);
-      lastSunday.setDate(lastMonday.getDate() + 6);
-      return { desde: formatDate(lastMonday), hasta: formatDate(lastSunday) };
+      const prevMonday = new Date(thisMonday);
+      prevMonday.setDate(prevMonday.getDate() - 7);
+      const prevSunday = new Date(thisMonday);
+      prevSunday.setDate(prevSunday.getDate() - 1);
+      return { desde: toLocalISO(prevMonday), hasta: toLocalISO(prevSunday) };
     }
-    case "this_month": {
-      const from = new Date(today.getFullYear(), today.getMonth(), 1);
-      const to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      return { desde: formatDate(from), hasta: formatDate(to) };
+    case "este_mes": {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      return { desde: toLocalISO(firstDay), hasta: toLocalISO(today) };
     }
-    case "last_month": {
-      const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const to = new Date(today.getFullYear(), today.getMonth(), 0);
-      return { desde: formatDate(from), hasta: formatDate(to) };
-    }
-    default: {
-      const monday = getMonday(today);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      return { desde: formatDate(monday), hasta: formatDate(sunday) };
+    case "mes_pasado": {
+      const firstDayPrev = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const lastDayPrev = new Date(today.getFullYear(), today.getMonth(), 0);
+      return { desde: toLocalISO(firstDayPrev), hasta: toLocalISO(lastDayPrev) };
     }
   }
 }
 
-export default function ProduccionAnalyticsPage() {
-  const router = useRouter();
+/* ─── Component ────────────────────────────────────────────────────── */
+
+export default function ProduccionAnalytics() {
+  const defaultRange = getPresetRange("esta_semana");
+  const [desde, setDesde] = useState(defaultRange.desde);
+  const [hasta, setHasta] = useState(defaultRange.hasta);
+  const [activePreset, setActivePreset] = useState<Preset>("esta_semana");
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const [preset, setPreset] = useState<RangePreset>("this_week");
-  const initial = getRangeForPreset("this_week");
-  const [fechaDesde, setFechaDesde] = useState(initial.desde);
-  const [fechaHasta, setFechaHasta] = useState(initial.hasta);
-  const [loading, setLoading] = useState(true);
-
-  const [rows, setRows] = useState<ProductRow[]>([]);
-  const [dayBars, setDayBars] = useState<DayBar[]>([]);
-  const [totalProducido, setTotalProducido] = useState(0);
-  const [totalPlanificado, setTotalPlanificado] = useState(0);
-
-  function applyPreset(p: RangePreset) {
-    setPreset(p);
-    if (p !== "custom") {
-      const range = getRangeForPreset(p);
-      setFechaDesde(range.desde);
-      setFechaHasta(range.hasta);
-    }
-  }
-
-  const fetchData = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [rawEntries, productos] = await Promise.all([
-        apiFetch<CalendarioRaw[]>(
-          `/api/produccion/calendario?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`
-        ),
-        apiFetch<Producto[]>("/api/produccion/productos"),
-      ]);
-
-      const prodMap = new Map(productos.map((p) => [p.id, p]));
-
-      // Per-product aggregation
-      const productAgg = new Map<number, { planificado: number; producido: number }>();
-      for (const entry of rawEntries) {
-        if (!productAgg.has(entry.producto_id)) {
-          productAgg.set(entry.producto_id, { planificado: 0, producido: 0 });
-        }
-        const agg = productAgg.get(entry.producto_id)!;
-        agg.planificado += entry.planned_qty ?? 0;
-        agg.producido += entry.actual_qty ?? 0;
-      }
-
-      const productRows: ProductRow[] = Array.from(productAgg.entries())
-        .map(([id, agg]) => {
-          const prod = prodMap.get(id);
-          const diferencia = agg.producido - agg.planificado;
-          const cumplimiento =
-            agg.planificado > 0
-              ? Math.round((agg.producido / agg.planificado) * 100)
-              : null;
-          return {
-            producto_id: id,
-            nombre: prod?.nombre ?? `Producto ${id}`,
-            planificado: agg.planificado,
-            producido: agg.producido,
-            diferencia,
-            cumplimiento,
-          };
-        })
-        .sort((a, b) => b.producido - a.producido);
-
-      setRows(productRows);
-
-      // Per-day aggregation for bar chart
-      const dayAgg = new Map<string, number>();
-      for (const entry of rawEntries) {
-        const prev = dayAgg.get(entry.fecha) ?? 0;
-        dayAgg.set(entry.fecha, prev + (entry.actual_qty ?? 0));
-      }
-
-      // Generate all dates in the selected range
-      const bars: DayBar[] = [];
-      const start = new Date(fechaDesde + "T00:00:00");
-      const end = new Date(fechaHasta + "T00:00:00");
-      for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = formatDate(d);
-        const dow = d.getDay(); // 0=Sun
-        const dayIdx = dow === 0 ? 6 : dow - 1; // 0=Mon … 6=Sun
-        bars.push({
-          fecha: dateStr,
-          label: DAY_SHORT[dayIdx] + " " + d.getDate(),
-          total: dayAgg.get(dateStr) ?? 0,
-        });
-      }
-
-      setDayBars(bars);
-
-      const totPlan = productRows.reduce((s, r) => s + r.planificado, 0);
-      const totProd = productRows.reduce((s, r) => s + r.producido, 0);
-      setTotalPlanificado(totPlan);
-      setTotalProducido(totProd);
+      const result = await apiFetch<AnalyticsData>(
+        `/api/produccion/analytics?desde=${desde}&hasta=${hasta}`
+      );
+      setData(result);
     } catch {
-      toast("Error al cargar el análisis de producción", "error");
+      toast("Error cargando analytics", "error");
     } finally {
       setLoading(false);
     }
-  }, [fechaDesde, fechaHasta]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [desde, hasta, toast]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    load();
+  }, [load]);
 
-  const cumplimientoGlobal =
-    totalPlanificado > 0
-      ? Math.round((totalProducido / totalPlanificado) * 100)
-      : null;
-
-  const maxDayTotal = dayBars.length > 0 ? Math.max(...dayBars.map((b) => b.total), 1) : 1;
-
-  function cumplimientoColor(pct: number | null): string {
-    if (pct === null) return "text-warm-gray";
-    if (pct >= 90) return "text-green-600";
-    if (pct >= 70) return "text-amber-600";
-    return "text-red-600";
+  function applyPreset(preset: Exclude<Preset, "custom">) {
+    const range = getPresetRange(preset);
+    setDesde(range.desde);
+    setHasta(range.hasta);
+    setActivePreset(preset);
   }
 
-  function cumplimientoBarColor(pct: number | null): string {
-    if (pct === null) return "bg-warm-gray";
-    if (pct >= 90) return "bg-green-500";
-    if (pct >= 70) return "bg-amber-400";
-    return "bg-red-400";
+  function handleDesdeChange(val: string) {
+    setDesde(val);
+    setActivePreset("custom");
   }
+
+  function handleHastaChange(val: string) {
+    setHasta(val);
+    setActivePreset("custom");
+  }
+
+  /* ─── Cumplimiento color ─────────────────────────────────────────── */
+
+  function cumplimientoColor(pct: number): string {
+    if (pct >= 80) return "text-green-600";
+    if (pct >= 60) return "text-amber-500";
+    return "text-red-500";
+  }
+
+  function cumplimientoBg(pct: number): string {
+    if (pct >= 80) return "bg-green-50 border-green-200";
+    if (pct >= 60) return "bg-amber-50 border-amber-200";
+    return "bg-red-50 border-red-200";
+  }
+
+  /* ─── Quantity arrow ─────────────────────────────────────────────── */
+
+  function quantityIndicator(avg: number | null, plan: number | null) {
+    if (avg === null || plan === null || plan === 0) return null;
+    const diff = avg - plan;
+    const pct = (diff / plan) * 100;
+    if (Math.abs(pct) < 1) return null;
+    const isUp = diff > 0;
+    return (
+      <span className={`text-xs font-medium ${isUp ? "text-green-600" : "text-red-500"}`}>
+        {isUp ? "↑" : "↓"} {Math.abs(pct).toFixed(0)}%
+      </span>
+    );
+  }
+
+  /* ─── Render ─────────────────────────────────────────────────────── */
+
+  const presets: { key: Exclude<Preset, "custom">; label: string }[] = [
+    { key: "esta_semana", label: "Esta semana" },
+    { key: "semana_pasada", label: "Semana pasada" },
+    { key: "este_mes", label: "Este mes" },
+    { key: "mes_pasado", label: "Mes pasado" },
+  ];
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <button
-          onClick={() => router.push("/produccion")}
-          className="text-warm-gray hover:text-brot transition-colors text-sm min-h-[44px] flex items-center"
+      {/* Back link + Header */}
+      <div className="flex items-center gap-3 mb-4">
+        <Link
+          href="/produccion"
+          className="flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-lg text-gray-600 shrink-0"
+          style={{ touchAction: "manipulation" }}
         >
-          ← Volver
-        </button>
-        <div className="flex-1">
-          <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
-            Análisis de Producción
-          </h1>
-          <p className="text-sm text-warm-gray mt-0.5">
-            Planificado vs. producido por período
-          </p>
-        </div>
+          &lsaquo;
+        </Link>
+        <h1 className="font-[family-name:var(--font-garamond)] text-2xl text-gray-900">
+          Analytics de Produccion
+        </h1>
       </div>
 
-      {/* Date range selector */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-6">
-        <div className="flex gap-2 flex-wrap mb-3">
-          {(["this_week", "last_week", "this_month", "last_month"] as RangePreset[]).map(
-            (p) => (
-              <button
-                key={p}
-                onClick={() => applyPreset(p)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors min-h-[34px] ${
-                  preset === p
-                    ? "bg-brot text-white border-brot"
-                    : "bg-white border-cream-dark text-warm-gray hover:bg-cream hover:text-text"
-                }`}
-              >
-                {PRESET_LABELS[p]}
-              </button>
-            )
-          )}
+      {/* Date range picker */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+        {/* Preset buttons */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          {presets.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => applyPreset(p.key)}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activePreset === p.key
+                  ? "bg-[#004225] text-white"
+                  : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+              style={{ touchAction: "manipulation", minHeight: 44 }}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-warm-gray mb-1">
-              Desde
-            </label>
+
+        {/* Custom date inputs */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <label className="text-xs text-gray-400 block mb-1">Desde</label>
             <input
               type="date"
-              value={fechaDesde}
-              onChange={(e) => {
-                setFechaDesde(e.target.value);
-                setPreset("custom");
-              }}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] text-sm"
+              value={desde}
+              onChange={(e) => handleDesdeChange(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+              style={{ minHeight: 44 }}
             />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-warm-gray mb-1">
-              Hasta
-            </label>
+          <div className="flex-1">
+            <label className="text-xs text-gray-400 block mb-1">Hasta</label>
             <input
               type="date"
-              value={fechaHasta}
-              onChange={(e) => {
-                setFechaHasta(e.target.value);
-                setPreset("custom");
-              }}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] text-sm"
+              value={hasta}
+              onChange={(e) => handleHastaChange(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+              style={{ minHeight: 44 }}
             />
           </div>
         </div>
+        <p className="text-xs text-gray-400 mt-2">
+          {displayDate(desde)} - {displayDate(hasta)}
+        </p>
       </div>
 
-      {loading ? (
-        <div className="p-8 text-center text-warm-gray">Cargando...</div>
-      ) : (
-        <div className="space-y-6">
+      {/* Loading */}
+      {loading && (
+        <p className="text-center py-12 text-gray-500">Cargando...</p>
+      )}
+
+      {/* Content */}
+      {!loading && data && (
+        <>
           {/* Summary cards */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white rounded-xl border border-cream-dark p-5">
-              <p className="text-xs font-medium text-warm-gray uppercase tracking-wide mb-1">
-                Producido
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+            {/* Completadas */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">
+                Completadas
               </p>
-              <p className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
-                {totalProducido.toLocaleString("es-AR")}
+              <p className="text-3xl font-bold text-gray-900">
+                {data.resumen.total_completadas}
+                <span className="text-lg font-normal text-gray-400">
+                  {" "}/ {data.resumen.total_planificadas}
+                </span>
               </p>
-              <p className="text-xs text-warm-gray mt-0.5">unidades</p>
             </div>
-            <div className="bg-white rounded-xl border border-cream-dark p-5">
-              <p className="text-xs font-medium text-warm-gray uppercase tracking-wide mb-1">
-                Planificado
-              </p>
-              <p className="font-[family-name:var(--font-garamond)] text-3xl text-text">
-                {totalPlanificado.toLocaleString("es-AR")}
-              </p>
-              <p className="text-xs text-warm-gray mt-0.5">unidades</p>
-            </div>
-            <div className="bg-white rounded-xl border border-cream-dark p-5">
-              <p className="text-xs font-medium text-warm-gray uppercase tracking-wide mb-1">
+
+            {/* Cumplimiento */}
+            <div
+              className={`rounded-xl border p-4 ${cumplimientoBg(
+                data.resumen.porcentaje_cumplimiento
+              )}`}
+            >
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">
                 Cumplimiento
               </p>
               <p
-                className={`font-[family-name:var(--font-garamond)] text-3xl ${cumplimientoColor(cumplimientoGlobal)}`}
+                className={`text-3xl font-bold ${cumplimientoColor(
+                  data.resumen.porcentaje_cumplimiento
+                )}`}
               >
-                {cumplimientoGlobal !== null ? `${cumplimientoGlobal}%` : "—"}
+                {data.resumen.porcentaje_cumplimiento.toFixed(1)}%
               </p>
-              <p className="text-xs text-warm-gray mt-0.5">actual / plan</p>
+            </div>
+
+            {/* Dias registrados */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">
+                Dias registrados
+              </p>
+              <p className="text-3xl font-bold text-gray-900">
+                {data.resumen.dias_registrados}
+              </p>
             </div>
           </div>
 
-          {/* Daily bar chart */}
-          {dayBars.length > 0 && (
-            <div className="bg-white rounded-xl border border-cream-dark p-5">
-              <h2 className="font-medium text-text mb-4">Producción por día</h2>
-              <div className="overflow-x-auto">
-                <div className="flex items-end gap-1.5 min-w-max">
-                  {dayBars.map((bar) => {
-                    const pct =
-                      maxDayTotal > 0 ? (bar.total / maxDayTotal) * 100 : 0;
-                    return (
-                      <div
-                        key={bar.fecha}
-                        className="flex flex-col items-center"
-                        style={{ width: "40px" }}
-                      >
-                        <span className="text-[10px] text-warm-gray mb-0.5 h-4 flex items-center justify-center">
-                          {bar.total > 0 ? bar.total : ""}
-                        </span>
-                        {/* Bar track */}
-                        <div
-                          className="w-full rounded-t-sm bg-cream-dark"
-                          style={{
-                            height: "80px",
-                            display: "flex",
-                            flexDirection: "column",
-                            justifyContent: "flex-end",
-                          }}
-                        >
-                          <div
-                            className="w-full rounded-t-sm bg-brot transition-all duration-500"
-                            style={{
-                              height: `${pct}%`,
-                              minHeight: bar.total > 0 ? "2px" : "0",
-                            }}
-                          />
-                        </div>
-                        <p className="text-[10px] text-warm-gray text-center mt-0.5 leading-tight">
-                          {bar.label}
+          {/* Daily chart */}
+          {data.por_dia.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+              <h2 className="font-[family-name:var(--font-garamond)] text-lg text-gray-900 mb-4">
+                Por dia
+              </h2>
+              <div className="space-y-2">
+                {data.por_dia.map((dia) => {
+                  const pct = dia.planificadas > 0
+                    ? (dia.completadas / dia.planificadas) * 100
+                    : 0;
+                  return (
+                    <div key={dia.fecha} className="flex items-center gap-3">
+                      {/* Day label */}
+                      <div className="w-20 shrink-0 text-right">
+                        <p className="text-sm font-medium text-gray-700 leading-tight">
+                          {dia.dia_nombre.slice(0, 3)}
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          {displayDate(dia.fecha)}
                         </p>
                       </div>
-                    );
-                  })}
-                </div>
+
+                      {/* Bar */}
+                      <div className="flex-1 h-7 bg-gray-100 rounded-md overflow-hidden relative">
+                        <div
+                          className="h-full bg-[#004225] rounded-md transition-all duration-300"
+                          style={{ width: `${Math.min(pct, 100)}%` }}
+                        />
+                        {/* Count overlay */}
+                        <span className="absolute inset-0 flex items-center px-2 text-xs font-medium">
+                          <span
+                            className={
+                              pct > 40 ? "text-white" : "text-gray-600"
+                            }
+                          >
+                            {dia.completadas}/{dia.planificadas}
+                          </span>
+                        </span>
+                      </div>
+
+                      {/* Percentage */}
+                      <span
+                        className={`w-12 text-right text-sm font-semibold ${cumplimientoColor(
+                          dia.porcentaje
+                        )}`}
+                      >
+                        {dia.porcentaje.toFixed(0)}%
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Per-product table */}
-          <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
-            <div className="px-5 py-4 border-b border-cream-dark">
-              <h2 className="font-medium text-text">Por producto</h2>
-            </div>
-            {rows.length === 0 ? (
-              <p className="text-warm-gray text-sm p-5">
-                Sin datos para el período seleccionado.
-              </p>
-            ) : (
-              <>
-                {/* Desktop table */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-cream-dark bg-cream/50">
-                        <th className="text-left px-5 py-3 font-medium text-warm-gray">
-                          Producto
-                        </th>
-                        <th className="text-right px-4 py-3 font-medium text-warm-gray">
-                          Planificado
-                        </th>
-                        <th className="text-right px-4 py-3 font-medium text-warm-gray">
-                          Producido
-                        </th>
-                        <th className="text-right px-4 py-3 font-medium text-warm-gray">
-                          Diferencia
-                        </th>
-                        <th className="text-right px-4 py-3 font-medium text-warm-gray">
-                          % Cumplimiento
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row, idx) => (
+          {/* Per-task breakdown */}
+          {data.por_tarea.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+              <h2 className="font-[family-name:var(--font-garamond)] text-lg text-gray-900 mb-4">
+                Por tarea
+              </h2>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-xs text-gray-400 uppercase tracking-wide">
+                      <th className="pb-2 pr-4 font-medium">Tarea</th>
+                      <th className="pb-2 pr-4 font-medium text-center">Completadas</th>
+                      <th className="pb-2 pr-4 font-medium text-right">Cant. Promedio</th>
+                      <th className="pb-2 pr-4 font-medium text-right">Cant. Plan</th>
+                      <th className="pb-2 pr-4 font-medium text-right">Tiempo Promedio</th>
+                      <th className="pb-2 font-medium text-right">Tiempo Plan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.por_tarea.map((tarea) => {
+                      const completionRate =
+                        tarea.veces_planificada > 0
+                          ? (tarea.veces_completada / tarea.veces_planificada) * 100
+                          : 0;
+                      const isGood = completionRate >= 80;
+                      return (
                         <tr
-                          key={row.producto_id}
-                          className={
-                            idx < rows.length - 1
-                              ? "border-b border-cream-dark"
-                              : ""
-                          }
+                          key={tarea.tarea_id}
+                          className="border-b border-gray-100 last:border-0"
                         >
-                          <td className="px-5 py-3 font-medium text-text">
-                            {row.nombre}
+                          <td className="py-2.5 pr-4 font-medium text-gray-900">
+                            {tarea.titulo}
                           </td>
-                          <td className="px-4 py-3 text-right text-warm-gray">
-                            {row.planificado}
+                          <td className="py-2.5 pr-4 text-center">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                                isGood
+                                  ? "bg-green-50 text-green-700"
+                                  : "bg-red-50 text-red-600"
+                              }`}
+                            >
+                              {tarea.veces_completada}/{tarea.veces_planificada}
+                            </span>
                           </td>
-                          <td className="px-4 py-3 text-right font-medium text-text">
-                            {row.producido}
+                          <td className="py-2.5 pr-4 text-right text-gray-700">
+                            <span className="flex items-center justify-end gap-1">
+                              {tarea.cantidad_promedio !== null
+                                ? `${tarea.cantidad_promedio.toFixed(1)} ${tarea.unidad_cantidad || ""}`
+                                : "-"}
+                              {quantityIndicator(
+                                tarea.cantidad_promedio,
+                                tarea.cantidad_planificada
+                              )}
+                            </span>
                           </td>
-                          <td
-                            className={`px-4 py-3 text-right font-medium ${
-                              row.diferencia >= 0
-                                ? "text-green-600"
-                                : "text-red-600"
-                            }`}
-                          >
-                            {row.diferencia > 0
-                              ? `+${row.diferencia}`
-                              : row.diferencia}
+                          <td className="py-2.5 pr-4 text-right text-gray-400">
+                            {tarea.cantidad_planificada !== null
+                              ? `${tarea.cantidad_planificada} ${tarea.unidad_cantidad || ""}`
+                              : "-"}
                           </td>
-                          <td className="px-4 py-3 text-right">
-                            {row.cumplimiento !== null ? (
-                              <span
-                                className={`font-medium ${cumplimientoColor(row.cumplimiento)}`}
-                              >
-                                {row.cumplimiento}%
-                              </span>
-                            ) : (
-                              <span className="text-warm-gray">—</span>
-                            )}
+                          <td className="py-2.5 pr-4 text-right text-gray-700">
+                            {tarea.duracion_promedio !== null
+                              ? `${tarea.duracion_promedio} min`
+                              : "-"}
+                          </td>
+                          <td className="py-2.5 text-right text-gray-400">
+                            {tarea.duracion_planificada !== null
+                              ? `${tarea.duracion_planificada} min`
+                              : "-"}
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-                {/* Mobile list */}
-                <div className="md:hidden divide-y divide-cream-dark">
-                  {rows.map((row) => (
-                    <div key={row.producto_id} className="px-4 py-3">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="font-medium text-text text-sm">
-                          {row.nombre}
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-3">
+                {data.por_tarea.map((tarea) => {
+                  const completionRate =
+                    tarea.veces_planificada > 0
+                      ? (tarea.veces_completada / tarea.veces_planificada) * 100
+                      : 0;
+                  const isGood = completionRate >= 80;
+                  return (
+                    <div
+                      key={tarea.tarea_id}
+                      className="border border-gray-200 rounded-lg p-3"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <p className="text-sm font-medium text-gray-900">
+                          {tarea.titulo}
                         </p>
-                        {row.cumplimiento !== null ? (
-                          <span
-                            className={`text-sm font-medium ${cumplimientoColor(row.cumplimiento)}`}
-                          >
-                            {row.cumplimiento}%
-                          </span>
-                        ) : (
-                          <span className="text-warm-gray text-sm">—</span>
-                        )}
-                      </div>
-                      <div className="flex gap-4 text-xs text-warm-gray">
-                        <span>
-                          Plan:{" "}
-                          <span className="text-text">{row.planificado}</span>
-                        </span>
-                        <span>
-                          Real:{" "}
-                          <span className="text-text">{row.producido}</span>
-                        </span>
-                        <span>
-                          Dif:{" "}
-                          <span
-                            className={
-                              row.diferencia >= 0
-                                ? "text-green-600"
-                                : "text-red-600"
-                            }
-                          >
-                            {row.diferencia > 0
-                              ? `+${row.diferencia}`
-                              : row.diferencia}
-                          </span>
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-xs font-semibold shrink-0 ml-2 ${
+                            isGood
+                              ? "bg-green-50 text-green-700"
+                              : "bg-red-50 text-red-600"
+                          }`}
+                        >
+                          {tarea.veces_completada}/{tarea.veces_planificada}
                         </span>
                       </div>
-                      {row.planificado > 0 && (
-                        <div className="mt-2 h-1.5 rounded-full bg-cream-dark overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${cumplimientoBarColor(row.cumplimiento)}`}
-                            style={{
-                              width: `${Math.min(row.cumplimiento ?? 0, 100)}%`,
-                            }}
-                          />
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <p className="text-gray-400">Cant. Promedio</p>
+                          <p className="text-gray-700 font-medium flex items-center gap-1">
+                            {tarea.cantidad_promedio !== null
+                              ? `${tarea.cantidad_promedio.toFixed(1)} ${tarea.unidad_cantidad || ""}`
+                              : "-"}
+                            {quantityIndicator(
+                              tarea.cantidad_promedio,
+                              tarea.cantidad_planificada
+                            )}
+                          </p>
                         </div>
-                      )}
+                        <div>
+                          <p className="text-gray-400">Cant. Plan</p>
+                          <p className="text-gray-700 font-medium">
+                            {tarea.cantidad_planificada !== null
+                              ? `${tarea.cantidad_planificada} ${tarea.unidad_cantidad || ""}`
+                              : "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400">Tiempo Promedio</p>
+                          <p className="text-gray-700 font-medium">
+                            {tarea.duracion_promedio !== null
+                              ? `${tarea.duracion_promedio} min`
+                              : "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400">Tiempo Plan</p>
+                          <p className="text-gray-700 font-medium">
+                            {tarea.duracion_planificada !== null
+                              ? `${tarea.duracion_planificada} min`
+                              : "-"}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {data.por_dia.length === 0 && data.por_tarea.length === 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
+              Sin datos de produccion en este periodo
+            </div>
+          )}
+        </>
       )}
     </div>
   );

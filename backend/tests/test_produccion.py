@@ -178,13 +178,15 @@ def test_log_production(client, db):
     assert res3.json()["actual_qty"] == 35.0
     assert res3.json()["notes"] == "Lote adicional"
 
-    # Duplicate log for same product+date should return 409
+    # Duplicate log for same product+date should upsert (update existing)
     res4 = client.post(
         "/api/produccion/log",
         json={"producto_id": prod_id, "target_date": fecha, "actual_qty": 5.0, "recorded_by": user_id},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert res4.status_code == 409
+    assert res4.status_code == 201
+    assert res4.json()["actual_qty"] == 5.0
+    assert res4.json()["id"] == log_id
 
 
 def test_calendario_view(client, db):

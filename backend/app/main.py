@@ -42,6 +42,7 @@ from app.routers import (  # noqa: E402
     congelados,
     entregas_b2b,
     ingredientes,
+    inventario,
     mermas,
     pedidos,
     pedidos_clientes,
@@ -60,6 +61,7 @@ app.include_router(auth_cliente.router)
 app.include_router(permisos.router)
 app.include_router(categorias.router)
 app.include_router(ingredientes.router)
+app.include_router(inventario.router)
 app.include_router(recetas.router)
 app.include_router(mermas.router)
 app.include_router(congelados.router)

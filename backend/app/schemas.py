@@ -436,6 +436,82 @@ class LogProduccionOut(BaseModel):
     recorded_at: datetime
 
 
+class TareaProduccionCreate(BaseModel):
+    dia_semana: int
+    hora: Optional[str] = None
+    titulo: str
+    descripcion: Optional[str] = None
+    duracion_minutos: Optional[int] = None
+    cantidad_planificada: Optional[float] = None
+    unidad_cantidad: Optional[str] = None
+    receta_id: Optional[int] = None
+    tipo: str = "produccion"
+    posicion: int = 0
+
+
+class TareaProduccionUpdate(BaseModel):
+    dia_semana: Optional[int] = None
+    hora: Optional[str] = None
+    titulo: Optional[str] = None
+    descripcion: Optional[str] = None
+    duracion_minutos: Optional[int] = None
+    cantidad_planificada: Optional[float] = None
+    unidad_cantidad: Optional[str] = None
+    receta_id: Optional[int] = None
+    tipo: Optional[str] = None
+    posicion: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class TareaProduccionOut(BaseModel):
+    id: int
+    dia_semana: int
+    hora: Optional[str] = None
+    titulo: str
+    descripcion: Optional[str] = None
+    duracion_minutos: Optional[int] = None
+    cantidad_planificada: Optional[float] = None
+    unidad_cantidad: Optional[str] = None
+    receta_id: Optional[int] = None
+    receta_nombre: Optional[str] = None
+    tipo: str
+    posicion: int
+    is_active: bool
+
+
+class RegistroProduccionCreate(BaseModel):
+    tarea_id: int
+    fecha: date
+    completada: bool = False
+    cantidad_real: Optional[float] = None
+    duracion_real: Optional[int] = None
+    notas: Optional[str] = None
+
+
+class RegistroExtraCreate(BaseModel):
+    fecha: date
+    receta_id: int
+    cantidad_real: Optional[float] = None
+    duracion_real: Optional[int] = None
+    notas: Optional[str] = None
+
+
+class RegistroProduccionOut(BaseModel):
+    id: int
+    tarea_id: Optional[int] = None
+    fecha: date
+    completada: bool
+    cantidad_real: Optional[float] = None
+    duracion_real: Optional[int] = None
+    notas: Optional[str] = None
+    titulo_extra: Optional[str] = None
+    unidad_extra: Optional[str] = None
+    receta_id: Optional[int] = None
+    receta_nombre: Optional[str] = None
+    registrado_por: int
+    registrado_at: datetime
+
+
 # ============================================================
 # Module 6 — Frozen Stock
 # ============================================================

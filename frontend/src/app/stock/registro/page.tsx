@@ -21,14 +21,14 @@ interface IngredienteRow {
   cantidad: string;
   notas: string;
   ubicacion: string;
-  enabled: boolean;
 }
+
+const DRAFT_KEY = "brot_stock_registro_draft";
 
 export default function RegistroStockPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]);
   const [rows, setRows] = useState<IngredienteRow[]>([]);
   const [fecha, setFecha] = useState(() => new Date().toISOString().split("T")[0]);
   const [loading, setLoading] = useState(true);
@@ -39,22 +39,42 @@ export default function RegistroStockPage() {
     apiFetch<Ingrediente[]>("/api/ingredientes")
       .then((data) => {
         const activos = data.filter((i) => i.activo);
-        setIngredientes(activos);
+
+        const saved = sessionStorage.getItem(DRAFT_KEY);
+        let draft: Record<number, { cantidad: string; notas: string; ubicacion: string }> = {};
+        if (saved) {
+          try { draft = JSON.parse(saved); } catch { /* ignore */ }
+        }
+
         setRows(
           activos.map((ing) => ({
             ingrediente_id: ing.id,
             nombre: ing.nombre,
             unidad: ing.unidad_uso,
-            cantidad: "",
-            notas: "",
-            ubicacion: "",
-            enabled: false,
+            cantidad: draft[ing.id]?.cantidad ?? "",
+            notas: draft[ing.id]?.notas ?? "",
+            ubicacion: draft[ing.id]?.ubicacion ?? "",
           }))
         );
       })
       .catch(() => toast("Error al cargar ingredientes", "error"))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (rows.length === 0) return;
+    const draft: Record<number, { cantidad: string; notas: string; ubicacion: string }> = {};
+    for (const r of rows) {
+      if (r.cantidad || r.notas || r.ubicacion) {
+        draft[r.ingrediente_id] = { cantidad: r.cantidad, notas: r.notas, ubicacion: r.ubicacion };
+      }
+    }
+    if (Object.keys(draft).length > 0) {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } else {
+      sessionStorage.removeItem(DRAFT_KEY);
+    }
+  }, [rows]);
 
   const filteredRows = rows.filter(
     (r) =>
@@ -65,7 +85,7 @@ export default function RegistroStockPage() {
   const updateRow = (
     ingredienteId: number,
     field: keyof IngredienteRow,
-    value: string | boolean
+    value: string
   ) => {
     setRows((prev) =>
       prev.map((r) =>
@@ -74,15 +94,15 @@ export default function RegistroStockPage() {
     );
   };
 
-  const enabledRows = rows.filter((r) => r.enabled && r.cantidad !== "");
+  const filledRows = rows.filter((r) => r.cantidad !== "" && r.cantidad !== "0");
 
   const handleSubmit = async () => {
-    if (enabledRows.length === 0) {
-      toast("Ingresá al menos un ingrediente con cantidad", "error");
+    if (filledRows.length === 0) {
+      toast("Ingresa al menos un ingrediente con cantidad", "error");
       return;
     }
 
-    const payload = enabledRows.map((r) => ({
+    const payload = filledRows.map((r) => ({
       ingrediente_id: r.ingrediente_id,
       cantidad: parseFloat(r.cantidad),
       unidad: r.unidad,
@@ -97,7 +117,8 @@ export default function RegistroStockPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      toast(`${enabledRows.length} registros guardados correctamente`);
+      toast(`${filledRows.length} registros guardados`);
+      sessionStorage.removeItem(DRAFT_KEY);
       router.push("/stock");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error desconocido";
@@ -107,17 +128,13 @@ export default function RegistroStockPage() {
     }
   };
 
-  const toggleAll = (checked: boolean) => {
-    setRows((prev) => prev.map((r) => ({ ...r, enabled: checked })));
-  };
-
   return (
     <PermissionGate
       module="inventario"
       action="write"
       fallback={
         <div className="p-8 text-center text-warm-gray">
-          No tenés permisos para registrar stock.
+          No tenes permisos para registrar stock.
         </div>
       }
     >
@@ -150,8 +167,7 @@ export default function RegistroStockPage() {
 
         {/* Instructions */}
         <p className="text-sm text-warm-gray mb-4">
-          Activá la casilla de cada ingrediente que contaste e ingresá la
-          cantidad actual. Solo los activados serán guardados.
+          Ingresa la cantidad actual de cada ingrediente. Solo se guardan los que tengan cantidad.
         </p>
 
         {/* Search */}
@@ -165,23 +181,11 @@ export default function RegistroStockPage() {
           />
         </div>
 
-        {/* Select all */}
-        {!loading && (
+        {filledRows.length > 0 && (
           <div className="flex items-center gap-3 mb-3 px-1">
-            <label className="flex items-center gap-2 text-sm text-warm-gray cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="w-4 h-4 accent-brot"
-                onChange={(e) => toggleAll(e.target.checked)}
-              />
-              Seleccionar todos
-            </label>
-            {enabledRows.length > 0 && (
-              <span className="text-xs text-brot font-medium">
-                {enabledRows.length} seleccionado
-                {enabledRows.length !== 1 ? "s" : ""}
-              </span>
-            )}
+            <span className="text-xs text-brot font-medium">
+              {filledRows.length} ingrediente{filledRows.length !== 1 ? "s" : ""} con cantidad
+            </span>
           </div>
         )}
 
@@ -195,84 +199,54 @@ export default function RegistroStockPage() {
             </div>
           ) : (
             <div className="divide-y divide-cream-dark">
-              {filteredRows.map((row) => (
-                <div
-                  key={row.ingrediente_id}
-                  className={`px-4 py-3 transition-colors ${
-                    row.enabled ? "bg-brot/5" : ""
-                  }`}
-                >
-                  {/* Top: checkbox + name */}
-                  <div className="flex items-center gap-3 mb-2">
-                    <input
-                      type="checkbox"
-                      checked={row.enabled}
-                      onChange={(e) =>
-                        updateRow(
-                          row.ingrediente_id,
-                          "enabled",
-                          e.target.checked
-                        )
-                      }
-                      className="w-4 h-4 accent-brot shrink-0"
-                    />
-                    <p className="font-medium text-text text-sm">{row.nombre}</p>
-                  </div>
-
-                  {/* Inputs (always visible but muted when disabled) */}
+              {filteredRows.map((row) => {
+                const hasCantidad = row.cantidad !== "" && row.cantidad !== "0";
+                return (
                   <div
-                    className={`grid grid-cols-1 md:grid-cols-3 gap-2 pl-7 transition-opacity ${
-                      row.enabled ? "opacity-100" : "opacity-40"
-                    }`}
+                    key={row.ingrediente_id}
+                    className={`px-4 py-3 transition-colors ${hasCantidad ? "bg-brot/5" : ""}`}
                   >
-                    <div className="flex items-center gap-2">
+                    <p className="font-medium text-text text-sm mb-2">{row.nombre}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="any"
+                          placeholder="Cantidad"
+                          value={row.cantidad}
+                          onChange={(e) =>
+                            updateRow(row.ingrediente_id, "cantidad", e.target.value)
+                          }
+                          className="flex-1 px-3 py-2 rounded-lg border border-cream-dark text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
+                        />
+                        <span className="text-xs text-warm-gray whitespace-nowrap">
+                          {row.unidad}
+                        </span>
+                      </div>
                       <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        placeholder="Cantidad"
-                        value={row.cantidad}
-                        disabled={!row.enabled}
+                        type="text"
+                        placeholder="Ubicacion (opcional)"
+                        value={row.ubicacion}
                         onChange={(e) =>
-                          updateRow(
-                            row.ingrediente_id,
-                            "cantidad",
-                            e.target.value
-                          )
+                          updateRow(row.ingrediente_id, "ubicacion", e.target.value)
                         }
-                        className="flex-1 px-3 py-2 rounded-lg border border-cream-dark text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 disabled:bg-cream disabled:cursor-not-allowed min-h-[40px]"
+                        className="px-3 py-2 rounded-lg border border-cream-dark text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
                       />
-                      <span className="text-xs text-warm-gray whitespace-nowrap">
-                        {row.unidad}
-                      </span>
+                      <input
+                        type="text"
+                        placeholder="Notas (opcional)"
+                        value={row.notas}
+                        onChange={(e) =>
+                          updateRow(row.ingrediente_id, "notas", e.target.value)
+                        }
+                        className="px-3 py-2 rounded-lg border border-cream-dark text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
+                      />
                     </div>
-                    <input
-                      type="text"
-                      placeholder="Ubicación (opcional)"
-                      value={row.ubicacion}
-                      disabled={!row.enabled}
-                      onChange={(e) =>
-                        updateRow(
-                          row.ingrediente_id,
-                          "ubicacion",
-                          e.target.value
-                        )
-                      }
-                      className="px-3 py-2 rounded-lg border border-cream-dark text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 disabled:bg-cream disabled:cursor-not-allowed min-h-[40px]"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Notas (opcional)"
-                      value={row.notas}
-                      disabled={!row.enabled}
-                      onChange={(e) =>
-                        updateRow(row.ingrediente_id, "notas", e.target.value)
-                      }
-                      className="px-3 py-2 rounded-lg border border-cream-dark text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 disabled:bg-cream disabled:cursor-not-allowed min-h-[40px]"
-                    />
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -287,12 +261,12 @@ export default function RegistroStockPage() {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={submitting || enabledRows.length === 0}
+            disabled={submitting || filledRows.length === 0}
             className="bg-brot text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-brot-dark transition-colors min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting
               ? "Guardando..."
-              : `Guardar ${enabledRows.length > 0 ? `(${enabledRows.length})` : ""}`}
+              : `Guardar ${filledRows.length > 0 ? `(${filledRows.length})` : ""}`}
           </button>
         </div>
       </div>

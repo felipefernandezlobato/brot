@@ -125,13 +125,19 @@ def alertas_vencimiento(
 @router.get("", response_model=list[StockCongeladoOut])
 def list_stock_congelado(
     producto_id: int | None = Query(None),
+    fecha_desde: date | None = Query(None),
+    fecha_hasta: date | None = Query(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     q = db.query(StockCongelado).options(joinedload(StockCongelado.producto))
     if producto_id:
         q = q.filter(StockCongelado.producto_congelado_id == producto_id)
-    return [_stock_out(e) for e in q.order_by(StockCongelado.fecha_entrada).all()]
+    if fecha_desde:
+        q = q.filter(StockCongelado.fecha_entrada >= fecha_desde)
+    if fecha_hasta:
+        q = q.filter(StockCongelado.fecha_entrada <= fecha_hasta)
+    return [_stock_out(e) for e in q.order_by(StockCongelado.fecha_entrada.desc()).all()]
 
 
 @router.post("", response_model=StockCongeladoOut, status_code=201)

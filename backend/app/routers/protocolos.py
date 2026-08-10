@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -274,7 +274,9 @@ def undo_completion(
     if user.role != "admin":
         if completion.completed_by != user.id:
             raise HTTPException(status_code=403, detail="No puedes deshacer la tarea de otro usuario")
-        elapsed = datetime.utcnow() - completion.completed_at
+        now = datetime.now(timezone.utc)
+        completed = completion.completed_at.replace(tzinfo=timezone.utc) if completion.completed_at.tzinfo is None else completion.completed_at
+        elapsed = now - completed
         if elapsed > timedelta(hours=1):
             raise HTTPException(
                 status_code=403,
@@ -304,7 +306,7 @@ def review_completion(
     completion.is_satisfactory = data.is_satisfactory
     completion.review_note = data.review_note
     completion.reviewed_by = user.id
-    completion.reviewed_at = datetime.utcnow()
+    completion.reviewed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(completion)
     return completion
