@@ -1,6 +1,114 @@
-# BROT Phase 1: Foundation — Implementation Plan
+# BROT — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+---
+
+## Master Checklist
+
+### Infrastructure
+- [ ] Backend scaffolding (FastAPI, SQLAlchemy, Alembic, tests)
+- [ ] Frontend scaffolding (Next.js, Tailwind, BROT branding, PWA)
+- [ ] Database models + Pydantic schemas
+- [ ] Deploy to Vercel + Render + Neon
+
+### Auth & Permissions
+- [ ] Employee PIN auth (login, me, user list, seed admin)
+- [ ] Customer email auth (register, login, me)
+- [ ] Configurable RBAC (Permission model, admin UI, permission gate)
+- [ ] AppShell + Sidebar + BottomNav + AuthGuard
+
+### Module 1: Ingredientes
+- [ ] Backend: Ingredientes CRUD + auto price history
+- [ ] Backend: Unit conversion service (kg/g/mg, litro/ml/cl)
+- [ ] Backend: Categorías CRUD
+- [ ] Frontend: Ingredientes pages (list, create, detail/edit)
+- [ ] Frontend: Admin categorías page
+
+### Module 2: Escandallos (Recipe Cost Cards)
+- [ ] Backend: Recipe cost calculation engine (sub-recipes, merma, cycle detection)
+- [ ] Backend: Recetas CRUD (lines, cost card, margin, multiplier)
+- [ ] Frontend: Escandallos pages (list, create, detail/cost card)
+
+### Module 3: Stock Materia Prima / Inventario
+- [ ] Backend: InventarioRegistro model + snapshot CRUD
+- [ ] Backend: Stock actual, alertas, par level, recomendación
+- [ ] Backend: Consumo analytics service
+- [ ] Frontend: Stock pages (current stock, snapshot entry, alerts, pivot view)
+
+### Module 4: Proveedores & Pedidos Materia Prima
+- [ ] Backend: Proveedor CRUD + PrecioProveedor multi-supplier catalog
+- [ ] Backend: Pedido lifecycle (borrador → enviado → recibido) + auto stock update
+- [ ] Backend: Order recommendations by supplier
+- [ ] Backend: PDF invoice import (extract → preview → confirm)
+- [ ] Frontend: Proveedores pages
+- [ ] Frontend: Pedidos pages (list, create, receive, pivot view)
+- [ ] Frontend: PDF import page
+
+### Module 5: Calendario Producción
+- [ ] Backend: ProductItem + ProductionPlan (4-week rotating) + ProductionLog
+- [ ] Backend: Machine time + human time tracking per batch (capacity planning)
+- [ ] Frontend: Production calendar view (weekly/monthly)
+- [ ] Frontend: Production logging (planned vs actual, time tracking)
+
+### Module 6: Stock Producto Congelado
+- [ ] Backend: Frozen product model with shelf life + expiry tracking
+- [ ] Backend: FIFO management + expiry alerts
+- [ ] Frontend: Frozen stock pages (list, alerts)
+
+### Module 7: Mermas (Waste/Shrinkage)
+- [ ] Backend: MermaRegistro CRUD + cost snapshot at creation
+- [ ] Backend: Merma analysis (by category, by reason, by time, top items)
+- [ ] Frontend: Mermas pages (log, analysis dashboard)
+
+### Module 8: Protocolos (Checklists + Temperatures)
+- [ ] Backend: ChecklistTemplate + ChecklistCompletion (single area)
+- [ ] Backend: Four frequencies (apertura, cierre, semanal, mensual)
+- [ ] Backend: Quality review / strikes system
+- [ ] Backend: Fridge + TemperatureReading with alerts
+- [ ] Backend: History + reporting (summary, snapshot, export CSV)
+- [ ] Frontend: Protocol pages (daily checklist, weekly, monthly)
+- [ ] Frontend: Temperature entry + trend charts
+- [ ] Frontend: Protocol history + reporting
+
+### Module 9: Customer Portal Orders
+- [ ] Backend: ProductoCatalogo (public catalog)
+- [ ] Backend: PedidoCliente lifecycle (pendiente → confirmado → en_preparacion → listo → entregado)
+- [ ] Backend: Delivery day validation (Wed/Sat only)
+- [ ] Backend: PedidoRecurrente + auto-generation + skip/edit
+- [ ] Frontend: Customer catalog browse page
+- [ ] Frontend: Customer order placement + delivery date picker
+- [ ] Frontend: Customer order history
+- [ ] Frontend: Customer login + registration pages
+- [ ] Frontend: Admin — customer orders management
+
+### Module 10: Entregas de Pedidos por Proveedor (Inbound)
+- [ ] Backend: Supplier delivery tracking + order matching
+- [ ] Backend: Delivery accuracy (ordered vs received) + discrepancy flags
+- [ ] Frontend: Supplier delivery pages
+
+### Module 11: Volumen de Entregas Colectivo (Outbound B2B)
+- [ ] Backend: ClienteB2B + EntregaB2B CRUD
+- [ ] Backend: Delivery volume aggregation (by period, client, product)
+- [ ] Frontend: B2B delivery pages (route planning, confirmation, volume analysis)
+
+### Module 12: Precio Competencia
+- [ ] Backend: PrecioCompetencia CRUD
+- [ ] Frontend: Competitor price comparison dashboard (side-by-side)
+
+### Data Import
+- [ ] Backend: CSV/Excel upload endpoints for all modules
+- [ ] Backend: Bulk validation + preview → confirm pattern
+- [ ] Frontend: Import page per module (upload, preview, confirm)
+
+### Final
+- [ ] Full integration testing (all modules end-to-end)
+- [ ] Mobile testing (PWA install, touch targets, safe areas)
+- [ ] Production deploy (Vercel + Render + Neon)
+
+---
+
+## Phase 1: Foundation
 
 **Goal:** Build a running BROT app with backend/frontend scaffolding, dual auth (employee PIN + customer email), configurable RBAC, and the first two domain modules (Ingredientes + Escandallos).
 
@@ -3483,18 +3591,16 @@ git push origin main
 
 ---
 
-## Future Phases (separate plans)
+## Future Phases
 
-| Phase | Modules | Depends On |
-|-------|---------|------------|
-| Phase 2 | Stock Materia Prima, Inventario | Phase 1 (ingredientes) |
-| Phase 3 | Proveedores, Pedidos Proveedores | Phase 1 (ingredientes) + Phase 2 (stock) |
-| Phase 4 | Producción (calendario, tiempos, cantidades) | Phase 1 (recetas) |
-| Phase 5 | Stock Congelado | Phase 4 (producción) |
-| Phase 6 | Mermas | Phase 1 (ingredientes + recetas) |
-| Phase 7 | Protocolos + Temperaturas | Independent |
-| Phase 8 | Customer Portal (catalog, orders, recurring) | Phase 1 (recetas) |
-| Phase 9 | Entregas B2B + Entregas Proveedores | Phase 3 + Phase 8 |
-| Phase 10 | Data Import (CSV/Excel for all modules) | All modules |
-| Phase 11 | Precio Competencia comparison dashboard | Phase 1 (recetas) |
-| Phase 12 | Deploy (Vercel + Render + Neon setup) | All phases |
+- [ ] **Phase 2:** Stock Materia Prima + Inventario — *depends on Phase 1 (ingredientes)*
+- [ ] **Phase 3:** Proveedores + Pedidos Proveedores — *depends on Phase 1 + Phase 2*
+- [ ] **Phase 4:** Producción (calendario, tiempos, cantidades) — *depends on Phase 1 (recetas)*
+- [ ] **Phase 5:** Stock Congelado — *depends on Phase 4*
+- [ ] **Phase 6:** Mermas — *depends on Phase 1 (ingredientes + recetas)*
+- [ ] **Phase 7:** Protocolos + Temperaturas — *independent*
+- [ ] **Phase 8:** Customer Portal (catalog, orders, recurring) — *depends on Phase 1 (recetas)*
+- [ ] **Phase 9:** Entregas B2B + Entregas Proveedores — *depends on Phase 3 + Phase 8*
+- [ ] **Phase 10:** Data Import (CSV/Excel for all modules) — *depends on all modules*
+- [ ] **Phase 11:** Precio Competencia comparison dashboard — *depends on Phase 1 (recetas)*
+- [ ] **Phase 12:** Deploy (Vercel + Render + Neon setup) — *final*
