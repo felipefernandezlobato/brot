@@ -4,9 +4,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.database import SessionLocal
+from app.seed import seed_data
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    db = SessionLocal()
+    try:
+        seed_data(db)
+    finally:
+        db.close()
     yield
 
 
@@ -20,6 +28,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from app.routers import auth, auth_cliente, categorias, ingredientes, permisos, recetas  # noqa: E402
+
+app.include_router(auth.router)
+app.include_router(auth_cliente.router)
+app.include_router(permisos.router)
+app.include_router(categorias.router)
+app.include_router(ingredientes.router)
+app.include_router(recetas.router)
 
 
 @app.get("/api/health")
