@@ -402,7 +402,7 @@ GET  /api/export/csv
 ## Deploy
 
 **Production URLs:**
-- Frontend: https://brot.vercel.app
+- Frontend: https://brot-bruteam.vercel.app
 - Backend: https://brot-api.onrender.com
 
 **Database:** Neon PostgreSQL (project: `BROT`, region: `aws-eu-central-1`)
@@ -414,7 +414,7 @@ GET  /api/export/csv
 3. Wait ~2-3 min, then verify: `curl -s -o /dev/null -w "%{http_code}" https://brot-api.onrender.com/api/auth/users` (expect 200)
 
 **Environment variables (already configured):**
-- Render: `DATABASE_URL` (Neon URL), `SECRET_KEY`, `CORS_ORIGINS` (https://brot.vercel.app)
+- Render: `DATABASE_URL` (Neon URL), `SECRET_KEY`, `CORS_ORIGINS` (https://brot-bruteam.vercel.app)
 - Vercel: `NEXT_PUBLIC_API_URL` = `https://brot-api.onrender.com`
 
 **Render config:** Root directory `backend`, build `pip install -r requirements.txt`, start `bash start.sh`
