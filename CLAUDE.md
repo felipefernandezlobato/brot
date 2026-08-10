@@ -200,12 +200,22 @@ Customer-facing ordering system for B2C sales.
 - **Customer order history:** View past orders and their status
 - **Admin view:** See all customer orders, filter by date/status, manage order status transitions
 - **No online payment:** Customers pay upon delivery/pickup
+- **Recurring orders:** Customers can set up a weekly standing order with default products/quantities. Each week the system auto-generates an order from the template for the next available delivery day. The customer can edit (add/remove items, change quantities) or skip any specific week before a cutoff time. Admin can also view and manage all recurring orders.
 
 **New models:**
 - `Cliente` — email, password_hash, nombre, telefono, direccion, is_active
-- `PedidoCliente` — cliente_id, fecha_pedido, fecha_entrega (Wed/Sat only), estado, notas, total
+- `PedidoCliente` — cliente_id, fecha_pedido, fecha_entrega (Wed/Sat only), estado, notas, total, pedido_recurrente_id (nullable, links back to the template that generated it)
 - `LineaPedidoCliente` — pedido_cliente_id, producto_id, cantidad, precio_unitario_snapshot, subtotal
 - `ProductoCatalogo` — nombre, descripcion, precio, categoria, imagen_url, disponible, posicion
+- `PedidoRecurrente` — cliente_id, dia_entrega (wed/sat), activo, fecha_inicio, notas
+- `LineaPedidoRecurrente` — pedido_recurrente_id, producto_id, cantidad_default
+
+**Recurring order flow:**
+1. Customer creates a recurring order template: picks delivery day (Wed or Sat), adds products with default quantities
+2. System auto-generates a `PedidoCliente` from the template each week (e.g., on Monday for Wed delivery, on Thursday for Sat delivery)
+3. Customer receives notification and can edit the generated order (change quantities, add/remove items) or skip the week entirely before a cutoff
+4. If not edited, the default order stands as-is
+5. Admin dashboard shows all recurring templates + upcoming auto-generated orders
 
 ### 9. Entregas de Pedidos por Proveedor (Supplier Delivery Tracking)
 Track incoming supplier deliveries.
