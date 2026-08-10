@@ -16,7 +16,7 @@ CONVERSIONES = {
 FAMILIAS = {
     "kg": "peso", "g": "peso", "mg": "peso",
     "litro": "volumen", "ml": "volumen", "cl": "volumen",
-    "unidad": "unidad",
+    "unidad": "unidad", "u": "unidad",
 }
 
 

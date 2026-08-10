@@ -64,7 +64,7 @@ type Tab = "actual" | "nueva" | "historial";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "actual", label: "Stock Actual" },
-  { key: "nueva", label: "Nueva Entrada" },
+  { key: "nueva", label: "Registrar" },
   { key: "historial", label: "Historial" },
 ];
 
