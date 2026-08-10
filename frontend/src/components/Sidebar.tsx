@@ -8,9 +8,14 @@ const NAV_ITEMS = [
   { href: "/ingredientes", label: "Ingredientes", icon: "🧂" },
   { href: "/stock", label: "Stock", icon: "📦" },
   { href: "/escandallos", label: "Escandallos", icon: "📋" },
+  { href: "/proveedores", label: "Proveedores", icon: "🏪" },
+  { href: "/pedidos", label: "Pedidos", icon: "🛒" },
+  { href: "/mermas", label: "Mermas", icon: "♻️" },
   { href: "/produccion", label: "Producción", icon: "🏭" },
   { href: "/congelados", label: "Congelados", icon: "❄️" },
   { href: "/entregas", label: "Entregas B2B", icon: "🚚" },
+  { href: "/protocolos", label: "Protocolos", icon: "✅" },
+  { href: "/competencia", label: "Competencia", icon: "🏷️", admin: true },
   { href: "/admin", label: "Admin", icon: "⚙️", admin: true },
 ];
 
