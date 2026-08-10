@@ -196,6 +196,12 @@ export default function ProduccionCalendarioPage() {
           >
             Productos
           </button>
+          <button
+            onClick={() => router.push("/produccion/analytics")}
+            className="border border-cream-dark bg-white text-text px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-cream transition-colors min-h-[44px]"
+          >
+            Análisis
+          </button>
         </div>
       </div>
 

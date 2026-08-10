@@ -5,17 +5,10 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 
-const DAYS_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const DAYS_FULL = [
-  "Lunes",
-  "Martes",
-  "Miércoles",
-  "Jueves",
-  "Viernes",
-  "Sábado",
-  "Domingo",
-];
+// 6 working days — Sunday excluded
+const DAYS_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const WEEKS = [1, 2, 3, 4];
+const DISPLAY_WEEK = 1; // canonical week used for the UI
 
 interface ProductoProduccion {
   id: number;
@@ -24,24 +17,18 @@ interface ProductoProduccion {
   is_active: boolean;
 }
 
-interface PlanCell {
-  week_number: number;
-  day_of_week: number;
-  planned_qty: number;
-}
-
 interface PlanEntry {
   producto_id: number;
   week_number: number;
-  day_of_week: number;
+  day_of_week: number; // 0=Lun … 5=Sáb
   planned_qty: number;
 }
 
-// key: `${week}-${day}-${productoId}`
+// key: `${day}-${productoId}`  (day 0=Lun … 5=Sáb)
 type PlanMap = Map<string, number>;
 
-function cellKey(week: number, day: number, productoId: number): string {
-  return `${week}-${day}-${productoId}`;
+function cellKey(day: number, productoId: number): string {
+  return `${day}-${productoId}`;
 }
 
 export default function PlanProduccionPage() {
@@ -53,7 +40,6 @@ export default function PlanProduccionPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [semana, setSemana] = useState(1); // selected week view: 1-4
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -64,14 +50,13 @@ export default function PlanProduccionPage() {
       ]);
       setProductos(prods.filter((p) => p.is_active));
       const map = new Map<string, number>();
-      planEntries.forEach((entry) => {
-        const k = cellKey(
-          entry.week_number,
-          entry.day_of_week,
-          entry.producto_id
-        );
-        map.set(k, entry.planned_qty ?? 0);
-      });
+      // Only use DISPLAY_WEEK entries for the UI
+      planEntries
+        .filter((entry) => entry.week_number === DISPLAY_WEEK)
+        .forEach((entry) => {
+          const k = cellKey(entry.day_of_week, entry.producto_id);
+          map.set(k, entry.planned_qty ?? 0);
+        });
       setPlanMap(map);
       setDirty(false);
     } catch {
@@ -85,16 +70,11 @@ export default function PlanProduccionPage() {
     loadData();
   }, [loadData]);
 
-  function updateCell(
-    week: number,
-    day: number,
-    productoId: number,
-    value: string
-  ) {
+  function updateCell(day: number, productoId: number, value: string) {
     const num = value === "" ? 0 : Math.max(0, Number(value));
     setPlanMap((prev) => {
       const next = new Map(prev);
-      const k = cellKey(week, day, productoId);
+      const k = cellKey(day, productoId);
       if (num === 0) {
         next.delete(k);
       } else {
@@ -105,66 +85,49 @@ export default function PlanProduccionPage() {
     setDirty(true);
   }
 
-  function getCellValue(
-    week: number,
-    day: number,
-    productoId: number
-  ): string {
-    const k = cellKey(week, day, productoId);
-    const v = planMap.get(k);
+  function getCellValue(day: number, productoId: number): string {
+    const v = planMap.get(cellKey(day, productoId));
     return v ? String(v) : "";
   }
 
-  function getDayTotal(week: number, day: number): number {
+  function getDayTotal(day: number): number {
     return productos.reduce((sum, p) => {
-      const k = cellKey(week, day, p.id);
-      return sum + (planMap.get(k) ?? 0);
+      return sum + (planMap.get(cellKey(day, p.id)) ?? 0);
     }, 0);
   }
 
-  function getProductWeekTotal(week: number, productoId: number): number {
+  function getProductWeekTotal(productoId: number): number {
     return DAYS_LABELS.reduce((sum, _, dayIdx) => {
-      const k = cellKey(week, dayIdx + 1, productoId);
-      return sum + (planMap.get(k) ?? 0);
+      return sum + (planMap.get(cellKey(dayIdx, productoId)) ?? 0);
     }, 0);
   }
 
   async function handleSave() {
     setSaving(true);
     try {
-      const payload: PlanCell[] = [];
-      planMap.forEach((cantidad, key) => {
-        const [week, day] = key.split("-").map(Number);
-        payload.push({
-          week_number: week,
-          day_of_week: day,
-          planned_qty: cantidad,
-        });
-      });
-
-      // Send per week_number + day_of_week combination to the API
-      // The API accepts POST /api/produccion/plan with all entries
+      // Save each product/day combo to all 4 weeks
+      const toPost: PlanEntry[] = [];
       for (const week of WEEKS) {
-        for (let day = 1; day <= 7; day++) {
-          const weekDayEntries: PlanEntry[] = productos
-            .map((p) => ({
-              producto_id: p.id,
-              week_number: week,
-              day_of_week: day,
-              planned_qty:
-                planMap.get(cellKey(week, day, p.id)) ?? 0,
-            }))
-            .filter((e) => e.planned_qty > 0);
-          if (weekDayEntries.length > 0) {
-            await apiFetch(
-              `/api/produccion/plan?week_number=${week}&day_of_week=${day}`,
-              {
-                method: "POST",
-                body: JSON.stringify(weekDayEntries),
-              }
-            );
+        for (let dayIdx = 0; dayIdx < DAYS_LABELS.length; dayIdx++) {
+          for (const p of productos) {
+            const planned_qty = planMap.get(cellKey(dayIdx, p.id)) ?? 0;
+            if (planned_qty > 0) {
+              toPost.push({
+                producto_id: p.id,
+                week_number: week,
+                day_of_week: dayIdx,
+                planned_qty,
+              });
+            }
           }
         }
+      }
+
+      for (const entry of toPost) {
+        await apiFetch("/api/produccion/plan", {
+          method: "POST",
+          body: JSON.stringify(entry),
+        });
       }
 
       toast("Plan guardado correctamente");
@@ -197,7 +160,7 @@ export default function PlanProduccionPage() {
             Plan de Producción
           </h1>
           <p className="text-sm text-warm-gray mt-0.5">
-            Plan rotativo de 4 semanas
+            Plan semanal de producción
           </p>
         </div>
         {dirty && (
@@ -211,24 +174,8 @@ export default function PlanProduccionPage() {
         )}
       </div>
 
-      {/* Week selector tabs */}
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {WEEKS.map((w) => (
-          <button
-            key={w}
-            onClick={() => setSemana(w)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors ${
-              semana === w
-                ? "bg-brot text-white"
-                : "bg-white border border-cream-dark text-warm-gray hover:bg-cream hover:text-text"
-            }`}
-          >
-            Semana {w}
-          </button>
-        ))}
-        <div className="ml-auto text-xs text-warm-gray flex items-center">
-          Cantidades en unidades por día
-        </div>
+      <div className="mb-4 text-xs text-warm-gray text-right">
+        Cantidades en unidades por día
       </div>
 
       {loading ? (
@@ -293,9 +240,9 @@ export default function PlanProduccionPage() {
                             type="number"
                             min="0"
                             inputMode="numeric"
-                            value={getCellValue(semana, dayIdx + 1, p.id)}
+                            value={getCellValue(dayIdx, p.id)}
                             onChange={(e) =>
-                              updateCell(semana, dayIdx + 1, p.id, e.target.value)
+                              updateCell(dayIdx, p.id, e.target.value)
                             }
                             placeholder="—"
                             className={inputCls}
@@ -304,7 +251,7 @@ export default function PlanProduccionPage() {
                       ))}
                       <td className="px-3 py-2 text-center">
                         <span className="text-sm font-medium text-brot">
-                          {getProductWeekTotal(semana, p.id) || "—"}
+                          {getProductWeekTotal(p.id) || "—"}
                         </span>
                       </td>
                     </tr>
@@ -318,7 +265,7 @@ export default function PlanProduccionPage() {
                     {DAYS_LABELS.map((_, dayIdx) => (
                       <td key={dayIdx} className="px-1.5 py-2.5 text-center">
                         <span className="text-sm font-semibold text-text">
-                          {getDayTotal(semana, dayIdx + 1) || "—"}
+                          {getDayTotal(dayIdx) || "—"}
                         </span>
                       </td>
                     ))}
@@ -329,24 +276,8 @@ export default function PlanProduccionPage() {
             </div>
           </div>
 
-          {/* Mobile: one day at a time */}
+          {/* Mobile: scrollable table */}
           <div className="md:hidden space-y-3 mb-4">
-            {/* Day selector */}
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {DAYS_FULL.map((day, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    // We'll use a local state for mobile day selection
-                  }}
-                  className="px-3 py-1.5 rounded-lg border border-cream-dark bg-white text-xs text-warm-gray hover:bg-cream whitespace-nowrap min-h-[36px]"
-                >
-                  {day}
-                </button>
-              ))}
-            </div>
-
-            {/* Full mobile table: products as rows, days as compact columns */}
             <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="text-xs border-collapse w-full">
@@ -384,14 +315,9 @@ export default function PlanProduccionPage() {
                               type="number"
                               min="0"
                               inputMode="numeric"
-                              value={getCellValue(semana, dayIdx + 1, p.id)}
+                              value={getCellValue(dayIdx, p.id)}
                               onChange={(e) =>
-                                updateCell(
-                                  semana,
-                                  dayIdx + 1,
-                                  p.id,
-                                  e.target.value
-                                )
+                                updateCell(dayIdx, p.id, e.target.value)
                               }
                               placeholder="—"
                               className="w-10 px-0.5 py-1 rounded border border-cream-dark bg-white text-center text-xs focus:outline-none focus:ring-1 focus:ring-brot/40 min-h-[34px]"
