@@ -10,6 +10,11 @@ const TABS = [
   { href: "/admin/equipo", label: "Equipo" },
   { href: "/admin/permisos", label: "Permisos" },
   { href: "/admin/categorias", label: "Categorías" },
+  { href: "/admin/catalogo", label: "Catálogo" },
+  { href: "/admin/pedidos-clientes", label: "Pedidos Clientes" },
+  { href: "/admin/protocolos", label: "Protocolos" },
+  { href: "/admin/importar", label: "Importar" },
+  { href: "/admin/configuracion", label: "Configuración" },
 ];
 
 export default function AdminLayout({
