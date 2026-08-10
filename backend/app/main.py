@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="BROT API", lifespan=lifespan)
 
-origins = os.getenv("CORS_ORIGINS", "http://localhost:3003").split(",")
+origins = os.getenv("CORS_ORIGINS", "http://localhost:3003,https://brot-bruteam.vercel.app").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
