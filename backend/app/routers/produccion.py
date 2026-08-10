@@ -358,8 +358,8 @@ def get_calendario(
             )
             seen_product_ids.add(plan.producto_id)
 
-        # Unplanned logs for this date
-        for log in unplanned:
+        # All remaining logs for this date (not matched to a plan entry)
+        for log in logs:
             if log.target_date == date_str and log.producto_id not in seen_product_ids:
                 result.append(
                     {
@@ -372,8 +372,9 @@ def get_calendario(
                         "log_id": log.id,
                         "duration_minutes_machine": log.duration_minutes_machine,
                         "duration_minutes_human": log.duration_minutes_human,
-                        "is_unplanned": True,
+                        "is_unplanned": log.is_unplanned,
                     }
                 )
+                seen_product_ids.add(log.producto_id)
 
     return result
