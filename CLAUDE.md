@@ -62,9 +62,18 @@ brot/
 - Staff picks name from a grid, enters 4-digit PIN
 - PIN hashed with bcrypt, stored in DB
 - JWT token (HS256) with 30-day expiry
-- Two roles: `admin` (full access) and `staff` (limited)
+- Two roles: `admin` (full access) and `staff` (restricted)
 - Default admin user seeded on first run: name="Admin", PIN="0000"
 - Token stored in `localStorage` key: `brot_token`
+
+### Role-Based Access Control (RBAC)
+- **Admin:** Full access to all modules, all CRUD operations, all views
+- **Staff:** Restricted access — exact permissions TBD (will be configured after app is built)
+- **Implementation:** Build a configurable permission system so staff access can be toggled per module/action without code changes
+- **Permission model:** `Permission` table with `role`, `module`, `action` (view/create/edit/delete) columns
+- **Frontend:** `usePermission(module, action)` hook that checks the current user's role against allowed permissions. Hide/disable UI elements the user can't access.
+- **Backend:** `require_permission(module, action)` FastAPI dependency that checks role permissions on each endpoint. Returns 403 if denied.
+- **Admin settings page:** UI for admin to configure which modules/actions staff can access
 
 ### Customer Auth (Email + Password)
 - Customers register with email + password
