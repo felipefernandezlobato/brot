@@ -6,7 +6,11 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/", label: "Inicio", icon: "🏠" },
   { href: "/ingredientes", label: "Ingredientes", icon: "🧂" },
+  { href: "/stock", label: "Stock", icon: "📦" },
   { href: "/escandallos", label: "Escandallos", icon: "📋" },
+  { href: "/produccion", label: "Producción", icon: "🏭" },
+  { href: "/congelados", label: "Congelados", icon: "❄️" },
+  { href: "/entregas", label: "Entregas", icon: "🚚" },
   { href: "/admin", label: "Admin", icon: "⚙️", admin: true },
 ];
 
