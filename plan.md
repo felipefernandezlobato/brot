@@ -46,10 +46,14 @@
 - [ ] Frontend: PDF import page (deferred — advanced feature)
 
 ### Module 5: Calendario Producción
-- [x] Backend: ProductItem + ProductionPlan (4-week rotating) + ProductionLog (4/4 tests)
+- [x] Backend: ProductItem + ProductionPlan + ProductionLog (4/4 tests)
 - [x] Backend: Machine time + human time tracking per batch (capacity planning)
-- [x] Frontend: Production calendar view (weekly)
-- [x] Frontend: Production logging (planned vs actual, time tracking)
+- [x] Backend: Batch upsert for production log (single or array POST)
+- [x] Frontend: Production calendar view (weekly, planned vs actual, color-coded)
+- [x] Frontend: Production logging (planned vs actual, time tracking, draft persistence)
+- [x] Frontend: Production analytics page (date ranges, summary cards, per-product table)
+- [x] Frontend: Single-week plan editor (no 4-week rotation)
+- [x] Frontend: Product management page
 
 ### Module 6: Stock Producto Congelado
 - [x] Backend: Frozen product model with shelf life + expiry tracking (13/13 tests)
@@ -101,8 +105,27 @@
 - [ ] Backend: Bulk validation + preview → confirm pattern (deferred)
 - [x] Frontend: Import page shell (upload, preview UI — endpoints pending)
 
+### Bug Fixes Applied
+- [x] Comprehensive field mapping audit (31 files fixed — is_active vs activo, planned_qty vs cantidad_planificada, etc.)
+- [x] Remove all emojis from UI
+- [x] Fix UTC date shifting (toISOString → local date formatting)
+- [x] Calendar shows logged production even without plan entries
+- [x] Filter inactive products from production calendar
+- [x] Production log batch upsert (accepts array, upserts existing entries)
+- [x] Draft persistence on production registro page (sessionStorage)
+- [x] PVP B2B label on competencia page
+
+### Data Loaded
+- [x] 23 ingredients with prices and 7 suppliers
+- [x] 20 recipes (3 sub-recipes + 17 final products) with cost calculations
+- [x] Weekly production plan matching exact bakery schedule
+- [x] Historical production data (week of Jun 29 - Jul 5, 2026)
+- [x] Competitor prices: Aroma Francés, Granadino, La Granadina Artesanal
+- [x] 29 production products (20 active)
+
 ### Final
-- [x] Full integration testing (127/127 backend tests, 35 frontend routes building clean)
+- [x] Full integration testing (127/127 backend tests, 46 frontend routes building clean)
+- [x] Browser testing (desktop + mobile, all modules verified)
 - [ ] Mobile testing (PWA install, touch targets, safe areas)
 - [ ] Production deploy (Vercel + Render + Neon)
 
