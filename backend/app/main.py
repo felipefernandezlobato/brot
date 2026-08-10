@@ -48,9 +48,11 @@ from app.routers import (  # noqa: E402
     pedidos_clientes_admin,
     permisos,
     produccion,
+    protocolos,
     proveedores,
     recetas,
     recurrentes,
+    temperaturas,
 )
 
 app.include_router(auth.router)
@@ -72,6 +74,8 @@ app.include_router(pedidos.router)
 app.include_router(entregas_b2b.clientes_router)
 app.include_router(entregas_b2b.router)
 app.include_router(competencia.router)
+app.include_router(protocolos.router)
+app.include_router(temperaturas.router)
 
 
 @app.get("/api/health")
