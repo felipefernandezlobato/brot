@@ -7,28 +7,28 @@
 ## Master Checklist
 
 ### Infrastructure
-- [ ] Backend scaffolding (FastAPI, SQLAlchemy, Alembic, tests)
-- [ ] Frontend scaffolding (Next.js, Tailwind, BROT branding, PWA)
-- [ ] Database models + Pydantic schemas
+- [x] Backend scaffolding (FastAPI, SQLAlchemy, Alembic, tests)
+- [x] Frontend scaffolding (Next.js, Tailwind, BROT branding, PWA)
+- [x] Database models + Pydantic schemas
 - [ ] Deploy to Vercel + Render + Neon
 
 ### Auth & Permissions
-- [ ] Employee PIN auth (login, me, user list, seed admin)
-- [ ] Customer email auth (register, login, me)
-- [ ] Configurable RBAC (Permission model, admin UI, permission gate)
-- [ ] AppShell + Sidebar + BottomNav + AuthGuard
+- [x] Employee PIN auth (login, me, user list, seed admin)
+- [x] Customer email auth (register, login, me)
+- [x] Configurable RBAC (Permission model, admin UI, permission gate)
+- [x] AppShell + Sidebar + BottomNav + AuthGuard
 
 ### Module 1: Ingredientes
-- [ ] Backend: Ingredientes CRUD + auto price history
-- [ ] Backend: Unit conversion service (kg/g/mg, litro/ml/cl)
-- [ ] Backend: Categorías CRUD
-- [ ] Frontend: Ingredientes pages (list, create, detail/edit)
-- [ ] Frontend: Admin categorías page
+- [x] Backend: Ingredientes CRUD + auto price history
+- [x] Backend: Unit conversion service (kg/g/mg, litro/ml/cl)
+- [x] Backend: Categorías CRUD
+- [x] Frontend: Ingredientes pages (list, create, detail/edit)
+- [x] Frontend: Admin categorías page
 
 ### Module 2: Escandallos (Recipe Cost Cards)
-- [ ] Backend: Recipe cost calculation engine (sub-recipes, merma, cycle detection)
-- [ ] Backend: Recetas CRUD (lines, cost card, margin, multiplier)
-- [ ] Frontend: Escandallos pages (list, create, detail/cost card)
+- [x] Backend: Recipe cost calculation engine (sub-recipes, merma, cycle detection)
+- [x] Backend: Recetas CRUD (lines, cost card, margin, multiplier)
+- [x] Frontend: Escandallos pages (list, create, detail/cost card)
 
 ### Module 3: Stock Materia Prima / Inventario
 - [ ] Backend: InventarioRegistro model + snapshot CRUD
