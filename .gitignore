@@ -58,3 +58,4 @@ htmlcov/
 *.log
 *.pid
 *.seed
+.playwright-mcp/
