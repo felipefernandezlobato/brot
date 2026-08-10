@@ -31,14 +31,14 @@
 - [x] Frontend: Escandallos pages (list, create, detail/cost card)
 
 ### Module 3: Stock Materia Prima / Inventario
-- [ ] Backend: InventarioRegistro model + snapshot CRUD
-- [ ] Backend: Stock actual, alertas, par level, recomendación
+- [x] Backend: InventarioRegistro model + snapshot CRUD (4/4 tests)
+- [x] Backend: Stock actual, alertas, par level, recomendación
 - [ ] Backend: Consumo analytics service
 - [ ] Frontend: Stock pages (current stock, snapshot entry, alerts, pivot view)
 
 ### Module 4: Proveedores & Pedidos Materia Prima
-- [ ] Backend: Proveedor CRUD + PrecioProveedor multi-supplier catalog
-- [ ] Backend: Pedido lifecycle (borrador → enviado → recibido) + auto stock update
+- [x] Backend: Proveedor CRUD + PrecioProveedor multi-supplier catalog (9/9 tests)
+- [x] Backend: Pedido lifecycle (borrador → enviado → recibido) + auto stock update (13/13 tests)
 - [ ] Backend: Order recommendations by supplier
 - [ ] Backend: PDF invoice import (extract → preview → confirm)
 - [ ] Frontend: Proveedores pages
@@ -46,36 +46,36 @@
 - [ ] Frontend: PDF import page
 
 ### Module 5: Calendario Producción
-- [ ] Backend: ProductItem + ProductionPlan (4-week rotating) + ProductionLog
-- [ ] Backend: Machine time + human time tracking per batch (capacity planning)
+- [x] Backend: ProductItem + ProductionPlan (4-week rotating) + ProductionLog (4/4 tests)
+- [x] Backend: Machine time + human time tracking per batch (capacity planning)
 - [ ] Frontend: Production calendar view (weekly/monthly)
 - [ ] Frontend: Production logging (planned vs actual, time tracking)
 
 ### Module 6: Stock Producto Congelado
-- [ ] Backend: Frozen product model with shelf life + expiry tracking
-- [ ] Backend: FIFO management + expiry alerts
+- [x] Backend: Frozen product model with shelf life + expiry tracking (13/13 tests)
+- [x] Backend: FIFO management + expiry alerts
 - [ ] Frontend: Frozen stock pages (list, alerts)
 
 ### Module 7: Mermas (Waste/Shrinkage)
-- [ ] Backend: MermaRegistro CRUD + cost snapshot at creation
-- [ ] Backend: Merma analysis (by category, by reason, by time, top items)
+- [x] Backend: MermaRegistro CRUD + cost snapshot at creation (7/7 tests)
+- [x] Backend: Merma analysis (by category, by reason, by time, top items)
 - [ ] Frontend: Mermas pages (log, analysis dashboard)
 
 ### Module 8: Protocolos (Checklists + Temperatures)
-- [ ] Backend: ChecklistTemplate + ChecklistCompletion (single area)
-- [ ] Backend: Four frequencies (apertura, cierre, semanal, mensual)
-- [ ] Backend: Quality review / strikes system
-- [ ] Backend: Fridge + TemperatureReading with alerts
-- [ ] Backend: History + reporting (summary, snapshot, export CSV)
+- [x] Backend: ChecklistTemplate + ChecklistCompletion (single area) (14/14 tests)
+- [x] Backend: Four frequencies (apertura, cierre, semanal, mensual)
+- [x] Backend: Quality review / strikes system
+- [x] Backend: Fridge + TemperatureReading with alerts (11/11 tests)
+- [x] Backend: History + reporting (summary, snapshot, export CSV)
 - [ ] Frontend: Protocol pages (daily checklist, weekly, monthly)
 - [ ] Frontend: Temperature entry + trend charts
 - [ ] Frontend: Protocol history + reporting
 
 ### Module 9: Customer Portal Orders
-- [ ] Backend: ProductoCatalogo (public catalog)
-- [ ] Backend: PedidoCliente lifecycle (pendiente → confirmado → en_preparacion → listo → entregado)
-- [ ] Backend: Delivery day validation (Wed/Sat only)
-- [ ] Backend: PedidoRecurrente + auto-generation + skip/edit
+- [x] Backend: ProductoCatalogo (public catalog) (11/11 tests)
+- [x] Backend: PedidoCliente lifecycle (pendiente → confirmado → en_preparacion → listo → entregado)
+- [x] Backend: Delivery day validation (Wed/Sat only)
+- [x] Backend: PedidoRecurrente + auto-generation + skip/edit
 - [ ] Frontend: Customer catalog browse page
 - [ ] Frontend: Customer order placement + delivery date picker
 - [ ] Frontend: Customer order history
@@ -88,12 +88,12 @@
 - [ ] Frontend: Supplier delivery pages
 
 ### Module 11: Volumen de Entregas Colectivo (Outbound B2B)
-- [ ] Backend: ClienteB2B + EntregaB2B CRUD
-- [ ] Backend: Delivery volume aggregation (by period, client, product)
+- [x] Backend: ClienteB2B + EntregaB2B CRUD (3/3 tests)
+- [x] Backend: Delivery volume aggregation (by period, client, product)
 - [ ] Frontend: B2B delivery pages (route planning, confirmation, volume analysis)
 
 ### Module 12: Precio Competencia
-- [ ] Backend: PrecioCompetencia CRUD
+- [x] Backend: PrecioCompetencia CRUD (2/2 tests)
 - [ ] Frontend: Competitor price comparison dashboard (side-by-side)
 
 ### Data Import
