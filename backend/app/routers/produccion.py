@@ -329,12 +329,14 @@ def get_calendario(
         dow = d.weekday()  # 0 = Monday … 6 = Sunday
         date_str = d.isoformat()
 
-        # Planned entries for this cycle slot
+        # Planned entries for this cycle slot (only active products)
         plan_entries = (
             db.query(PlanProduccion)
+            .join(ProductoProduccion, PlanProduccion.producto_id == ProductoProduccion.id)
             .filter(
                 PlanProduccion.week_number == week_num,
                 PlanProduccion.day_of_week == dow,
+                ProductoProduccion.is_active == True,
             )
             .all()
         )
