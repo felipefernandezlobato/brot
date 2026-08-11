@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/format";
 import { useToast } from "@/components/Toast";
@@ -466,10 +467,79 @@ function TabPropuesta({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-// ── Tab: Historial ───────────────────────────────────────────────────────────
+// ── Tab: Historial (pivot table) ─────────────────────────────────────────────
+
+interface IngredienteInfo {
+  id: number;
+  nombre: string;
+  unidad: string;
+  proveedor: string;
+}
 
 function TabHistorial({ recibidos }: { recibidos: PedidoListItem[] }) {
-  const router = useRouter();
+  const { toast } = useToast();
+  const [ingredientes, setIngredientes] = useState<IngredienteInfo[]>([]);
+
+  useEffect(() => {
+    apiFetch<Record<string, unknown>[]>("/api/ingredientes")
+      .then((data) => setIngredientes(data.map((i) => ({
+        id: i.id as number,
+        nombre: i.nombre as string,
+        unidad: i.unidad_uso as string,
+        proveedor: (i.proveedor as string) || "Sin proveedor",
+      }))))
+      .catch(() => {});
+  }, []);
+
+  const ingMap = useMemo(
+    () => new Map(ingredientes.map((i) => [i.id, i])),
+    [ingredientes]
+  );
+
+  // All unique order dates, most recent first
+  const allDates = useMemo(() => {
+    const dates = new Set(recibidos.map((p) => p.fecha.split("T")[0]));
+    return Array.from(dates).sort((a, b) => b.localeCompare(a));
+  }, [recibidos]);
+
+  // Build pivot: (ingrediente_id, fecha) -> cantidad
+  const pivotData = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of recibidos) {
+      const fecha = p.fecha.split("T")[0];
+      for (const l of p.lineas) {
+        const key = `${l.ingrediente_id}:${fecha}`;
+        map.set(key, (map.get(key) ?? 0) + l.cantidad_pedida);
+      }
+    }
+    return map;
+  }, [recibidos]);
+
+  // All ingredients that appear in orders, grouped by supplier
+  const ingWithOrders = useMemo(() => {
+    const ids = new Set<number>();
+    for (const p of recibidos) {
+      for (const l of p.lineas) ids.add(l.ingrediente_id);
+    }
+    return ingredientes
+      .filter((i) => ids.has(i.id))
+      .sort((a, b) => a.proveedor.localeCompare(b.proveedor) || a.nombre.localeCompare(b.nombre));
+  }, [recibidos, ingredientes]);
+
+  // Group by supplier
+  const bySupplier = useMemo(() => {
+    const map = new Map<string, IngredienteInfo[]>();
+    for (const ing of ingWithOrders) {
+      if (!map.has(ing.proveedor)) map.set(ing.proveedor, []);
+      map.get(ing.proveedor)!.push(ing);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [ingWithOrders]);
+
+  const shortDate = (d: string) => {
+    const dt = new Date(d + "T00:00:00");
+    return dt.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+  };
 
   if (recibidos.length === 0) {
     return (
@@ -482,43 +552,63 @@ function TabHistorial({ recibidos }: { recibidos: PedidoListItem[] }) {
   return (
     <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="text-xs w-full">
           <thead>
             <tr className="border-b border-cream-dark bg-cream/50">
-              <th className="text-left px-4 py-3 font-medium text-warm-gray">#</th>
-              <th className="text-left px-4 py-3 font-medium text-warm-gray">Proveedor</th>
-              <th className="text-left px-4 py-3 font-medium text-warm-gray">Fecha pedido</th>
-              <th className="text-left px-4 py-3 font-medium text-warm-gray">Recibido</th>
-              <th className="text-right px-4 py-3 font-medium text-warm-gray">Items</th>
-              <th className="text-right px-4 py-3 font-medium text-warm-gray">Total</th>
+              <th className="text-left px-3 py-2 font-medium text-warm-gray sticky left-0 bg-cream/50 z-10 whitespace-nowrap">
+                Ingrediente
+              </th>
+              <th className="text-left px-2 py-2 font-medium text-warm-gray bg-cream/50">
+                Ud.
+              </th>
+              {allDates.map((d) => (
+                <th key={d} className="text-center px-2 py-2 font-medium text-warm-gray whitespace-nowrap">
+                  {shortDate(d)}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {recibidos.map((p, idx) => (
-              <tr
-                key={p.id}
-                onClick={() => router.push(`/pedidos/${p.id}`)}
-                className={`cursor-pointer hover:bg-cream/40 transition-colors ${
-                  idx < recibidos.length - 1 ? "border-b border-cream-dark" : ""
-                }`}
-              >
-                <td className="px-4 py-3 text-warm-gray font-mono text-xs">#{p.id}</td>
-                <td className="px-4 py-3 font-medium text-text">{p.proveedor_nombre}</td>
-                <td className="px-4 py-3 text-warm-gray">{formatDate(p.fecha)}</td>
-                <td className="px-4 py-3 text-warm-gray">
-                  {p.fecha_recepcion ? formatDate(p.fecha_recepcion) : "--"}
-                </td>
-                <td className="px-4 py-3 text-right text-warm-gray">{p.lineas.length}</td>
-                <td className="px-4 py-3 text-right font-medium text-text">
-                  {formatARS(calcTotal(p.lineas))}
-                </td>
-              </tr>
+            {bySupplier.map(([supplier, ings]) => (
+              <Fragment key={supplier}>
+                <tr className="bg-brot/5">
+                  <td
+                    colSpan={2 + allDates.length}
+                    className="px-3 py-1.5 font-bold text-brot text-xs uppercase tracking-wide sticky left-0 bg-brot/5 z-10"
+                  >
+                    {supplier}
+                  </td>
+                </tr>
+                {ings.map((ing, idx) => (
+                  <tr
+                    key={ing.id}
+                    className={idx < ings.length - 1 ? "border-b border-cream-dark" : "border-b border-brot/10"}
+                  >
+                    <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-white z-10 whitespace-nowrap">
+                      <Link href={`/ingredientes/${ing.id}`} className="hover:text-brot hover:underline">
+                        {ing.nombre}
+                      </Link>
+                    </td>
+                    <td className="px-2 py-1.5 text-warm-gray">{ing.unidad}</td>
+                    {allDates.map((d) => {
+                      const val = pivotData.get(`${ing.id}:${d}`);
+                      return (
+                        <td key={d} className={`text-center px-2 py-1.5 tabular-nums ${
+                          val ? "text-text font-medium" : "text-cream-dark"
+                        }`}>
+                          {val ? `${val}` : "--"}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </Fragment>
             ))}
           </tbody>
         </table>
       </div>
       <p className="text-xs text-warm-gray p-3 text-right border-t border-cream-dark">
-        {recibidos.length} pedido{recibidos.length !== 1 ? "s" : ""} recibidos
+        {ingWithOrders.length} ingredientes · {allDates.length} pedidos
       </p>
     </div>
   );
