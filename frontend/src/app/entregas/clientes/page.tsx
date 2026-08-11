@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 
@@ -244,13 +245,21 @@ export default function ClientesB2BPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
-          Clientes B2B
-        </h2>
-        <p className="text-sm text-warm-gray mt-1">
-          Gestiona los clientes para entregas B2B.
-        </p>
+      <div className="flex items-center justify-between mb-6 gap-4">
+        <div>
+          <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+            Clientes B2B
+          </h2>
+          <p className="text-sm text-warm-gray mt-1">
+            Gestiona los clientes para entregas B2B.
+          </p>
+        </div>
+        <Link
+          href="/entregas"
+          className="text-sm text-brot hover:text-brot-dark transition-colors min-h-[44px] flex items-center"
+        >
+          ← Entregas B2B
+        </Link>
       </div>
 
       {/* Client list */}

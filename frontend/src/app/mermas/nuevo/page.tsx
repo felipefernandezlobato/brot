@@ -15,18 +15,26 @@ interface Ingrediente {
   costo_por_unidad_uso: number;
 }
 
+interface Receta {
+  id: number;
+  nombre: string;
+  costo_por_porcion: number;
+  precio_venta: number | null;
+}
+
 const MOTIVOS: { value: Motivo; label: string }[] = [
   { value: "caducado", label: "Caducado" },
   { value: "dañado", label: "Dañado" },
-  { value: "produccion", label: "Merma de producción" },
+  { value: "produccion", label: "Merma de produccion" },
   { value: "otro", label: "Otro" },
 ];
 
 const UNIDADES = ["g", "kg", "ml", "litro", "unidad"];
 
 interface FormData {
-  modo: "ingrediente" | "libre";
+  modo: "ingrediente" | "producto" | "libre";
   ingrediente_id: string;
+  receta_id: string;
   nombre_libre: string;
   cantidad: string;
   unidad: string;
@@ -35,11 +43,12 @@ interface FormData {
 }
 
 const EMPTY_FORM: FormData = {
-  modo: "ingrediente",
+  modo: "producto",
   ingrediente_id: "",
+  receta_id: "",
   nombre_libre: "",
   cantidad: "",
-  unidad: "g",
+  unidad: "unidad",
   motivo: "caducado",
   notas: "",
 };
@@ -49,14 +58,26 @@ export default function NuevaMermaPage() {
   const { toast } = useToast();
 
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]);
+  const [recetas, setRecetas] = useState<Receta[]>([]);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
 
   useEffect(() => {
-    apiFetch<Ingrediente[]>("/api/ingredientes")
-      .then(setIngredientes)
-      .catch(() => toast("Error al cargar ingredientes", "error"));
+    Promise.all([
+      apiFetch<Ingrediente[]>("/api/ingredientes"),
+      apiFetch<Record<string, unknown>[]>("/api/recetas"),
+    ])
+      .then(([ings, recs]) => {
+        setIngredientes(ings);
+        setRecetas(recs.filter((r) => !(r.es_subreceta as boolean)).map((r) => ({
+          id: r.id as number,
+          nombre: r.nombre as string,
+          costo_por_porcion: r.costo_por_porcion as number,
+          precio_venta: r.precio_venta as number | null,
+        })));
+      })
+      .catch(() => toast("Error al cargar datos", "error"));
   }, []);
 
   function setField<K extends keyof FormData>(field: K, value: FormData[K]) {
@@ -64,27 +85,35 @@ export default function NuevaMermaPage() {
     setErrors((prev) => ({ ...prev, [field]: undefined }));
   }
 
-  // Ingredient selected from dropdown
   const selectedIngredient = ingredientes.find(
     (i) => String(i.id) === form.ingrediente_id
   );
+  const selectedReceta = recetas.find(
+    (r) => String(r.id) === form.receta_id
+  );
 
-  // Auto-calculate cost preview
-  const costPreview =
-    form.modo === "ingrediente" &&
-    selectedIngredient &&
-    form.cantidad &&
-    Number(form.cantidad) > 0
-      ? selectedIngredient.costo_por_unidad_uso * Number(form.cantidad)
-      : null;
+  const costPreview = (() => {
+    const qty = Number(form.cantidad);
+    if (!qty || qty <= 0) return null;
+    if (form.modo === "ingrediente" && selectedIngredient) {
+      return selectedIngredient.costo_por_unidad_uso * qty;
+    }
+    if (form.modo === "producto" && selectedReceta) {
+      return selectedReceta.costo_por_porcion * qty;
+    }
+    return null;
+  })();
 
   function validate(): boolean {
     const errs: Partial<Record<string, string>> = {};
     if (form.modo === "ingrediente" && !form.ingrediente_id) {
       errs.ingrediente_id = "Seleccione un ingrediente";
     }
+    if (form.modo === "producto" && !form.receta_id) {
+      errs.receta_id = "Seleccione un producto";
+    }
     if (form.modo === "libre" && !form.nombre_libre.trim()) {
-      errs.nombre_libre = "Ingrese el nombre del ítem";
+      errs.nombre_libre = "Ingrese el nombre del item";
     }
     if (!form.cantidad || Number(form.cantidad) <= 0) {
       errs.cantidad = "Debe ser mayor a 0";
@@ -99,14 +128,15 @@ export default function NuevaMermaPage() {
     setSaving(true);
     try {
       const cantidad = Number(form.cantidad);
-      const unidad =
-        form.modo === "ingrediente" && selectedIngredient
-          ? selectedIngredient.unidad_uso
-          : form.unidad;
-      const costeUnitario =
-        form.modo === "ingrediente" && selectedIngredient
-          ? selectedIngredient.costo_por_unidad_uso
-          : 0;
+      let unidad = form.unidad;
+      let costeUnitario = 0;
+      if (form.modo === "ingrediente" && selectedIngredient) {
+        unidad = selectedIngredient.unidad_uso;
+        costeUnitario = selectedIngredient.costo_por_unidad_uso;
+      } else if (form.modo === "producto" && selectedReceta) {
+        unidad = "unidad";
+        costeUnitario = selectedReceta.costo_por_porcion;
+      }
       const body: Record<string, unknown> = {
         cantidad,
         unidad,
@@ -118,6 +148,8 @@ export default function NuevaMermaPage() {
       };
       if (form.modo === "ingrediente") {
         body.ingrediente_id = Number(form.ingrediente_id);
+      } else if (form.modo === "producto") {
+        body.receta_id = Number(form.receta_id);
       } else {
         body.nombre_libre = form.nombre_libre.trim();
       }
@@ -163,6 +195,17 @@ export default function NuevaMermaPage() {
           <div className="flex rounded-lg border border-cream-dark overflow-hidden">
             <button
               type="button"
+              onClick={() => setField("modo", "producto")}
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                form.modo === "producto"
+                  ? "bg-brot text-white"
+                  : "bg-white text-warm-gray hover:bg-cream"
+              }`}
+            >
+              Producto
+            </button>
+            <button
+              type="button"
               onClick={() => setField("modo", "ingrediente")}
               className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
                 form.modo === "ingrediente"
@@ -181,9 +224,38 @@ export default function NuevaMermaPage() {
                   : "bg-white text-warm-gray hover:bg-cream"
               }`}
             >
-              Nombre libre
+              Otro
             </button>
           </div>
+
+          {/* Product dropdown */}
+          {form.modo === "producto" && (
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">
+                Producto
+              </label>
+              <select
+                value={form.receta_id}
+                onChange={(e) => setField("receta_id", e.target.value)}
+                className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+                  errors.receta_id ? "border-red-400" : "border-cream-dark"
+                }`}
+              >
+                <option value="">Seleccionar producto...</option>
+                {recetas.map((r) => (
+                  <option key={r.id} value={r.id}>{r.nombre}</option>
+                ))}
+              </select>
+              {errors.receta_id && (
+                <p className="text-xs text-red-500 mt-1">{errors.receta_id}</p>
+              )}
+              {selectedReceta && (
+                <p className="text-xs text-warm-gray mt-1">
+                  Costo: {formatARS(selectedReceta.costo_por_porcion)}/unidad
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Ingredient dropdown */}
           {form.modo === "ingrediente" && (
