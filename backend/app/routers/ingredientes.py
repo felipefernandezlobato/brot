@@ -1,9 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
+from sqlalchemy import func
+
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import HistorialPrecio, Ingrediente, LineaReceta, User
+from app.models import (
+    HistorialPrecio,
+    Ingrediente,
+    InventarioRegistro,
+    LineaReceta,
+    PrecioProveedor,
+    Proveedor,
+    Receta,
+    User,
+)
 from app.permissions import require_permission
 from app.schemas import (
     HistorialPrecioOut,
@@ -16,7 +27,10 @@ from app.services.costes import costo_por_unidad_uso
 router = APIRouter(prefix="/api/ingredientes", tags=["ingredientes"])
 
 
-def _to_out(ing: Ingrediente) -> dict:
+def _to_out(ing: Ingrediente, db: Session | None = None) -> dict:
+    num_recetas = 0
+    if db:
+        num_recetas = db.query(LineaReceta).filter(LineaReceta.ingrediente_id == ing.id).count()
     return {
         "id": ing.id,
         "nombre": ing.nombre,
@@ -32,6 +46,7 @@ def _to_out(ing: Ingrediente) -> dict:
         "activo": ing.activo,
         "costo_por_unidad_uso": costo_por_unidad_uso(ing),
         "fecha_actualizacion": ing.fecha_actualizacion,
+        "num_recetas": num_recetas,
     }
 
 
@@ -47,7 +62,7 @@ def list_ingredientes(
         q = q.filter(Ingrediente.categoria_id == categoria_id)
     if buscar:
         q = q.filter(Ingrediente.nombre.ilike(f"%{buscar}%"))
-    return [_to_out(i) for i in q.order_by(Ingrediente.nombre).all()]
+    return [_to_out(i, db) for i in q.order_by(Ingrediente.nombre).all()]
 
 
 @router.get("/{ing_id}", response_model=IngredienteOut)
@@ -61,7 +76,7 @@ def get_ingrediente(
     ).filter(Ingrediente.id == ing_id).first()
     if not ing:
         raise HTTPException(status_code=404, detail="Ingrediente no encontrado")
-    return _to_out(ing)
+    return _to_out(ing, db)
 
 
 @router.post("", response_model=IngredienteOut, status_code=201)
@@ -75,7 +90,7 @@ def create_ingrediente(
     db.commit()
     db.refresh(ing)
     db.refresh(ing, ["categoria_rel"])
-    return _to_out(ing)
+    return _to_out(ing, db)
 
 
 @router.put("/{ing_id}", response_model=IngredienteOut)
@@ -106,7 +121,7 @@ def update_ingrediente(
         setattr(ing, key, val)
     db.commit()
     db.refresh(ing)
-    return _to_out(ing)
+    return _to_out(ing, db)
 
 
 @router.delete("/{ing_id}")
@@ -137,3 +152,95 @@ def get_historial(
         .order_by(HistorialPrecio.fecha_cambio.desc())
         .all()
     )
+
+
+@router.delete("/{ing_id}/historial/{historial_id}")
+def delete_historial(
+    ing_id: int,
+    historial_id: int,
+    user: User = require_permission("ingredientes", "delete"),
+    db: Session = Depends(get_db),
+):
+    h = db.query(HistorialPrecio).filter(
+        HistorialPrecio.id == historial_id,
+        HistorialPrecio.ingrediente_id == ing_id,
+    ).first()
+    if not h:
+        raise HTTPException(status_code=404, detail="Historial no encontrado")
+    db.delete(h)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/{ing_id}/recetas")
+def get_recetas_usando(
+    ing_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    lineas = (
+        db.query(LineaReceta)
+        .filter(LineaReceta.ingrediente_id == ing_id)
+        .all()
+    )
+    receta_ids = {l.receta_id for l in lineas}
+    recetas = db.query(Receta).filter(Receta.id.in_(receta_ids)).all() if receta_ids else []
+
+    from app.services.costes import costo_receta
+    result = []
+    for r in recetas:
+        total, porcion = costo_receta(r, db)
+        multi = r.precio_venta / porcion if r.precio_venta and porcion > 0 else None
+        result.append({
+            "id": r.id,
+            "nombre": r.nombre,
+            "categoria": r.categoria_rel.nombre if r.categoria_rel else "",
+            "precio_venta": r.precio_venta,
+            "costo_porcion": round(porcion, 2),
+            "multi": round(multi, 2) if multi else None,
+        })
+    return result
+
+
+@router.get("/{ing_id}/precios-proveedores")
+def get_precios_proveedores(
+    ing_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    precios = (
+        db.query(PrecioProveedor)
+        .join(Proveedor, Proveedor.id == PrecioProveedor.proveedor_id)
+        .filter(PrecioProveedor.ingrediente_id == ing_id)
+        .all()
+    )
+    return [
+        {
+            "id": p.id,
+            "proveedor_id": p.proveedor_id,
+            "proveedor_nombre": p.proveedor_rel.nombre if p.proveedor_rel else "",
+            "precio": p.precio,
+            "unidad": p.unidad,
+            "fecha": str(p.fecha),
+        }
+        for p in precios
+    ]
+
+
+@router.get("/{ing_id}/stock")
+def get_stock_ingrediente(
+    ing_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    latest = (
+        db.query(InventarioRegistro)
+        .filter(InventarioRegistro.ingrediente_id == ing_id)
+        .order_by(InventarioRegistro.id.desc())
+        .first()
+    )
+    return {
+        "stock_actual": latest.cantidad if latest else 0,
+        "unidad": latest.unidad if latest else "",
+        "fecha_ultimo_conteo": str(latest.fecha_registro) if latest else None,
+    }

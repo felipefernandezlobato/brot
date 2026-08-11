@@ -22,6 +22,7 @@ interface Ingrediente {
   activo: boolean;
   costo_por_unidad_uso: number;
   fecha_actualizacion: string;
+  num_recetas: number;
 }
 
 export default function IngredientesPage() {
@@ -33,6 +34,7 @@ export default function IngredientesPage() {
   const [loading, setLoading] = useState(true);
   const [buscar, setBuscar] = useState("");
   const [categoriaId, setCategoriaId] = useState<number | null>(null);
+  const [proveedorFiltro, setProveedorFiltro] = useState<string>("");
 
   useEffect(() => {
     Promise.all([
@@ -47,17 +49,25 @@ export default function IngredientesPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const proveedores = useMemo(() => {
+    const set = new Set(ingredientes.map((i) => i.proveedor).filter(Boolean) as string[]);
+    return Array.from(set).sort();
+  }, [ingredientes]);
+
   const filtrados = useMemo(() => {
     return ingredientes.filter((ing) => {
       const matchBuscar =
         buscar === "" ||
-        ing.nombre.toLowerCase().includes(buscar.toLowerCase()) ||
-        (ing.proveedor ?? "").toLowerCase().includes(buscar.toLowerCase());
+        ing.nombre.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes(
+          buscar.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+        );
       const matchCategoria =
         categoriaId === null || ing.categoria_id === categoriaId;
-      return matchBuscar && matchCategoria;
+      const matchProveedor =
+        proveedorFiltro === "" || (ing.proveedor ?? "") === proveedorFiltro;
+      return matchBuscar && matchCategoria && matchProveedor;
     });
-  }, [ingredientes, buscar, categoriaId]);
+  }, [ingredientes, buscar, categoriaId, proveedorFiltro]);
 
   return (
     <div>
@@ -74,15 +84,25 @@ export default function IngredientesPage() {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="mb-4">
+      {/* Search + supplier filter */}
+      <div className="flex gap-3 mb-4">
         <input
           type="search"
-          placeholder="Buscar por nombre o proveedor..."
+          placeholder="Buscar ingrediente..."
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+          className="flex-1 px-4 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
         />
+        <select
+          value={proveedorFiltro}
+          onChange={(e) => setProveedorFiltro(e.target.value)}
+          className="px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+        >
+          <option value="">Todos los proveedores</option>
+          {proveedores.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
       </div>
 
       {/* Category filter chips */}
@@ -144,6 +164,9 @@ export default function IngredientesPage() {
                     <th className="text-left px-4 py-3 font-medium text-warm-gray">
                       Proveedor
                     </th>
+                    <th className="text-right px-4 py-3 font-medium text-warm-gray">
+                      Recetas
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -181,7 +204,10 @@ export default function IngredientesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-warm-gray">
-                        {ing.proveedor ?? "—"}
+                        {ing.proveedor ?? "--"}
+                      </td>
+                      <td className="px-4 py-3 text-right text-warm-gray">
+                        {ing.num_recetas || "--"}
                       </td>
                     </tr>
                   ))}

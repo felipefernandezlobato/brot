@@ -35,6 +35,30 @@ interface HistorialPrecio {
   fecha_cambio: string;
 }
 
+interface RecetaUsando {
+  id: number;
+  nombre: string;
+  categoria: string;
+  precio_venta: number | null;
+  costo_porcion: number;
+  multi: number | null;
+}
+
+interface PrecioProveedor {
+  id: number;
+  proveedor_id: number;
+  proveedor_nombre: string;
+  precio: number;
+  unidad: string;
+  fecha: string;
+}
+
+interface StockInfo {
+  stock_actual: number;
+  unidad: string;
+  fecha_ultimo_conteo: string | null;
+}
+
 interface EditForm {
   nombre: string;
   categoria_id: string;
@@ -56,6 +80,9 @@ export default function IngredienteDetailPage() {
   const [ingrediente, setIngrediente] = useState<Ingrediente | null>(null);
   const [historial, setHistorial] = useState<HistorialPrecio[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [recetas, setRecetas] = useState<RecetaUsando[]>([]);
+  const [preciosProveedores, setPreciosProveedores] = useState<PrecioProveedor[]>([]);
+  const [stockInfo, setStockInfo] = useState<StockInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -71,11 +98,17 @@ export default function IngredienteDetailPage() {
       apiFetch<Ingrediente>(`/api/ingredientes/${id}`),
       apiFetch<HistorialPrecio[]>(`/api/ingredientes/${id}/historial`),
       apiFetch<Categoria[]>("/api/categorias?tipo=ingrediente"),
+      apiFetch<RecetaUsando[]>(`/api/ingredientes/${id}/recetas`),
+      apiFetch<PrecioProveedor[]>(`/api/ingredientes/${id}/precios-proveedores`),
+      apiFetch<StockInfo>(`/api/ingredientes/${id}/stock`),
     ])
-      .then(([ing, hist, cats]) => {
+      .then(([ing, hist, cats, recs, precios, stock]) => {
         setIngrediente(ing);
         setHistorial(hist);
         setCategorias(cats);
+        setRecetas(recs);
+        setPreciosProveedores(precios);
+        setStockInfo(stock);
         initEditForm(ing);
       })
       .catch(() => toast("Error al cargar el ingrediente", "error"))
@@ -208,43 +241,129 @@ export default function IngredienteDetailPage() {
       {/* View mode */}
       {!editing && (
         <>
-          {/* Summary card */}
-          <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">
-            <div className="grid grid-cols-2 gap-4">
-              <InfoRow label="Categoría" value={ingrediente.categoria_nombre} />
-              <InfoRow
-                label="Proveedor"
-                value={ingrediente.proveedor ?? "—"}
-              />
-              <InfoRow
-                label="Precio de compra"
-                value={`${formatARS(ingrediente.precio_compra)} / ${
-                  ingrediente.cantidad_compra
-                } ${ingrediente.unidad_compra}`}
-              />
-              <InfoRow
-                label="Costo por unidad uso"
-                value={`${formatARS(ingrediente.costo_por_unidad_uso)} / ${
-                  ingrediente.unidad_uso
-                }`}
-                highlight
-              />
-              <InfoRow
-                label="Merma"
-                value={`${ingrediente.merma_porcentaje}%`}
-              />
-              <InfoRow
-                label="Última actualización"
-                value={formatDate(ingrediente.fecha_actualizacion)}
-              />
+          {/* Stat cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="bg-white border border-cream-dark rounded-xl p-4">
+              <p className="text-xs text-warm-gray">Precio compra</p>
+              <p className="text-lg font-bold text-text">{formatARS(ingrediente.precio_compra)}</p>
+              <p className="text-xs text-warm-gray">/ {ingrediente.cantidad_compra} {ingrediente.unidad_compra}</p>
+            </div>
+            <div className="bg-white border border-brot/30 rounded-xl p-4">
+              <p className="text-xs text-warm-gray">Costo / {ingrediente.unidad_uso}</p>
+              <p className="text-lg font-bold text-brot">{formatARS(ingrediente.costo_por_unidad_uso)}</p>
+            </div>
+            <div className="bg-white border border-cream-dark rounded-xl p-4">
+              <p className="text-xs text-warm-gray">Stock actual</p>
+              <p className="text-lg font-bold text-text">
+                {stockInfo ? `${stockInfo.stock_actual} ${stockInfo.unidad}` : "--"}
+              </p>
+              {stockInfo?.fecha_ultimo_conteo && (
+                <p className="text-xs text-warm-gray">{formatDate(stockInfo.fecha_ultimo_conteo)}</p>
+              )}
+            </div>
+            <div className="bg-white border border-cream-dark rounded-xl p-4">
+              <p className="text-xs text-warm-gray">Recetas</p>
+              <p className="text-lg font-bold text-text">{recetas.length}</p>
+            </div>
+          </div>
+
+          {/* Info row */}
+          <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              <span><span className="text-warm-gray">Categoria:</span> <span className="font-medium text-text">{ingrediente.categoria_nombre}</span></span>
+              <span><span className="text-warm-gray">Proveedor:</span> <span className="font-medium text-text">{ingrediente.proveedor ?? "--"}</span></span>
+              <span><span className="text-warm-gray">Merma:</span> <span className="font-medium text-text">{ingrediente.merma_porcentaje}%</span></span>
+              <span><span className="text-warm-gray">Unidades:</span> <span className="font-medium text-text">{ingrediente.unidad_compra} → {ingrediente.unidad_uso}</span></span>
+              <span><span className="text-warm-gray">Actualizado:</span> <span className="font-medium text-text">{formatDate(ingrediente.fecha_actualizacion)}</span></span>
             </div>
             {ingrediente.notas && (
-              <div className="mt-4 pt-4 border-t border-cream-dark">
-                <p className="text-xs text-warm-gray mb-1">Notas</p>
-                <p className="text-sm text-text">{ingrediente.notas}</p>
-              </div>
+              <p className="text-xs text-warm-gray mt-2 pt-2 border-t border-cream-dark">{ingrediente.notas}</p>
             )}
           </div>
+
+          {/* Recipes using this ingredient */}
+          {recetas.length > 0 && (
+            <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+              <div className="px-4 py-3 border-b border-cream-dark">
+                <h2 className="font-medium text-text text-sm">Recetas que lo usan ({recetas.length})</h2>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-cream-dark bg-cream/50">
+                    <th className="text-left px-4 py-2 font-medium text-warm-gray">Receta</th>
+                    <th className="text-left px-3 py-2 font-medium text-warm-gray">Categoria</th>
+                    <th className="text-right px-3 py-2 font-medium text-warm-gray">Costo</th>
+                    <th className="text-right px-3 py-2 font-medium text-warm-gray">PVP</th>
+                    <th className="text-right px-4 py-2 font-medium text-warm-gray">Multi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recetas.map((r, idx) => (
+                    <tr
+                      key={r.id}
+                      onClick={() => router.push(`/escandallos`)}
+                      className={`cursor-pointer hover:bg-cream/40 ${idx < recetas.length - 1 ? "border-b border-cream-dark" : ""}`}
+                    >
+                      <td className="px-4 py-2 font-medium text-text">{r.nombre}</td>
+                      <td className="px-3 py-2 text-warm-gray">{r.categoria}</td>
+                      <td className="px-3 py-2 text-right text-text tabular-nums">{formatARS(r.costo_porcion)}</td>
+                      <td className="px-3 py-2 text-right text-text tabular-nums">{r.precio_venta ? formatARS(r.precio_venta) : "--"}</td>
+                      <td className="px-4 py-2 text-right">
+                        {r.multi ? (
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            r.multi >= 3 ? "bg-green-100 text-green-700" :
+                            r.multi >= 2 ? "bg-amber-100 text-amber-700" :
+                            "bg-red-100 text-red-700"
+                          }`}>
+                            x{r.multi}
+                          </span>
+                        ) : "--"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Supplier prices */}
+          {preciosProveedores.length > 0 && (
+            <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+              <div className="px-4 py-3 border-b border-cream-dark">
+                <h2 className="font-medium text-text text-sm">Precios por proveedor</h2>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-cream-dark bg-cream/50">
+                    <th className="text-left px-4 py-2 font-medium text-warm-gray">Proveedor</th>
+                    <th className="text-right px-3 py-2 font-medium text-warm-gray">Precio</th>
+                    <th className="text-left px-3 py-2 font-medium text-warm-gray">Unidad</th>
+                    <th className="text-left px-4 py-2 font-medium text-warm-gray">Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preciosProveedores
+                    .sort((a, b) => a.precio - b.precio)
+                    .map((p, idx) => (
+                      <tr
+                        key={p.id}
+                        className={`${idx < preciosProveedores.length - 1 ? "border-b border-cream-dark" : ""} ${
+                          idx === 0 ? "bg-green-50/50" : ""
+                        }`}
+                      >
+                        <td className="px-4 py-2 font-medium text-text">
+                          {p.proveedor_nombre}
+                          {idx === 0 && <span className="ml-2 text-xs text-green-600">Mejor precio</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right font-medium text-text tabular-nums">{formatARS(p.precio)}</td>
+                        <td className="px-3 py-2 text-warm-gray">{p.unidad}</td>
+                        <td className="px-4 py-2 text-warm-gray">{formatDate(p.fecha)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Price history */}
           <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">
@@ -257,10 +376,11 @@ export default function IngredienteDetailPage() {
               </p>
             ) : (
               <div className="space-y-2">
-                {historial
-                  .slice()
-                  .reverse()
-                  .map((h) => (
+                {historial.map((h) => {
+                  const pctChange = h.precio_anterior > 0
+                    ? ((h.precio_nuevo - h.precio_anterior) / h.precio_anterior * 100)
+                    : 0;
+                  return (
                     <div
                       key={h.id}
                       className="flex items-center justify-between text-sm py-2 border-b border-cream-dark last:border-0"
@@ -276,9 +396,15 @@ export default function IngredienteDetailPage() {
                         <span className="font-medium text-brot">
                           {formatARS(h.precio_nuevo)}
                         </span>
+                        {pctChange !== 0 && (
+                          <span className={`text-xs font-medium ${pctChange > 0 ? "text-red-600" : "text-green-600"}`}>
+                            {pctChange > 0 ? "+" : ""}{pctChange.toFixed(1)}%
+                          </span>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
               </div>
             )}
           </div>

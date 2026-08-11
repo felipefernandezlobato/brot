@@ -101,18 +101,34 @@ def flujo_completo(
     )
     total_producido = sum(r.cantidad_real or 0 for r in produccion)
 
-    # Stock congelado actual
-    stock_cong = (
+    # Stock congelado actual — latest entry per product (most recent fecha_entrada)
+    latest_cong_subq = (
+        db.query(
+            StockCongelado.producto_congelado_id,
+            func.max(StockCongelado.fecha_entrada).label("max_fecha"),
+        )
+        .filter(StockCongelado.is_active.is_(True))
+        .group_by(StockCongelado.producto_congelado_id)
+        .subquery()
+    )
+    latest_cong_entries = (
         db.query(
             ProductoCongelado.nombre,
             ProductoCongelado.id,
-            func.sum(StockCongelado.cantidad).label("total"),
+            StockCongelado.cantidad,
         )
         .join(StockCongelado, StockCongelado.producto_congelado_id == ProductoCongelado.id)
-        .filter(StockCongelado.is_active.is_(True))
-        .group_by(ProductoCongelado.id, ProductoCongelado.nombre)
+        .join(
+            latest_cong_subq,
+            (StockCongelado.producto_congelado_id == latest_cong_subq.c.producto_congelado_id)
+            & (StockCongelado.fecha_entrada == latest_cong_subq.c.max_fecha),
+        )
         .all()
     )
+    stock_cong: list = [
+        type("Row", (), {"nombre": r.nombre, "id": r.id, "total": r.cantidad})()
+        for r in latest_cong_entries
+    ]
     stock_cong_total = sum(r.total for r in stock_cong)
 
     # Entregas B2B en el periodo
