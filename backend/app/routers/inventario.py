@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Ingrediente, InventarioRegistro, User
+from app.models import Ingrediente, InventarioRegistro, LineaPedido, Pedido, User
 from app.permissions import require_permission
 from app.schemas import InventarioRegistroCreate, InventarioRegistroOut
 
@@ -141,6 +141,105 @@ def create_inventario(
     for r in registros:
         db.refresh(r)
     return [_to_out(r) for r in registros]
+
+
+@router.get("/recomendacion")
+def recomendacion_pedido(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Order recommendation: for each active ingredient, calculate
+    cantidad_sugerida = max(0, par_level - stock_actual)
+
+    Par level = average weekly consumption * 2 weeks (safety buffer).
+    Consumption estimated from inventory record differences over last 8 weeks.
+    """
+    ingredientes = db.query(Ingrediente).filter(Ingrediente.activo.is_(True)).all()
+    subq = _latest_subquery(db)
+    latest_regs = (
+        db.query(InventarioRegistro)
+        .join(subq, InventarioRegistro.id == subq.c.max_id)
+        .all()
+    )
+    stock_map = {r.ingrediente_id: r.cantidad for r in latest_regs}
+
+    # Estimate weekly consumption from last 8 weeks of inventory data
+    hace_8_semanas = date.today() - timedelta(weeks=8)
+    items = []
+
+    for ing in ingredientes:
+        stock_actual = stock_map.get(ing.id, 0)
+
+        # Get all records for this ingredient in last 8 weeks, oldest first
+        records = (
+            db.query(InventarioRegistro)
+            .filter(
+                InventarioRegistro.ingrediente_id == ing.id,
+                InventarioRegistro.fecha_registro >= hace_8_semanas,
+            )
+            .order_by(InventarioRegistro.fecha_registro, InventarioRegistro.id)
+            .all()
+        )
+
+        # Calculate consumption from consecutive snapshots
+        consumo_total = 0
+        dias_total = 0
+        for i in range(1, len(records)):
+            prev_r = records[i - 1]
+            curr_r = records[i]
+            dias = (curr_r.fecha_registro - prev_r.fecha_registro).days
+            if dias <= 0:
+                continue
+
+            # Received orders between these two dates
+            recibido = (
+                db.query(func.coalesce(func.sum(LineaPedido.cantidad_recibida), 0))
+                .join(Pedido, Pedido.id == LineaPedido.pedido_id)
+                .filter(
+                    LineaPedido.ingrediente_id == ing.id,
+                    Pedido.estado == "recibido",
+                    Pedido.fecha_recepcion > prev_r.fecha_registro,
+                    Pedido.fecha_recepcion <= curr_r.fecha_registro,
+                )
+                .scalar()
+            ) or 0
+
+            consumo = prev_r.cantidad + recibido - curr_r.cantidad
+            if consumo > 0:
+                consumo_total += consumo
+                dias_total += dias
+
+        consumo_semanal = (consumo_total / dias_total * 7) if dias_total > 0 else 0
+        par_level = consumo_semanal * 2
+        cantidad_sugerida = max(0, round(par_level - stock_actual, 1))
+
+        items.append({
+            "ingrediente_id": ing.id,
+            "ingrediente": ing.nombre,
+            "unidad": ing.unidad_uso,
+            "proveedor": ing.proveedor or "Sin proveedor",
+            "stock_actual": stock_actual,
+            "consumo_semanal": round(consumo_semanal, 2),
+            "par_level": round(par_level, 1),
+            "cantidad_sugerida": cantidad_sugerida,
+        })
+
+    # Group by supplier
+    by_supplier: dict[str, list] = {}
+    for item in items:
+        sup = item["proveedor"]
+        if sup not in by_supplier:
+            by_supplier[sup] = []
+        by_supplier[sup].append(item)
+
+    return {
+        "fecha": str(date.today()),
+        "por_proveedor": [
+            {"proveedor": sup, "items": items}
+            for sup, items in sorted(by_supplier.items())
+        ],
+    }
 
 
 @router.delete("/{registro_id}")

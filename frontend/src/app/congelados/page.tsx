@@ -60,10 +60,9 @@ function expiryBadge(dias: number | null): { text: string; cls: string } | null 
 
 // ── Tab navigation ───────────────────────────────────────────────────────────
 
-type Tab = "actual" | "nueva" | "historial";
+type Tab = "nueva" | "historial";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "actual", label: "Stock Actual" },
   { key: "nueva", label: "Registrar" },
   { key: "historial", label: "Historial" },
 ];
@@ -77,7 +76,7 @@ const CHART_COLORS = [
 
 export default function CongeladosPage() {
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("actual");
+  const [tab, setTab] = useState<Tab>("nueva");
 
   const [stock, setStock] = useState<StockCongelado[]>([]);
   const [productos, setProductos] = useState<ProductoCongelado[]>([]);
@@ -149,20 +148,12 @@ export default function CongeladosPage() {
         </div>
       ) : (
         <>
-          {tab === "actual" && (
-            <TabStockActual
-              stock={stock}
-              productos={productos}
-              onReload={load}
-            />
-          )}
           {tab === "nueva" && (
             <TabNuevaEntrada
               productos={productos}
               stock={stock}
               onSaved={() => {
                 load();
-                switchTab("actual");
               }}
             />
           )}

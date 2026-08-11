@@ -47,10 +47,9 @@ interface StockActualItem {
 
 // ── Tab navigation ───────────────────────────────────────────────────────────
 
-type Tab = "actual" | "registrar" | "historial";
+type Tab = "registrar" | "historial";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "actual", label: "Stock Actual" },
   { key: "registrar", label: "Registrar" },
   { key: "historial", label: "Historial" },
 ];
@@ -67,7 +66,7 @@ const CHART_COLORS = [
 
 export default function StockPage() {
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("actual");
+  const [tab, setTab] = useState<Tab>("registrar");
 
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]);
   const [stockActual, setStockActual] = useState<RegistroStock[]>([]);
@@ -131,19 +130,12 @@ export default function StockPage() {
         </div>
       ) : (
         <>
-          {tab === "actual" && (
-            <TabStockActual
-              ingredientes={ingredientes}
-              stockActual={stockActual}
-            />
-          )}
           {tab === "registrar" && (
             <TabRegistrar
               ingredientes={ingredientes}
               stockActual={stockActual}
               onSaved={() => {
                 load();
-                switchTab("actual");
               }}
             />
           )}
