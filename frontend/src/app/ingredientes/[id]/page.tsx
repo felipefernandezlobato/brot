@@ -8,14 +8,15 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { formatARS, formatDate } from "@/lib/format";
 import { Categoria } from "@/lib/types";
 import {
-  LineChart,
+  ComposedChart,
   Line,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
-  ReferenceLine,
+  Legend,
 } from "recharts";
 
 const UNIDADES = ["kg", "g", "litro", "ml", "unidad"];
@@ -388,20 +389,28 @@ export default function IngredienteDetailPage() {
             </div>
           )}
 
-          {/* Stock evolution chart */}
-          {stockHistory.length > 1 && (
+          {/* Stock evolution + consumption chart */}
+          {stockHistory.length > 1 && (() => {
+            const sorted = stockHistory
+              .slice()
+              .sort((a, b) => a.fecha_registro.localeCompare(b.fecha_registro));
+            const chartData = sorted.map((r, i) => {
+              let consumo = 0;
+              if (i > 0) {
+                const prev = sorted[i - 1];
+                const dias = (new Date(r.fecha_registro).getTime() - new Date(prev.fecha_registro).getTime()) / (1000 * 60 * 60 * 24);
+                if (dias > 0) {
+                  const diff = prev.cantidad - r.cantidad;
+                  consumo = Math.max(0, Math.round((diff / dias) * 7 * 10) / 10);
+                }
+              }
+              return { fecha: r.fecha_registro, stock: r.cantidad, consumo };
+            });
+            return (
             <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">
-              <h2 className="font-medium text-text mb-3">Evolucion de stock</h2>
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart
-                  data={stockHistory
-                    .slice()
-                    .sort((a, b) => a.fecha_registro.localeCompare(b.fecha_registro))
-                    .map((r) => ({
-                      fecha: r.fecha_registro,
-                      stock: r.cantidad,
-                    }))}
-                >
+              <h2 className="font-medium text-text mb-3">Evolucion de stock y consumo semanal</h2>
+              <ResponsiveContainer width="100%" height={280}>
+                <ComposedChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E8DFD3" />
                   <XAxis
                     dataKey="fecha"
@@ -411,24 +420,29 @@ export default function IngredienteDetailPage() {
                       return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
                     }}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: "#6B5E52" }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6B5E52" }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#dc2626" }} />
                   <Tooltip
                     labelFormatter={(v) => formatDate(String(v))}
-                    formatter={(value) => [`${value} ${ingrediente.unidad_uso}`, "Stock"]}
                     contentStyle={{ borderRadius: "8px", border: "1px solid #E8DFD3", fontSize: "13px" }}
                   />
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  <Bar yAxisId="right" dataKey="consumo" name="Consumo/sem" fill="#dc2626" opacity={0.3} barSize={20} />
                   <Line
+                    yAxisId="left"
                     type="monotone"
                     dataKey="stock"
+                    name="Stock"
                     stroke="#004225"
                     strokeWidth={2}
                     dot={{ r: 3, fill: "#004225" }}
                     connectNulls
                   />
-                </LineChart>
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
-          )}
+            );
+          })()}
 
           {/* Price history */}
           <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">

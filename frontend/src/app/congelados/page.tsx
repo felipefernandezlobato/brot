@@ -7,13 +7,15 @@ import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
 import { formatDate } from "@/lib/format";
 import {
-  LineChart,
+  ComposedChart,
   Line,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  Legend,
 } from "recharts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -813,9 +815,27 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
       const name = e.producto_nombre;
       row[name] = (row[name] ?? 0) + e.cantidad;
     }
-    return Array.from(byDate.entries())
+    const sorted = Array.from(byDate.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([fecha, values]) => ({ fecha, ...values }));
+
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      const dias = (new Date(curr.fecha).getTime() - new Date(prev.fecha).getTime()) / (1000 * 60 * 60 * 24);
+      if (dias <= 0) continue;
+      let totalConsumo = 0;
+      for (const name of Object.keys(curr)) {
+        if (name === "fecha" || name === "consumo") continue;
+        const prevVal = (prev as unknown as Record<string, number>)[name] ?? 0;
+        const currVal = (curr as unknown as Record<string, number>)[name] ?? 0;
+        const diff = prevVal - currVal;
+        if (diff > 0) totalConsumo += (diff / dias) * 7;
+      }
+      (curr as unknown as Record<string, number>)["consumo"] = Math.round(totalConsumo * 10) / 10;
+    }
+
+    return sorted;
   }, [entries, selectedIds]);
 
   const chartNames = useMemo(
@@ -953,7 +973,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                 </span>
               </p>
               <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={chartData}>
+                <ComposedChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E8DFD3" />
                   <XAxis
                     dataKey="fecha"
@@ -963,7 +983,8 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                       return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
                     }}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: "#6B5E52" }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6B5E52" }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#dc2626" }} />
                   <Tooltip
                     labelFormatter={(v) => formatDate(String(v))}
                     contentStyle={{
@@ -972,9 +993,12 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                       fontSize: "13px",
                     }}
                   />
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  <Bar yAxisId="right" dataKey="consumo" name="Consumo/sem" fill="#dc2626" opacity={0.3} barSize={16} />
                   {chartNames.map((name, idx) => (
                     <Line
                       key={name}
+                      yAxisId="left"
                       type="monotone"
                       dataKey={name}
                       stroke={CHART_COLORS[idx % CHART_COLORS.length]}
@@ -983,7 +1007,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                       connectNulls
                     />
                   ))}
-                </LineChart>
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           )}
