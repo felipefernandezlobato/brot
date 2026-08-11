@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
@@ -9,451 +9,293 @@ import { formatDate } from "@/lib/format";
 interface ClienteB2B {
   id: number;
   nombre: string;
-  direccion: string | null;
-  telefono: string | null;
-  contacto: string | null;
-  notas: string | null;
-  dia_entrega_preferido: string | null;
-  is_active: boolean;
 }
-
-type EstadoEntrega = "pendiente" | "en_camino" | "entregado" | "cancelado";
 
 interface EntregaB2B {
   id: number;
   cliente_b2b_id: number;
   fecha_entrega: string;
-  estado: EstadoEntrega;
+  estado: string;
   notas: string | null;
   created_at: string;
   lineas: { id: number; entrega_id: number; producto_id: number; cantidad: number; precio_unitario: number }[];
 }
 
-const ESTADOS: EstadoEntrega[] = ["pendiente", "en_camino", "entregado", "cancelado"];
+interface ProductoCatalogo {
+  id: number;
+  nombre: string;
+  receta_id: number | null;
+}
 
-const ESTADO_LABEL: Record<EstadoEntrega, string> = {
-  pendiente: "Pendiente",
-  en_camino: "En camino",
-  entregado: "Entregado",
-  cancelado: "Cancelado",
-};
-
-const ESTADO_CLASS: Record<EstadoEntrega, string> = {
-  pendiente: "bg-amber-100 text-amber-800",
-  en_camino: "bg-blue-100 text-blue-800",
-  entregado: "bg-green-100 text-green-800",
-  cancelado: "bg-gray-100 text-gray-600",
-};
-
-const EMPTY_FORM = {
-  cliente_b2b_id: "",
-  fecha_entrega: new Date().toISOString().slice(0, 10),
-  notas: "",
-};
+type Tab = "entregas" | "historial";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "entregas", label: "Entregas" },
+  { key: "historial", label: "Historial" },
+];
 
 export default function EntregasPage() {
   const { toast } = useToast();
-
+  const [tab, setTab] = useState<Tab>("historial");
   const [entregas, setEntregas] = useState<EntregaB2B[]>([]);
   const [clientes, setClientes] = useState<ClienteB2B[]>([]);
+  const [productos, setProductos] = useState<ProductoCatalogo[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [filtroEstado, setFiltroEstado] = useState<EstadoEntrega | "todos">("todos");
-
-  const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [saving, setSaving] = useState(false);
-
-  const [changingEstadoId, setChangingEstadoId] = useState<number | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       apiFetch<EntregaB2B[]>("/api/entregas-b2b"),
       apiFetch<ClienteB2B[]>("/api/clientes-b2b"),
+      apiFetch<ProductoCatalogo[]>("/api/catalogo"),
     ])
-      .then(([e, c]) => {
-        setEntregas(e);
-        setClientes(c);
-      })
+      .then(([e, c, p]) => { setEntregas(e); setClientes(c); setProductos(p); })
       .catch(() => toast("Error al cargar entregas", "error"))
       .finally(() => setLoading(false));
   }, [toast]);
 
+  useEffect(() => { load(); }, [load]);
+
+  const switchTab = (t: Tab) => {
+    setTab(t);
+    window.history.replaceState(null, "", `/entregas?tab=${t}`);
+  };
+
   useEffect(() => {
-    load();
-  }, [load]);
-
-  const clienteMap = useMemo(
-    () => new Map(clientes.map((c) => [c.id, c.nombre])),
-    [clientes]
-  );
-  const getClienteNombre = (id: number) => clienteMap.get(id) ?? "—";
-
-  const filtradas = entregas.filter(
-    (e) => filtroEstado === "todos" || e.estado === filtroEstado
-  );
-
-  const handleCreate = async (ev: React.FormEvent) => {
-    ev.preventDefault();
-    if (!form.cliente_b2b_id || !form.fecha_entrega) return;
-    setSaving(true);
-    try {
-      await apiFetch<EntregaB2B>("/api/entregas-b2b", {
-        method: "POST",
-        body: JSON.stringify({
-          cliente_b2b_id: Number(form.cliente_b2b_id),
-          fecha_entrega: form.fecha_entrega,
-          notas: form.notas || null,
-        }),
-      });
-      toast("Entrega creada");
-      setForm({ ...EMPTY_FORM });
-      load();
-    } catch (err: unknown) {
-      toast(err instanceof Error ? err.message : "Error al crear entrega", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleChangeEstado = async (id: number, estado: EstadoEntrega) => {
-    setSaving(true);
-    try {
-      await apiFetch(`/api/entregas-b2b/${id}/estado`, {
-        method: "PUT",
-        body: JSON.stringify({ estado }),
-      });
-      toast("Estado actualizado");
-      setChangingEstadoId(null);
-      load();
-    } catch (err: unknown) {
-      toast(err instanceof Error ? err.message : "Error al actualizar estado", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    setSaving(true);
-    try {
-      await apiFetch(`/api/entregas-b2b/${id}`, { method: "DELETE" });
-      toast("Entrega eliminada");
-      setDeleteConfirm(null);
-      load();
-    } catch (err: unknown) {
-      toast(err instanceof Error ? err.message : "Error al eliminar", "error");
-      setDeleteConfirm(null);
-    } finally {
-      setSaving(false);
-    }
-  };
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("tab") as Tab | null;
+    if (t && TABS.some((x) => x.key === t)) setTab(t);
+  }, []);
 
   return (
     <div>
-      {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4">
         <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
           Entregas B2B
         </h1>
-        <div className="flex gap-3 items-center">
-          <Link
-            href="/entregas/volumen"
-            className="text-sm text-brot hover:text-brot-dark transition-colors"
-          >
-            Volumen →
-          </Link>
-          <Link
-            href="/entregas/clientes"
-            className="text-sm text-brot hover:text-brot-dark transition-colors"
-          >
-            Clientes →
-          </Link>
-        </div>
+        <Link href="/entregas/clientes" className="text-sm text-brot hover:text-brot-dark transition-colors">
+          Clientes →
+        </Link>
       </div>
 
-      {/* Status filter */}
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
-        <button
-          onClick={() => setFiltroEstado("todos")}
-          className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap min-h-[36px] transition-colors ${
-            filtroEstado === "todos"
-              ? "bg-brot text-white"
-              : "bg-white border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
-          }`}
-        >
-          Todas
-        </button>
-        {ESTADOS.map((est) => (
+      <div className="flex gap-1 bg-white rounded-xl border border-cream-dark p-1 mb-6">
+        {TABS.map((t) => (
           <button
-            key={est}
-            onClick={() => setFiltroEstado(est === filtroEstado ? "todos" : est)}
-            className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap min-h-[36px] transition-colors ${
-              filtroEstado === est
-                ? "bg-brot text-white"
-                : "bg-white border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+            key={t.key}
+            onClick={() => switchTab(t.key)}
+            className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
+              tab === t.key ? "bg-brot text-white" : "text-warm-gray hover:text-text hover:bg-cream/50"
             }`}
           >
-            {ESTADO_LABEL[est]}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* Entregas list */}
-      <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-6">
-        {loading ? (
-          <div className="p-8 text-center text-warm-gray">Cargando...</div>
-        ) : filtradas.length === 0 ? (
-          <div className="p-8 text-center text-warm-gray">
-            No hay entregas{filtroEstado !== "todos" ? ` con estado "${ESTADO_LABEL[filtroEstado as EstadoEntrega]}"` : ""}.
+      {loading ? (
+        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>
+      ) : (
+        <>
+          {tab === "entregas" && (
+            <TabEntregas entregas={entregas} clientes={clientes} onReload={load} />
+          )}
+          {tab === "historial" && (
+            <TabHistorial entregas={entregas} clientes={clientes} productos={productos} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: Entregas (list + create) ────────────────────────────────────────────
+
+function TabEntregas({
+  entregas,
+  clientes,
+  onReload,
+}: {
+  entregas: EntregaB2B[];
+  clientes: ClienteB2B[];
+  onReload: () => void;
+}) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const clienteMap = useMemo(() => new Map(clientes.map((c) => [c.id, c.nombre])), [clientes]);
+
+  const recibir = async (id: number) => {
+    setSaving(true);
+    try {
+      await apiFetch(`/api/entregas-b2b/${id}/estado`, { method: "PUT", body: JSON.stringify({ estado: "entregado" }) });
+      toast("Entrega marcada como entregada"); onReload();
+    } catch { toast("Error", "error"); } finally { setSaving(false); }
+  };
+
+  const eliminar = async (id: number) => {
+    setSaving(true);
+    try {
+      await apiFetch(`/api/entregas-b2b/${id}`, { method: "DELETE" });
+      toast("Entrega eliminada"); onReload();
+    } catch { toast("Error", "error"); } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {entregas.length === 0 ? (
+        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+          No hay entregas.
+        </div>
+      ) : (
+        entregas.map((e) => (
+          <div key={e.id} className="bg-white rounded-xl border border-cream-dark p-4">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <p className="font-medium text-text">{clienteMap.get(e.cliente_b2b_id) ?? "--"}</p>
+                <p className="text-xs text-warm-gray">{formatDate(e.fecha_entrega)} · {e.lineas.length} items</p>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                e.estado === "entregado" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+              }`}>
+                {e.estado}
+              </span>
+            </div>
+            {e.estado !== "entregado" && (
+              <div className="flex gap-2">
+                <button onClick={() => recibir(e.id)} disabled={saving}
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs min-h-[36px] disabled:opacity-50">
+                  Marcar entregado
+                </button>
+                <button onClick={() => eliminar(e.id)} disabled={saving}
+                  className="px-3 py-1.5 text-red-600 text-xs min-h-[36px]">
+                  Eliminar
+                </button>
+              </div>
+            )}
           </div>
-        ) : (
-          <>
-            {/* Desktop table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
+        ))
+      )}
+    </div>
+  );
+}
+
+// ── Tab: Historial (pivot by client) ─────────────────────────────────────────
+
+function TabHistorial({
+  entregas,
+  clientes,
+  productos,
+}: {
+  entregas: EntregaB2B[];
+  clientes: ClienteB2B[];
+  productos: ProductoCatalogo[];
+}) {
+  const prodMap = useMemo(() => new Map(productos.map((p) => [p.id, p])), [productos]);
+  const clienteMap = useMemo(() => new Map(clientes.map((c) => [c.id, c.nombre])), [clientes]);
+
+  // Group entregas by client
+  const byClient = useMemo(() => {
+    const map = new Map<number, EntregaB2B[]>();
+    for (const e of entregas) {
+      if (!map.has(e.cliente_b2b_id)) map.set(e.cliente_b2b_id, []);
+      map.get(e.cliente_b2b_id)!.push(e);
+    }
+    return Array.from(map.entries())
+      .map(([clienteId, ents]) => ({
+        clienteId,
+        clienteNombre: clienteMap.get(clienteId) ?? `#${clienteId}`,
+        entregas: ents,
+      }))
+      .sort((a, b) => a.clienteNombre.localeCompare(b.clienteNombre));
+  }, [entregas, clienteMap]);
+
+  const shortDate = (d: string) => {
+    const dt = new Date(d + "T00:00:00");
+    return dt.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+  };
+
+  if (entregas.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        No hay entregas registradas.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {byClient.map(({ clienteId, clienteNombre, entregas: clienteEntregas }) => {
+        // Dates for this client, most recent first
+        const dates = Array.from(new Set(clienteEntregas.map((e) => e.fecha_entrega.split("T")[0])))
+          .sort((a, b) => b.localeCompare(a));
+
+        // All products delivered to this client
+        const prodIds = new Set<number>();
+        for (const e of clienteEntregas) {
+          for (const l of e.lineas) prodIds.add(l.producto_id);
+        }
+        const clienteProducts = Array.from(prodIds)
+          .map((id) => prodMap.get(id))
+          .filter(Boolean) as ProductoCatalogo[];
+        clienteProducts.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+        // Pivot: (producto_id, fecha) -> cantidad
+        const pivot = new Map<string, number>();
+        for (const e of clienteEntregas) {
+          const fecha = e.fecha_entrega.split("T")[0];
+          for (const l of e.lineas) {
+            const key = `${l.producto_id}:${fecha}`;
+            pivot.set(key, (pivot.get(key) ?? 0) + l.cantidad);
+          }
+        }
+
+        return (
+          <div key={clienteId} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+            <div className="px-4 py-3 bg-cream/50 border-b border-cream-dark">
+              <p className="font-medium text-brot">{clienteNombre}</p>
+              <p className="text-xs text-warm-gray">{dates.length} entregas · {clienteProducts.length} productos</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="text-xs w-full">
                 <thead>
-                  <tr className="border-b border-cream-dark bg-cream/50">
-                    <th className="text-left px-4 py-3 font-medium text-warm-gray">Cliente</th>
-                    <th className="text-left px-4 py-3 font-medium text-warm-gray">Fecha</th>
-                    <th className="text-left px-4 py-3 font-medium text-warm-gray">Estado</th>
-                    <th className="text-left px-4 py-3 font-medium text-warm-gray">Notas</th>
-                    <th className="px-4 py-3" />
+                  <tr className="border-b border-cream-dark">
+                    <th className="text-left px-3 py-2 font-medium text-warm-gray sticky left-0 bg-white z-10 whitespace-nowrap">
+                      Producto
+                    </th>
+                    {dates.map((d) => (
+                      <th key={d} className="text-center px-2 py-2 font-medium text-warm-gray whitespace-nowrap">
+                        {shortDate(d)}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {filtradas.map((entrega, idx) => {
-                    if (deleteConfirm === entrega.id) {
-                      return (
-                        <tr key={entrega.id} className="border-b border-cream-dark bg-red-50">
-                          <td colSpan={4} className="px-4 py-3 text-sm">
-                            ¿Eliminar entrega de <strong>{getClienteNombre(entrega.cliente_b2b_id)}</strong> del {formatDate(entrega.fecha_entrega)}?
+                  {clienteProducts.map((prod, idx) => (
+                    <tr
+                      key={prod.id}
+                      className={idx < clienteProducts.length - 1 ? "border-b border-cream-dark" : ""}
+                    >
+                      <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-white z-10 whitespace-nowrap">
+                        {prod.receta_id ? (
+                          <Link href={`/escandallos/${prod.receta_id}`} className="hover:text-brot hover:underline">{prod.nombre}</Link>
+                        ) : prod.nombre}
+                      </td>
+                      {dates.map((d) => {
+                        const val = pivot.get(`${prod.id}:${d}`);
+                        return (
+                          <td key={d} className={`text-center px-2 py-1.5 tabular-nums ${
+                            val ? "text-text font-medium" : "text-cream-dark"
+                          }`}>
+                            {val ?? "--"}
                           </td>
-                          <td className="px-4 py-3">
-                            <div className="flex gap-2 justify-end">
-                              <button
-                                onClick={() => handleDelete(entrega.id)}
-                                disabled={saving}
-                                className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 transition-colors disabled:opacity-50"
-                              >
-                                {saving ? "..." : "Eliminar"}
-                              </button>
-                              <button
-                                onClick={() => setDeleteConfirm(null)}
-                                className="px-3 py-1.5 border border-cream-dark rounded-lg text-xs hover:bg-cream-dark transition-colors"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    }
-                    return (
-                      <tr
-                        key={entrega.id}
-                        className={idx < filtradas.length - 1 ? "border-b border-cream-dark" : ""}
-                      >
-                        <td className="px-4 py-3 font-medium text-text">{getClienteNombre(entrega.cliente_b2b_id)}</td>
-                        <td className="px-4 py-3 text-warm-gray">{formatDate(entrega.fecha_entrega)}</td>
-                        <td className="px-4 py-3">
-                          {changingEstadoId === entrega.id ? (
-                            <div className="flex gap-1 flex-wrap">
-                              {ESTADOS.map((est) => (
-                                <button
-                                  key={est}
-                                  onClick={() => handleChangeEstado(entrega.id, est)}
-                                  disabled={saving || est === entrega.estado}
-                                  className={`px-2 py-0.5 rounded-full text-xs transition-colors disabled:opacity-40 ${
-                                    est === entrega.estado
-                                      ? ESTADO_CLASS[est]
-                                      : "bg-cream border border-cream-dark hover:border-brot hover:text-brot"
-                                  }`}
-                                >
-                                  {ESTADO_LABEL[est]}
-                                </button>
-                              ))}
-                              <button
-                                onClick={() => setChangingEstadoId(null)}
-                                className="px-2 py-0.5 rounded-full text-xs text-warm-gray hover:text-text"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => { setChangingEstadoId(entrega.id); setDeleteConfirm(null); }}
-                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_CLASS[entrega.estado]} hover:opacity-80 transition-opacity`}
-                            >
-                              {ESTADO_LABEL[entrega.estado]}
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-warm-gray text-sm">{entrega.notas ?? "—"}</td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => { setDeleteConfirm(entrega.id); setChangingEstadoId(null); }}
-                            className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 transition-colors min-h-[36px]"
-                          >
-                            Eliminar
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        );
+                      })}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-
-            {/* Mobile cards */}
-            <div className="md:hidden divide-y divide-cream-dark">
-              {filtradas.map((entrega) => {
-                if (deleteConfirm === entrega.id) {
-                  return (
-                    <div key={entrega.id} className="px-4 py-3 bg-red-50 flex items-center gap-3 flex-wrap">
-                      <span className="text-sm flex-1">
-                        ¿Eliminar entrega de <strong>{getClienteNombre(entrega.cliente_b2b_id)}</strong>?
-                      </span>
-                      <button
-                        onClick={() => handleDelete(entrega.id)}
-                        disabled={saving}
-                        className="px-3 py-2 bg-red-600 text-white rounded-lg text-sm min-h-[44px] disabled:opacity-50"
-                      >
-                        {saving ? "..." : "Eliminar"}
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm(null)}
-                        className="px-3 py-2 border border-cream-dark rounded-lg text-sm min-h-[44px]"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  );
-                }
-                return (
-                  <div key={entrega.id} className="px-4 py-4">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div>
-                        <p className="font-medium text-text">{getClienteNombre(entrega.cliente_b2b_id)}</p>
-                        <p className="text-xs text-warm-gray mt-0.5">{formatDate(entrega.fecha_entrega)}</p>
-                        {entrega.notas && (
-                          <p className="text-xs text-warm-gray mt-0.5">{entrega.notas}</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => { setDeleteConfirm(entrega.id); setChangingEstadoId(null); }}
-                        className="text-xs text-red-600 min-h-[36px] shrink-0"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                    {changingEstadoId === entrega.id ? (
-                      <div className="flex gap-1 flex-wrap mt-2">
-                        {ESTADOS.map((est) => (
-                          <button
-                            key={est}
-                            onClick={() => handleChangeEstado(entrega.id, est)}
-                            disabled={saving || est === entrega.estado}
-                            className={`px-2 py-0.5 rounded-full text-xs transition-colors disabled:opacity-40 ${
-                              est === entrega.estado
-                                ? ESTADO_CLASS[est]
-                                : "bg-cream border border-cream-dark hover:border-brot hover:text-brot"
-                            }`}
-                          >
-                            {ESTADO_LABEL[est]}
-                          </button>
-                        ))}
-                        <button
-                          onClick={() => setChangingEstadoId(null)}
-                          className="px-2 py-0.5 rounded-full text-xs text-warm-gray"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setChangingEstadoId(entrega.id)}
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_CLASS[entrega.estado]}`}
-                      >
-                        {ESTADO_LABEL[entrega.estado]}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Create form */}
-      <div className="bg-white rounded-xl border border-cream-dark p-5">
-        <h3 className="font-medium mb-4">Nueva entrega</h3>
-        <form onSubmit={handleCreate}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-warm-gray mb-1">
-                Cliente <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={form.cliente_b2b_id}
-                onChange={(e) => setForm({ ...form, cliente_b2b_id: e.target.value })}
-                required
-                className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[42px]"
-              >
-                <option value="">— Seleccionar cliente —</option>
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-warm-gray mb-1">
-                Fecha <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={form.fecha_entrega}
-                onChange={(e) => setForm({ ...form, fecha_entrega: e.target.value })}
-                required
-                className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
-              />
-            </div>
-
-            <div className="sm:col-span-2 lg:col-span-1">
-              <label className="block text-xs font-medium text-warm-gray mb-1">
-                Notas
-              </label>
-              <input
-                type="text"
-                value={form.notas}
-                onChange={(e) => setForm({ ...form, notas: e.target.value })}
-                placeholder="Notas opcionales"
-                className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
-              />
-            </div>
           </div>
-
-          <div className="mt-4">
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 bg-brot text-white rounded-lg text-sm font-medium min-h-[44px] hover:bg-brot-dark transition-colors disabled:opacity-50"
-            >
-              {saving ? "Creando..." : "Crear entrega"}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {!loading && (
-        <p className="text-xs text-warm-gray mt-3 text-right">
-          {filtradas.length} entrega{filtradas.length !== 1 ? "s" : ""}
-        </p>
-      )}
+        );
+      })}
     </div>
   );
 }
