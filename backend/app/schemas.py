@@ -541,6 +541,7 @@ class ProductoCongeladoOut(BaseModel):
     unidad: str
     is_active: bool
     position: int
+    receta_id: Optional[int] = None
 
 
 class StockCongeladoCreate(BaseModel):

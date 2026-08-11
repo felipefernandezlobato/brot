@@ -27,11 +27,27 @@ def _to_out(reg: InventarioRegistro) -> dict:
 
 
 def _latest_subquery(db: Session):
-    """Subquery returning the max(id) per ingrediente_id (latest snapshot)."""
+    """Subquery returning the latest record per ingrediente_id (by date, then id)."""
+    from sqlalchemy import and_
+    latest_fecha = (
+        db.query(
+            InventarioRegistro.ingrediente_id,
+            func.max(InventarioRegistro.fecha_registro).label("max_fecha"),
+        )
+        .group_by(InventarioRegistro.ingrediente_id)
+        .subquery()
+    )
     return (
         db.query(
             InventarioRegistro.ingrediente_id,
             func.max(InventarioRegistro.id).label("max_id"),
+        )
+        .join(
+            latest_fecha,
+            and_(
+                InventarioRegistro.ingrediente_id == latest_fecha.c.ingrediente_id,
+                InventarioRegistro.fecha_registro == latest_fecha.c.max_fecha,
+            ),
         )
         .group_by(InventarioRegistro.ingrediente_id)
         .subquery()

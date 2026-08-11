@@ -47,14 +47,12 @@ def registrar_movimiento(
 
 
 def get_saldo_materia_prima(db: Session, ingrediente_id: int) -> float:
-    subq = (
-        db.query(func.max(InventarioRegistro.id))
+    reg = (
+        db.query(InventarioRegistro)
         .filter(InventarioRegistro.ingrediente_id == ingrediente_id)
-        .scalar()
+        .order_by(InventarioRegistro.fecha_registro.desc(), InventarioRegistro.id.desc())
+        .first()
     )
-    if not subq:
-        return 0.0
-    reg = db.query(InventarioRegistro).filter(InventarioRegistro.id == subq).first()
     return reg.cantidad if reg else 0.0
 
 

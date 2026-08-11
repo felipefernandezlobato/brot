@@ -236,7 +236,7 @@ def get_stock_ingrediente(
     latest = (
         db.query(InventarioRegistro)
         .filter(InventarioRegistro.ingrediente_id == ing_id)
-        .order_by(InventarioRegistro.id.desc())
+        .order_by(InventarioRegistro.fecha_registro.desc(), InventarioRegistro.id.desc())
         .first()
     )
     return {

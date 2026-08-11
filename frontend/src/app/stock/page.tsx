@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -536,7 +537,7 @@ function TabRegistrar({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-medium text-brot text-sm truncate">{ing.nombre}</p>
+                        <Link href={`/ingredientes/${ing.id}`} className="font-medium text-brot text-sm truncate hover:underline" onClick={(e) => e.stopPropagation()}>{ing.nombre}</Link>
                         <p className="text-xs text-warm-gray">
                           {prev ? haceTiempo(prev.fecha_registro) : "--"}
                         </p>
@@ -905,7 +906,7 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                       className={`${idx < allIngsWithData.length - 1 ? "border-b border-cream-dark" : ""} ${idx % 2 === 0 ? "" : "bg-cream/30"}`}
                     >
                       <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-white z-10 whitespace-nowrap" style={idx % 2 !== 0 ? { backgroundColor: "rgb(245 240 232 / 0.3)" } : undefined}>
-                        {ing.nombre}
+                        <Link href={`/ingredientes/${ing.id}`} className="hover:text-brot hover:underline">{ing.nombre}</Link>
                       </td>
                       <td className="px-2 py-1.5 text-warm-gray sticky z-10" style={idx % 2 !== 0 ? { backgroundColor: "rgb(245 240 232 / 0.3)" } : { backgroundColor: "white" }}>
                         {ing.unidad_uso}

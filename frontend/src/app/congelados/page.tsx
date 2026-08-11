@@ -25,6 +25,7 @@ interface ProductoCongelado {
   unidad: string;
   is_active: boolean;
   position: number;
+  receta_id: number | null;
 }
 
 interface StockCongelado {
@@ -651,7 +652,11 @@ function TabNuevaEntrada({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-medium text-brot text-sm truncate">{p.nombre}</p>
+                        {p.receta_id ? (
+                          <Link href={`/escandallos/${p.receta_id}`} className="font-medium text-brot text-sm truncate hover:underline" onClick={(e) => e.stopPropagation()}>{p.nombre}</Link>
+                        ) : (
+                          <p className="font-medium text-brot text-sm truncate">{p.nombre}</p>
+                        )}
                         <p className="text-xs text-warm-gray">
                           {lastDate ? haceTiempoCong(lastDate) : "--"}
                         </p>
@@ -1012,7 +1017,9 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                       className={`${idx < allProductsWithData.length - 1 ? "border-b border-cream-dark" : ""} ${idx % 2 === 0 ? "" : "bg-cream/30"}`}
                     >
                       <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-white z-10 whitespace-nowrap" style={idx % 2 !== 0 ? { backgroundColor: "rgb(245 240 232 / 0.3)" } : undefined}>
-                        {prod.nombre}
+                        {prod.receta_id ? (
+                          <Link href={`/escandallos/${prod.receta_id}`} className="hover:text-brot hover:underline">{prod.nombre}</Link>
+                        ) : prod.nombre}
                       </td>
                       <td className="px-2 py-1.5 text-warm-gray sticky z-10" style={idx % 2 !== 0 ? { backgroundColor: "rgb(245 240 232 / 0.3)" } : { backgroundColor: "white" }}>
                         {prod.unidad}
