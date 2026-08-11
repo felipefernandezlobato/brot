@@ -596,14 +596,16 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
   const [registros, setRegistros] = useState<RegistroStock[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [fechaDesde, setFechaDesde] = useState(() => {
+  type Rango = "4sem" | "12sem" | "todo";
+  const [rango, setRango] = useState<Rango>("4sem");
+
+  const fechaHasta = new Date().toISOString().split("T")[0];
+  const fechaDesde = useMemo(() => {
+    if (rango === "todo") return "2020-01-01";
     const d = new Date();
-    d.setDate(d.getDate() - 90);
+    d.setDate(d.getDate() - (rango === "4sem" ? 28 : 84));
     return d.toISOString().split("T")[0];
-  });
-  const [fechaHasta, setFechaHasta] = useState(
-    () => new Date().toISOString().split("T")[0]
-  );
+  }, [rango]);
 
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -740,28 +742,21 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
 
   return (
     <>
-      {/* Date filters */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-warm-gray mb-1">Desde</label>
-            <input
-              type="date"
-              value={fechaDesde}
-              onChange={(e) => setFechaDesde(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-warm-gray mb-1">Hasta</label>
-            <input
-              type="date"
-              value={fechaHasta}
-              onChange={(e) => setFechaHasta(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
-            />
-          </div>
-        </div>
+      {/* Range selector */}
+      <div className="flex gap-2 mb-4">
+        {([["4sem", "4 semanas"], ["12sem", "12 semanas"], ["todo", "Todo"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setRango(key)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors min-h-[36px] ${
+              rango === key
+                ? "bg-brot text-white"
+                : "bg-white border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {loading ? (
