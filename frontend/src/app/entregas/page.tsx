@@ -96,7 +96,7 @@ export default function EntregasPage() {
       ) : (
         <>
           {tab === "entregas" && (
-            <TabEntregas entregas={entregas} clientes={clientes} onReload={load} />
+            <TabEntregas entregas={entregas} clientes={clientes} productos={productos} onReload={load} />
           )}
           {tab === "historial" && (
             <TabHistorial entregas={entregas} clientes={clientes} productos={productos} />
@@ -112,15 +112,19 @@ export default function EntregasPage() {
 function TabEntregas({
   entregas,
   clientes,
+  productos,
   onReload,
 }: {
   entregas: EntregaB2B[];
   clientes: ClienteB2B[];
+  productos: ProductoCatalogo[];
   onReload: () => void;
 }) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const clienteMap = useMemo(() => new Map(clientes.map((c) => [c.id, c.nombre])), [clientes]);
+  const prodMap = useMemo(() => new Map(productos.map((p) => [p.id, p])), [productos]);
 
   const recibir = async (id: number) => {
     setSaving(true);
@@ -139,39 +143,79 @@ function TabEntregas({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {entregas.length === 0 ? (
         <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           No hay entregas.
         </div>
       ) : (
-        entregas.map((e) => (
-          <div key={e.id} className="bg-white rounded-xl border border-cream-dark p-4">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div>
-                <p className="font-medium text-text">{clienteMap.get(e.cliente_b2b_id) ?? "--"}</p>
-                <p className="text-xs text-warm-gray">{formatDate(e.fecha_entrega)} · {e.lineas.length} items</p>
-              </div>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                e.estado === "entregado" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-              }`}>
-                {e.estado}
-              </span>
+        entregas.map((e) => {
+          const expanded = expandedId === e.id;
+          return (
+            <div key={e.id} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+              <button
+                onClick={() => setExpandedId(expanded ? null : e.id)}
+                className="w-full text-left px-4 py-3 hover:bg-cream/30 transition-colors"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-text">{clienteMap.get(e.cliente_b2b_id) ?? "--"}</p>
+                    <p className="text-xs text-warm-gray">{formatDate(e.fecha_entrega)} · {e.lineas.length} items</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      e.estado === "entregado" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                    }`}>
+                      {e.estado}
+                    </span>
+                    <span className="text-warm-gray text-sm">{expanded ? "−" : "+"}</span>
+                  </div>
+                </div>
+              </button>
+
+              {expanded && (
+                <div className="border-t border-cream-dark">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-cream/30">
+                        <th className="text-left px-4 py-2 font-medium text-warm-gray">Producto</th>
+                        <th className="text-right px-4 py-2 font-medium text-warm-gray">Cantidad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {e.lineas.map((l, idx) => {
+                        const prod = prodMap.get(l.producto_id);
+                        return (
+                          <tr key={l.id} className={idx < e.lineas.length - 1 ? "border-b border-cream-dark" : ""}>
+                            <td className="px-4 py-2 text-text">
+                              {prod?.receta_id ? (
+                                <Link href={`/escandallos/${prod.receta_id}`} className="hover:text-brot hover:underline">{prod.nombre}</Link>
+                              ) : prod?.nombre ?? `#${l.producto_id}`}
+                            </td>
+                            <td className="px-4 py-2 text-right font-medium text-text tabular-nums">{l.cantidad}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {e.estado !== "entregado" && (
+                    <div className="px-4 py-3 border-t border-cream-dark flex gap-2">
+                      <button onClick={() => recibir(e.id)} disabled={saving}
+                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs min-h-[36px] disabled:opacity-50">
+                        Marcar entregado
+                      </button>
+                      <button onClick={() => eliminar(e.id)} disabled={saving}
+                        className="px-3 py-1.5 text-red-600 text-xs min-h-[36px]">
+                        Eliminar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            {e.estado !== "entregado" && (
-              <div className="flex gap-2">
-                <button onClick={() => recibir(e.id)} disabled={saving}
-                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs min-h-[36px] disabled:opacity-50">
-                  Marcar entregado
-                </button>
-                <button onClick={() => eliminar(e.id)} disabled={saving}
-                  className="px-3 py-1.5 text-red-600 text-xs min-h-[36px]">
-                  Eliminar
-                </button>
-              </div>
-            )}
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );
