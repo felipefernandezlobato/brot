@@ -236,6 +236,13 @@ export default function ProduccionHoy() {
         </h1>
         <div className="flex gap-2">
           <Link
+            href="/produccion/producir"
+            className="text-sm bg-brot text-white px-3 py-2 rounded-lg hover:bg-brot-dark transition-colors"
+            style={{ minHeight: 44, display: "flex", alignItems: "center" }}
+          >
+            Producir
+          </Link>
+          <Link
             href="/produccion/calendario"
             className="text-sm text-[#004225] border border-[#004225]/30 px-3 py-2 rounded-lg hover:bg-[#004225]/5 transition-colors"
             style={{ minHeight: 44, display: "flex", alignItems: "center" }}
