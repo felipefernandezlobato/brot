@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import MovimientoStock, Receta, RegistroProduccion, TareaProduccion, User
-from app.services.stock import deducir_por_receta, registrar_produccion_stock
+from pydantic import BaseModel
+
+from app.models import MovimientoStock, ProductoCongelado, Receta, RegistroProduccion, TareaProduccion, User
+from app.services.stock import deducir_por_receta, producir_producto, registrar_produccion_stock
 from app.permissions import require_permission
 from app.schemas import (
     RegistroExtraCreate,
@@ -482,3 +484,41 @@ def delete_tarea(
     db.delete(t)
     db.commit()
     return {"ok": True}
+
+
+# ==============================================================
+# Multi-level production (new system)
+# ==============================================================
+
+
+class ProduccionRequest(BaseModel):
+    producto_id: int
+    cantidad_producida: float
+    bastones_consumidos: Optional[float] = None
+    fecha: Optional[str] = None
+    notas: Optional[str] = None
+
+
+@router.post("/producir", status_code=201)
+def producir(
+    data: ProduccionRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == data.producto_id).first()
+    if not prod:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    ref = f"produccion:{prod.nombre}:{data.fecha or date.today()}"
+    movimientos = producir_producto(
+        db, prod.id, data.cantidad_producida,
+        data.bastones_consumidos, ref, user.id,
+    )
+    db.commit()
+
+    return {
+        "ok": True,
+        "producto": prod.nombre,
+        "cantidad": data.cantidad_producida,
+        "movimientos": len(movimientos),
+    }

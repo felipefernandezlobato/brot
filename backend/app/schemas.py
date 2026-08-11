@@ -542,6 +542,9 @@ class ProductoCongeladoOut(BaseModel):
     is_active: bool
     position: int
     receta_id: Optional[int] = None
+    nivel: str = "terminado"
+    producto_padre_id: Optional[int] = None
+    cantidad_por_padre: Optional[float] = None
 
 
 class StockCongeladoCreate(BaseModel):

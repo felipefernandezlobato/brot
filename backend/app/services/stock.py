@@ -207,6 +207,81 @@ def registrar_produccion_stock(
     )
 
 
+def producir_producto(
+    db: Session,
+    producto_congelado_id: int,
+    cantidad_producida: float,
+    bastones_consumidos: Optional[float],
+    referencia: str,
+    user_id: Optional[int] = None,
+) -> list[MovimientoStock]:
+    """
+    Register production of a product. Handles the full chain:
+
+    1. If product has receta_id with ingredient lines -> auto-deduct from Stock MP
+    2. If product has producto_padre_id:
+       - If padre is a baston -> use bastones_consumidos (manual input)
+       - Otherwise -> auto-calculate from cantidad_producida / cantidad_por_padre
+       Deducts from padre's StockCongelado
+    3. Adds produced quantity to this product's StockCongelado
+    """
+    prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == producto_congelado_id).first()
+    if not prod:
+        return []
+
+    movimientos: list[MovimientoStock] = []
+
+    # 1. Consume ingredients from Stock MP (if product has a recipe with ingredient lines)
+    if prod.receta_id:
+        receta = db.query(Receta).filter(Receta.id == prod.receta_id).first()
+        if receta and receta.porciones_por_lote:
+            lotes = cantidad_producida / receta.porciones_por_lote
+            lineas = db.query(LineaReceta).filter(LineaReceta.receta_id == receta.id).all()
+            for linea in lineas:
+                if linea.ingrediente_id:
+                    consumo = linea.cantidad * lotes
+                    mov = deducir_materia_prima(
+                        db, linea.ingrediente_id, consumo, linea.unidad, referencia, user_id
+                    )
+                    if mov:
+                        movimientos.append(mov)
+
+    # 2. Consume from parent product's StockCongelado
+    if prod.producto_padre_id and prod.cantidad_por_padre:
+        padre = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod.producto_padre_id).first()
+        if padre:
+            is_baston = padre.nivel == "semi" and "baston" in padre.nombre.lower()
+            if is_baston and bastones_consumidos is not None:
+                consumo_padre = bastones_consumidos
+            else:
+                consumo_padre = cantidad_producida / prod.cantidad_por_padre
+
+            mov = deducir_congelado_fifo(
+                db, padre.id, consumo_padre, referencia, user_id
+            )
+            if mov:
+                movimientos.append(mov)
+
+    # 3. Add produced quantity to StockCongelado
+    entry = StockCongelado(
+        producto_congelado_id=prod.id,
+        cantidad=cantidad_producida,
+        fecha_entrada=date.today(),
+        is_active=True,
+        notas=f"Produccion: {referencia}",
+    )
+    db.add(entry)
+
+    saldo = get_saldo_congelado(db, prod.id) + cantidad_producida
+    mov = registrar_movimiento(
+        db, "congelado", prod.id, +cantidad_producida, prod.unidad,
+        "produccion_salida", referencia, saldo, user_id,
+    )
+    movimientos.append(mov)
+
+    return movimientos
+
+
 def deducir_congelado_por_catalogo(
     db: Session,
     producto_catalogo_id: int,

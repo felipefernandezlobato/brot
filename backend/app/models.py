@@ -356,10 +356,14 @@ class ProductoCongelado(Base):
     categoria: Mapped[str] = mapped_column(sa.String(50))
     unidad: Mapped[str] = mapped_column(sa.String(20))
     receta_id: Mapped[Optional[int]] = mapped_column(ForeignKey("recetas.id"), nullable=True)
+    nivel: Mapped[str] = mapped_column(sa.String(20), default="terminado")
+    producto_padre_id: Mapped[Optional[int]] = mapped_column(ForeignKey("productos_congelados.id"), nullable=True)
+    cantidad_por_padre: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
     position: Mapped[int] = mapped_column(sa.Integer, default=0)
 
     receta: Mapped[Optional["Receta"]] = relationship(foreign_keys=[receta_id])
+    padre: Mapped[Optional["ProductoCongelado"]] = relationship(remote_side=[id])
 
 
 class StockCongelado(Base):
