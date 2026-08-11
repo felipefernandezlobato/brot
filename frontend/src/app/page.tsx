@@ -70,7 +70,7 @@ interface ReconciliacionItem {
 }
 
 interface ReconciliacionData {
-  fecha: string;
+  periodo: { desde: string; hasta: string };
   total_ingredientes: number;
   con_discrepancia: number;
   items: ReconciliacionItem[];
@@ -83,13 +83,54 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "reconciliacion", label: "Reconciliacion" },
 ];
 
+type Preset = "hoy" | "semana" | "mes" | "custom";
+
+function getPresetDates(preset: Preset): { desde: string; hasta: string } {
+  const hoy = new Date();
+  const hasta = hoy.toISOString().split("T")[0];
+
+  if (preset === "hoy") {
+    return { desde: hasta, hasta };
+  }
+  if (preset === "semana") {
+    const d = new Date(hoy);
+    const day = d.getDay();
+    d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    return { desde: d.toISOString().split("T")[0], hasta };
+  }
+  if (preset === "mes") {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    return { desde: d.toISOString().split("T")[0], hasta };
+  }
+  return { desde: hasta, hasta };
+}
+
+const PRESETS: { key: Preset; label: string }[] = [
+  { key: "hoy", label: "Hoy" },
+  { key: "semana", label: "Esta semana" },
+  { key: "mes", label: "Este mes" },
+  { key: "custom", label: "Personalizado" },
+];
+
 export default function DashboardPage() {
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("flujo");
+  const [preset, setPreset] = useState<Preset>("semana");
+  const [fechaDesde, setFechaDesde] = useState(() => getPresetDates("semana").desde);
+  const [fechaHasta, setFechaHasta] = useState(() => getPresetDates("semana").hasta);
 
   const switchTab = (t: Tab) => {
     setTab(t);
     window.history.replaceState(null, "", `/?tab=${t}`);
+  };
+
+  const switchPreset = (p: Preset) => {
+    setPreset(p);
+    if (p !== "custom") {
+      const dates = getPresetDates(p);
+      setFechaDesde(dates.desde);
+      setFechaHasta(dates.hasta);
+    }
   };
 
   useEffect(() => {
@@ -103,6 +144,47 @@ export default function DashboardPage() {
       <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot mb-6">
         Panel de Control
       </h1>
+
+      {/* Period selector */}
+      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex gap-1">
+            {PRESETS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => switchPreset(p.key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors min-h-[36px] ${
+                  preset === p.key
+                    ? "bg-brot text-white"
+                    : "bg-cream text-warm-gray hover:text-brot"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {preset === "custom" && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+                className="px-2 py-1.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+              />
+              <span className="text-warm-gray text-xs">a</span>
+              <input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+                className="px-2 py-1.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+              />
+            </div>
+          )}
+          <span className="text-xs text-warm-gray ml-auto">
+            {formatDate(fechaDesde)} — {formatDate(fechaHasta)}
+          </span>
+        </div>
+      </div>
 
       <div className="flex gap-1 bg-white rounded-xl border border-cream-dark p-1 mb-6">
         {TABS.map((t) => (
@@ -120,23 +202,24 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {tab === "flujo" && <TabFlujo />}
-      {tab === "reconciliacion" && <TabReconciliacion />}
+      {tab === "flujo" && <TabFlujo fechaDesde={fechaDesde} fechaHasta={fechaHasta} />}
+      {tab === "reconciliacion" && <TabReconciliacion fechaDesde={fechaDesde} fechaHasta={fechaHasta} />}
     </div>
   );
 }
 
-function TabFlujo() {
+function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: string }) {
   const { toast } = useToast();
   const [data, setData] = useState<FlujoData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch<FlujoData>("/api/dashboard/flujo?fecha_desde=2026-05-01")
+    setLoading(true);
+    apiFetch<FlujoData>(`/api/dashboard/flujo?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`)
       .then(setData)
       .catch(() => toast("Error al cargar dashboard", "error"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [fechaDesde, fechaHasta]);
 
   if (loading) {
     return <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>;
@@ -280,17 +363,18 @@ function TabFlujo() {
   );
 }
 
-function TabReconciliacion() {
+function TabReconciliacion({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: string }) {
   const { toast } = useToast();
   const [data, setData] = useState<ReconciliacionData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch<ReconciliacionData>("/api/dashboard/reconciliacion")
+    setLoading(true);
+    apiFetch<ReconciliacionData>(`/api/dashboard/reconciliacion?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`)
       .then(setData)
       .catch(() => toast("Error al cargar reconciliacion", "error"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [fechaDesde, fechaHasta]);
 
   if (loading) {
     return <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>;

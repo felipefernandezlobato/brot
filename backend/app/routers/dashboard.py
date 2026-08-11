@@ -208,99 +208,78 @@ def flujo_completo(
 
 @router.get("/reconciliacion")
 def reconciliacion_stock(
+    fecha_desde: Optional[date] = Query(None),
+    fecha_hasta: Optional[date] = Query(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Compare physical stock count vs calculated stock for each ingredient.
 
-    Calculated = last physical count
-                 + received (pedidos recibidos since that count)
-                 - consumed (production since that count, based on recipes)
-                 - wasted (mermas since that count)
+    When fecha_desde/fecha_hasta are provided, uses the stock snapshot at fecha_desde
+    as the baseline and compares against the snapshot at fecha_hasta.
+
+    Calculated = stock at fecha_desde
+                 + received (pedidos recibidos in period)
+                 - consumed (production in period)
+                 - wasted (mermas in period)
 
     Discrepancy = physical - calculated. Positive = more than expected, negative = missing.
     """
+    if not fecha_hasta:
+        fecha_hasta = date.today()
+    if not fecha_desde:
+        fecha_desde = fecha_hasta - timedelta(days=7)
+
     ingredientes = db.query(Ingrediente).filter(Ingrediente.activo.is_(True)).all()
     results = []
 
     for ing in ingredientes:
-        # Latest physical count (snapshot)
-        latest = (
-            db.query(InventarioRegistro)
-            .filter(InventarioRegistro.ingrediente_id == ing.id)
-            .order_by(InventarioRegistro.id.desc())
-            .first()
-        )
-        conteo_fisico = latest.cantidad if latest else 0
-        fecha_conteo = str(latest.fecha_registro) if latest else None
-
-        # Previous count (the one before latest) to calculate movements between them
-        prev = (
+        # Stock snapshot at end of period (latest count on or before fecha_hasta)
+        snapshot_fin = (
             db.query(InventarioRegistro)
             .filter(
                 InventarioRegistro.ingrediente_id == ing.id,
-                InventarioRegistro.id < (latest.id if latest else 0),
+                InventarioRegistro.fecha_registro <= fecha_hasta,
             )
             .order_by(InventarioRegistro.id.desc())
             .first()
         )
-        conteo_anterior = prev.cantidad if prev else 0
-        fecha_anterior = prev.fecha_registro if prev else None
+        conteo_fisico = snapshot_fin.cantidad if snapshot_fin else 0
+        fecha_conteo = str(snapshot_fin.fecha_registro) if snapshot_fin else None
 
-        if not fecha_anterior:
-            results.append({
-                "ingrediente_id": ing.id,
-                "ingrediente": ing.nombre,
-                "unidad": ing.unidad_uso,
-                "conteo_fisico": conteo_fisico,
-                "fecha_conteo": fecha_conteo,
-                "calculado": None,
-                "discrepancia": None,
-                "detalle": "Sin conteo anterior para comparar",
-            })
-            continue
-
-        # Received between prev count and latest count
-        recibido = (
-            db.query(func.coalesce(func.sum(MovimientoStock.cantidad), 0))
+        # Stock snapshot at start of period (latest count on or before fecha_desde)
+        snapshot_inicio = (
+            db.query(InventarioRegistro)
             .filter(
-                MovimientoStock.tipo_stock == "materia_prima",
-                MovimientoStock.referencia_producto_id == ing.id,
-                MovimientoStock.tipo_movimiento == "recepcion",
-                MovimientoStock.fecha > fecha_anterior,
-                MovimientoStock.fecha <= (latest.fecha_registro if latest else date.today()),
+                InventarioRegistro.ingrediente_id == ing.id,
+                InventarioRegistro.fecha_registro <= fecha_desde,
             )
-            .scalar()
-        ) or 0
+            .order_by(InventarioRegistro.id.desc())
+            .first()
+        )
+        conteo_inicio = snapshot_inicio.cantidad if snapshot_inicio else 0
+        fecha_inicio = str(snapshot_inicio.fecha_registro) if snapshot_inicio else None
 
-        # Consumed by production
-        consumido = abs(
-            db.query(func.coalesce(func.sum(MovimientoStock.cantidad), 0))
-            .filter(
-                MovimientoStock.tipo_stock == "materia_prima",
-                MovimientoStock.referencia_producto_id == ing.id,
-                MovimientoStock.tipo_movimiento == "produccion_consumo",
-                MovimientoStock.fecha > fecha_anterior,
-                MovimientoStock.fecha <= (latest.fecha_registro if latest else date.today()),
+        def _sum_movimientos(tipo_mov: str) -> float:
+            val = (
+                db.query(func.coalesce(func.sum(MovimientoStock.cantidad), 0))
+                .filter(
+                    MovimientoStock.tipo_stock == "materia_prima",
+                    MovimientoStock.referencia_producto_id == ing.id,
+                    MovimientoStock.tipo_movimiento == tipo_mov,
+                    MovimientoStock.fecha >= fecha_desde,
+                    MovimientoStock.fecha <= fecha_hasta,
+                )
+                .scalar()
             )
-            .scalar()
-        ) or 0
+            return abs(val) if val else 0
 
-        # Wasted
-        mermado = abs(
-            db.query(func.coalesce(func.sum(MovimientoStock.cantidad), 0))
-            .filter(
-                MovimientoStock.tipo_stock == "materia_prima",
-                MovimientoStock.referencia_producto_id == ing.id,
-                MovimientoStock.tipo_movimiento == "merma",
-                MovimientoStock.fecha > fecha_anterior,
-                MovimientoStock.fecha <= (latest.fecha_registro if latest else date.today()),
-            )
-            .scalar()
-        ) or 0
+        recibido = _sum_movimientos("recepcion")
+        consumido = _sum_movimientos("produccion_consumo")
+        mermado = _sum_movimientos("merma")
 
-        calculado = round(conteo_anterior + recibido - consumido - mermado, 2)
+        calculado = round(conteo_inicio + recibido - consumido - mermado, 2)
         discrepancia = round(conteo_fisico - calculado, 2)
 
         results.append({
@@ -309,8 +288,8 @@ def reconciliacion_stock(
             "unidad": ing.unidad_uso,
             "conteo_fisico": conteo_fisico,
             "fecha_conteo": fecha_conteo,
-            "conteo_anterior": conteo_anterior,
-            "fecha_anterior": str(fecha_anterior),
+            "conteo_anterior": conteo_inicio,
+            "fecha_anterior": fecha_inicio,
             "recibido": recibido,
             "consumido": consumido,
             "mermado": mermado,
@@ -321,7 +300,7 @@ def reconciliacion_stock(
 
     results.sort(key=lambda x: abs(x.get("discrepancia") or 0), reverse=True)
     return {
-        "fecha": str(date.today()),
+        "periodo": {"desde": str(fecha_desde), "hasta": str(fecha_hasta)},
         "total_ingredientes": len(results),
         "con_discrepancia": len([r for r in results if r.get("status") == "discrepancia"]),
         "items": results,
