@@ -121,6 +121,7 @@ class IngredienteOut(BaseModel):
     activo: bool
     costo_por_unidad_uso: float
     fecha_actualizacion: date
+    num_recetas: int = 0
 
 class HistorialPrecioOut(BaseModel):
     id: int

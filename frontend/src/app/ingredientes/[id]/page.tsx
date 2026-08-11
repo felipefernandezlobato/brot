@@ -1,12 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
 import { formatARS, formatDate } from "@/lib/format";
 import { Categoria } from "@/lib/types";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  ReferenceLine,
+} from "recharts";
 
 const UNIDADES = ["kg", "g", "litro", "ml", "unidad"];
 
@@ -59,6 +69,16 @@ interface StockInfo {
   fecha_ultimo_conteo: string | null;
 }
 
+interface StockRecord {
+  id: number;
+  ingrediente_id: number;
+  cantidad: number;
+  unidad: string;
+  fecha_registro: string;
+  notas: string | null;
+  ubicacion: string | null;
+}
+
 interface EditForm {
   nombre: string;
   categoria_id: string;
@@ -83,6 +103,7 @@ export default function IngredienteDetailPage() {
   const [recetas, setRecetas] = useState<RecetaUsando[]>([]);
   const [preciosProveedores, setPreciosProveedores] = useState<PrecioProveedor[]>([]);
   const [stockInfo, setStockInfo] = useState<StockInfo | null>(null);
+  const [stockHistory, setStockHistory] = useState<StockRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -101,14 +122,16 @@ export default function IngredienteDetailPage() {
       apiFetch<RecetaUsando[]>(`/api/ingredientes/${id}/recetas`),
       apiFetch<PrecioProveedor[]>(`/api/ingredientes/${id}/precios-proveedores`),
       apiFetch<StockInfo>(`/api/ingredientes/${id}/stock`),
+      apiFetch<StockRecord[]>(`/api/inventario?ingrediente_id=${id}`),
     ])
-      .then(([ing, hist, cats, recs, precios, stock]) => {
+      .then(([ing, hist, cats, recs, precios, stock, stockHist]) => {
         setIngrediente(ing);
         setHistorial(hist);
         setCategorias(cats);
         setRecetas(recs);
         setPreciosProveedores(precios);
         setStockInfo(stock);
+        setStockHistory(stockHist);
         initEditForm(ing);
       })
       .catch(() => toast("Error al cargar el ingrediente", "error"))
@@ -362,6 +385,48 @@ export default function IngredienteDetailPage() {
                     ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Stock evolution chart */}
+          {stockHistory.length > 1 && (
+            <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">
+              <h2 className="font-medium text-text mb-3">Evolucion de stock</h2>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart
+                  data={stockHistory
+                    .slice()
+                    .sort((a, b) => a.fecha_registro.localeCompare(b.fecha_registro))
+                    .map((r) => ({
+                      fecha: r.fecha_registro,
+                      stock: r.cantidad,
+                    }))}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E8DFD3" />
+                  <XAxis
+                    dataKey="fecha"
+                    tick={{ fontSize: 11, fill: "#6B5E52" }}
+                    tickFormatter={(v: string) => {
+                      const d = new Date(v + "T00:00:00");
+                      return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+                    }}
+                  />
+                  <YAxis tick={{ fontSize: 11, fill: "#6B5E52" }} />
+                  <Tooltip
+                    labelFormatter={(v) => formatDate(String(v))}
+                    formatter={(value) => [`${value} ${ingrediente.unidad_uso}`, "Stock"]}
+                    contentStyle={{ borderRadius: "8px", border: "1px solid #E8DFD3", fontSize: "13px" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="stock"
+                    stroke="#004225"
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: "#004225" }}
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           )}
 
