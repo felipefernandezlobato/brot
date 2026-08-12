@@ -521,10 +521,12 @@ def producir(
     if not prod:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-    ref = f"produccion:{prod.nombre}:{data.fecha or date.today()}"
+    from datetime import date as date_type
+    fecha = date_type.fromisoformat(data.fecha) if data.fecha else date.today()
+    ref = f"produccion:{prod.nombre}:{fecha}"
     movimientos = producir_producto(
         db, prod.id, data.cantidad_producida,
-        data.bastones_consumidos, ref, user.id,
+        data.bastones_consumidos, ref, user.id, fecha,
     )
     db.commit()
 

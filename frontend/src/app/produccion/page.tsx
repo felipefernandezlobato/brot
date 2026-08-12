@@ -179,6 +179,7 @@ export default function ProduccionHoy() {
         const body: Record<string, unknown> = {
           producto_id: tarea.producto_congelado_id,
           cantidad_producida: tarea.cantidad_real,
+          fecha,
         };
         const bast = bastonesMap[tarea.tarea_id];
         if (bast && parseFloat(bast) > 0) {

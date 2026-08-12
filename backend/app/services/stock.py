@@ -214,6 +214,7 @@ def producir_producto(
     bastones_consumidos: Optional[float],
     referencia: str,
     user_id: Optional[int] = None,
+    fecha_produccion: Optional[date] = None,
 ) -> list[MovimientoStock]:
     """
     Register production of a product. Handles the full chain:
@@ -263,10 +264,11 @@ def producir_producto(
                 movimientos.append(mov)
 
     # 3. Add produced quantity to StockCongelado
+    fecha = fecha_produccion or date.today()
     entry = StockCongelado(
         producto_congelado_id=prod.id,
         cantidad=cantidad_producida,
-        fecha_entrada=date.today(),
+        fecha_entrada=fecha,
         is_active=True,
         notas=f"Produccion: {referencia}",
     )
