@@ -323,21 +323,47 @@ Stock service: `services/stock.py` → `producir_producto()`.
 Calendar tasks have `producto_congelado_id` and `necesita_bastones` for correct stock handling.
 Stock effects ONLY via `/produccion/producir` (removed old `_aplicar_efectos_stock`).
 
+### Recipe Cost Chain (3 levels)
+Cost flows through: Masa (ingredients) → Baston (sub-recipe = masa) → Terminado (sub-recipe = baston).
+- Bastones have their own recipes (id=29,30,31) with `porciones_por_lote=1` and `cantidad=1u` of masa.
+- Motor calculates: `BastonCost = MasaTotalCost / MasaPorciones * 1`.
+- Terminado recipes reference bastones (NOT masas directly).
+- Pan products share masa proportionally by weight (0.6154 for 1kg, 0.3846 for 0.5kg).
+- Barras (Blanca/Integral) have direct ingredient lines, no sub-recipes.
+
+### Movement Descriptions
+All movement tables show context via `referencia_origen`:
+- `produccion_consumo` → "Consumido para Masa Croissant"
+- `produccion_salida` → "Producido" (no "para X")
+- `entrega_b2b` → "Entrega B2B Creme" (client name from ref format `entrega_b2b:{id}:{name}`)
+Ingredient detail pages have movements via `GET /api/ingredientes/{id}/movimientos`.
+
 ### Unified Product Pages
 - `/escandallos/[id]` — single page with recipe + costs + stock + chart + chain + movements
 - `/congelados/[id]` — redirects to escandallos for terminados, shows full detail for crudos/semis/masas
-- Endpoint: `GET /api/recetas/{id}/completo` returns everything in one call
+- Endpoint: `GET /api/recetas/{id}/completo` returns everything in one call (handles recipes with or without ProductoCongelado)
 
 ### Stock Charts (FIXED)
 Charts built from MovimientoStock (not StockCongelado). Shows cumulative running balance:
 goes UP on production (+produccion_salida), DOWN on consumption (-produccion_consumo).
 Both `/api/recetas/{id}/completo` and `/api/congelados/productos/{id}/detalle` use this.
+Ingredient charts use InventarioRegistro snapshots, deduplicated by date (last entry per day).
 `stock_actual` also calculated from MovimientoStock sum (fallback to StockCongelado for legacy data).
 
 ### End-to-End Traceability
 All stock movements recorded in `MovimientoStock` table with tipo_movimiento and referencia_origen.
+ALL functions in `services/stock.py` accept and propagate `fecha` — movements always get the correct date (production date from calendar, entrega date from delivery), never `date.today()` by default.
 Dashboard at `/api/dashboard/flujo` and `/api/dashboard/reconciliacion`.
 Reconciliation compares physical count vs calculated (anterior + recibido - consumido - merma).
+
+### Entregas B2B
+Nueva Entrega form on `/entregas` page (tab "Nueva") with client dropdown, date picker, product lines.
+`referencia_origen` format: `entrega_b2b:{id}:{client_name}` — includes client name for display in movements.
+Stock deduction uses `fecha_entrega` (not today) so backdated deliveries get correct movement dates.
+
+### Customer Portal
+Exists at `/cliente/login` (email+password auth). Features: registration, product catalog with prices, order placement (Wed/Sat delivery), recurring orders. Token stored in `brot_customer_token`.
+Catalog prices from `ProductoCatalogo.precio` — must be kept in sync with recipe PVPs.
 
 ---
 
