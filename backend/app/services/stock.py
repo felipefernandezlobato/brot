@@ -145,6 +145,7 @@ def deducir_por_receta(
     cantidad_lotes: float,
     referencia: str,
     user_id: Optional[int] = None,
+    fecha: Optional[date] = None,
 ) -> list[MovimientoStock]:
     receta = db.query(Receta).filter(Receta.id == receta_id).first()
     if not receta:
@@ -158,7 +159,7 @@ def deducir_por_receta(
 
         if linea.ingrediente_id:
             mov = deducir_materia_prima(
-                db, linea.ingrediente_id, consumo, linea.unidad, referencia, user_id
+                db, linea.ingrediente_id, consumo, linea.unidad, referencia, user_id, fecha=fecha
             )
             if mov:
                 movimientos.append(mov)
@@ -171,7 +172,7 @@ def deducir_por_receta(
             )
             if prod_cong:
                 mov = deducir_congelado_fifo(
-                    db, prod_cong.id, consumo, referencia, user_id
+                    db, prod_cong.id, consumo, referencia, user_id, fecha=fecha
                 )
                 if mov:
                     movimientos.append(mov)
@@ -185,6 +186,7 @@ def registrar_produccion_stock(
     cantidad_producida: float,
     referencia: str,
     user_id: Optional[int] = None,
+    fecha: Optional[date] = None,
 ) -> Optional[MovimientoStock]:
     prod_cong = (
         db.query(ProductoCongelado)
@@ -194,10 +196,11 @@ def registrar_produccion_stock(
     if not prod_cong:
         return None
 
+    f = fecha or date.today()
     entry = StockCongelado(
         producto_congelado_id=prod_cong.id,
         cantidad=cantidad_producida,
-        fecha_entrada=date.today(),
+        fecha_entrada=f,
         is_active=True,
         notas=f"Produccion: {referencia}",
     )
@@ -206,7 +209,7 @@ def registrar_produccion_stock(
     saldo = get_saldo_congelado(db, prod_cong.id) + cantidad_producida
     return registrar_movimiento(
         db, "congelado", prod_cong.id, +cantidad_producida, "u",
-        "produccion_salida", referencia, saldo, user_id,
+        "produccion_salida", referencia, saldo, user_id, fecha=fecha,
     )
 
 
