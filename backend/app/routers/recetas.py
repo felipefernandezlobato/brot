@@ -105,7 +105,6 @@ def get_receta_completo(
     ).filter(Receta.id == rec_id).first()
     if not receta:
         raise HTTPException(status_code=404, detail="Receta no encontrada")
-
     receta_out = _to_out(receta, db)
 
     # Find linked ProductoCongelado (prefer masa > semi > crudo > terminado)
@@ -121,6 +120,7 @@ def get_receta_completo(
     stock_actual = 0
     stock_history = []
     movimientos = []
+    ancestors = []
     padre = None
     hijos = []
 
