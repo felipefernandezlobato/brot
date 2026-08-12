@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Ingrediente, LineaReceta, Receta, User
+from app.models import Ingrediente, LineaReceta, ProductoCongelado, Receta, User
 from app.permissions import require_permission
 from app.schemas import RecetaCreate, RecetaOut, RecetaUpdate, LineaRecetaOut
 from app.services.costes import costo_linea, costo_receta
@@ -87,6 +87,80 @@ def get_receta(rec_id: int, user: User = Depends(get_current_user), db: Session 
     if not receta:
         raise HTTPException(status_code=404, detail="Receta no encontrada")
     return _to_out(receta, db)
+
+
+@router.get("/{rec_id}/flujo")
+def get_flujo_receta(
+    rec_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Full production chain for a recipe — what it consumes, what products it feeds."""
+    receta = db.query(Receta).filter(Receta.id == rec_id).first()
+    if not receta:
+        raise HTTPException(status_code=404, detail="Receta no encontrada")
+
+    # Ingredients consumed
+    lineas = db.query(LineaReceta).filter(LineaReceta.receta_id == rec_id).all()
+    ingredientes = []
+    sub_recetas = []
+    for l in lineas:
+        if l.ingrediente_id:
+            ing = db.get(Ingrediente, l.ingrediente_id)
+            if ing:
+                ingredientes.append({"id": ing.id, "nombre": ing.nombre, "cantidad": l.cantidad, "unidad": l.unidad})
+        elif l.subreceta_id:
+            sr = db.get(Receta, l.subreceta_id)
+            if sr:
+                sub_recetas.append({"id": sr.id, "nombre": sr.nombre, "cantidad": l.cantidad, "unidad": l.unidad})
+
+    # Products that use this recipe (ProductoCongelado with receta_id = this)
+    productos_directos = db.query(ProductoCongelado).filter(ProductoCongelado.receta_id == rec_id).all()
+
+    # Build full chain downstream: this recipe -> products -> children -> grandchildren
+    def build_chain(prod_id: int, depth: int = 0) -> dict:
+        p = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod_id).first()
+        if not p or depth > 5:
+            return None
+        hijos = db.query(ProductoCongelado).filter(ProductoCongelado.producto_padre_id == prod_id).all()
+        return {
+            "id": p.id,
+            "nombre": p.nombre,
+            "nivel": p.nivel,
+            "cantidad_por_padre": p.cantidad_por_padre,
+            "receta_id": p.receta_id,
+            "hijos": [build_chain(h.id, depth + 1) for h in hijos if build_chain(h.id, depth + 1)],
+        }
+
+    cadena = [build_chain(p.id) for p in productos_directos]
+
+    # Also find recipes that use THIS recipe as sub-recipe (upstream)
+    padres = db.query(LineaReceta).filter(LineaReceta.subreceta_id == rec_id).all()
+    recetas_padre = []
+    for l in padres:
+        r = db.get(Receta, l.receta_id)
+        if r:
+            recetas_padre.append({"id": r.id, "nombre": r.nombre})
+
+    total, porcion = costo_receta(receta, db)
+
+    return {
+        "receta": {
+            "id": receta.id,
+            "nombre": receta.nombre,
+            "es_subreceta": receta.es_subreceta,
+            "porciones_por_lote": receta.porciones_por_lote,
+            "costo_total": round(total, 2),
+            "costo_porcion": round(porcion, 2),
+            "precio_venta": receta.precio_venta,
+        },
+        "consume": {
+            "ingredientes": ingredientes,
+            "sub_recetas": sub_recetas,
+        },
+        "produce": cadena,
+        "usado_en": recetas_padre,
+    }
 
 
 @router.post("", response_model=RecetaOut, status_code=201)

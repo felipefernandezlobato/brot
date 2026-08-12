@@ -436,6 +436,9 @@ export default function RecetaDetailPage() {
               </p>
             </div>
           )}
+
+          {/* Production Flow */}
+          <FlujoProduccion recetaId={receta.id} />
         </div>
       ) : (
         /* EDIT MODE */
@@ -733,6 +736,167 @@ export default function RecetaDetailPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Production Flow Component ────────────────────────────────────────────────
+
+interface FlujoNode {
+  id: number;
+  nombre: string;
+  nivel: string;
+  cantidad_por_padre: number | null;
+  receta_id: number | null;
+  hijos: FlujoNode[];
+}
+
+interface FlujoData {
+  receta: {
+    id: number;
+    nombre: string;
+    es_subreceta: boolean;
+    porciones_por_lote: number;
+    costo_total: number;
+    costo_porcion: number;
+    precio_venta: number | null;
+  };
+  consume: {
+    ingredientes: { id: number; nombre: string; cantidad: number; unidad: string }[];
+    sub_recetas: { id: number; nombre: string; cantidad: number; unidad: string }[];
+  };
+  produce: FlujoNode[];
+  usado_en: { id: number; nombre: string }[];
+}
+
+const NIVEL_COLORS: Record<string, string> = {
+  masa: "bg-purple-100 text-purple-700 border-purple-200",
+  semi: "bg-blue-100 text-blue-700 border-blue-200",
+  crudo: "bg-amber-100 text-amber-700 border-amber-200",
+  terminado: "bg-green-100 text-green-700 border-green-200",
+};
+
+const NIVEL_LABELS: Record<string, string> = {
+  masa: "Masa",
+  semi: "Semi",
+  crudo: "Crudo",
+  terminado: "Final",
+};
+
+function FlujoProduccion({ recetaId }: { recetaId: number }) {
+  const [flujo, setFlujo] = useState<FlujoData | null>(null);
+
+  useEffect(() => {
+    apiFetch<FlujoData>(`/api/recetas/${recetaId}/flujo`)
+      .then(setFlujo)
+      .catch(() => {});
+  }, [recetaId]);
+
+  if (!flujo) return null;
+
+  const hasFlow = flujo.consume.ingredientes.length > 0 || flujo.consume.sub_recetas.length > 0 || flujo.produce.length > 0 || flujo.usado_en.length > 0;
+  if (!hasFlow) return null;
+
+  function renderNode(node: FlujoNode, depth: number = 0): React.ReactNode {
+    const color = NIVEL_COLORS[node.nivel] || "bg-cream text-text border-cream-dark";
+    const label = NIVEL_LABELS[node.nivel] || node.nivel;
+    return (
+      <div key={node.id} className={depth > 0 ? "ml-6" : ""}>
+        <div className="flex items-center gap-2 mb-1">
+          {depth > 0 && <span className="text-warm-gray">→</span>}
+          {node.cantidad_por_padre && depth > 0 && (
+            <span className="text-xs text-warm-gray">{node.cantidad_por_padre}u</span>
+          )}
+          <Link
+            href={`/congelados/${node.id}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium hover:opacity-80 transition-opacity ${color}`}
+          >
+            {node.nombre}
+            <span className="text-xs opacity-70">{label}</span>
+          </Link>
+        </div>
+        {node.hijos.length > 0 && (
+          <div className="border-l-2 border-cream-dark pl-2 ml-3">
+            {node.hijos.map((h) => renderNode(h, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm">
+      <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray mb-4">
+        Flujo de produccion
+      </h2>
+
+      <div className="space-y-4">
+        {/* What this recipe consumes */}
+        {(flujo.consume.ingredientes.length > 0 || flujo.consume.sub_recetas.length > 0) && (
+          <div>
+            <p className="text-xs font-medium text-warm-gray mb-2">Consume</p>
+            <div className="flex flex-wrap gap-2">
+              {flujo.consume.ingredientes.map((ing) => (
+                <Link
+                  key={ing.id}
+                  href={`/ingredientes/${ing.id}`}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs hover:opacity-80"
+                >
+                  {ing.nombre}
+                  <span className="opacity-60">{ing.cantidad}{ing.unidad}</span>
+                </Link>
+              ))}
+              {flujo.consume.sub_recetas.map((sr) => (
+                <Link
+                  key={sr.id}
+                  href={`/escandallos/${sr.id}`}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-xs hover:opacity-80"
+                >
+                  {sr.nombre}
+                  <span className="opacity-60">{sr.cantidad}{sr.unidad}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Arrow */}
+        {flujo.consume.ingredientes.length > 0 && flujo.produce.length > 0 && (
+          <div className="flex items-center gap-2 text-warm-gray">
+            <div className="flex-1 border-t border-dashed border-cream-dark" />
+            <span className="text-xs">produce →</span>
+            <div className="flex-1 border-t border-dashed border-cream-dark" />
+          </div>
+        )}
+
+        {/* What this recipe produces (tree) */}
+        {flujo.produce.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-warm-gray mb-2">Produce</p>
+            <div className="space-y-2">
+              {flujo.produce.map((node) => renderNode(node))}
+            </div>
+          </div>
+        )}
+
+        {/* Recipes that use this as sub-recipe */}
+        {flujo.usado_en.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-warm-gray mb-2">Usado en estas recetas</p>
+            <div className="flex flex-wrap gap-2">
+              {flujo.usado_en.map((r) => (
+                <Link
+                  key={r.id}
+                  href={`/escandallos/${r.id}`}
+                  className="inline-flex items-center px-2.5 py-1 rounded-lg bg-brot/10 border border-brot/20 text-brot text-xs hover:opacity-80"
+                >
+                  {r.nombre}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
