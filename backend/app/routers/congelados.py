@@ -134,22 +134,25 @@ def get_producto_detalle(
         .scalar()
     ) or 0
 
-    # Cumulative stock history by date
-    raw_entries = (
-        db.query(StockCongelado)
-        .filter(StockCongelado.producto_congelado_id == prod_id)
-        .order_by(StockCongelado.fecha_entrada)
+    # Cumulative stock history from MovimientoStock (shows both production AND consumption)
+    movs_for_chart = (
+        db.query(MovimientoStock)
+        .filter(
+            MovimientoStock.tipo_stock == "congelado",
+            MovimientoStock.referencia_producto_id == prod_id,
+        )
+        .order_by(MovimientoStock.fecha, MovimientoStock.id)
         .all()
     )
     by_date: dict[str, float] = {}
-    for s in raw_entries:
-        key = str(s.fecha_entrada)
-        by_date[key] = by_date.get(key, 0) + s.cantidad
+    for m in movs_for_chart:
+        key = str(m.fecha)
+        by_date[key] = by_date.get(key, 0) + m.cantidad
     running = 0.0
     stock_history = []
     for fecha_str in sorted(by_date.keys()):
         running += by_date[fecha_str]
-        stock_history.append({"fecha": fecha_str, "cantidad": running})
+        stock_history.append({"fecha": fecha_str, "cantidad": round(running, 2)})
 
     # Recent movements
     movimientos = [

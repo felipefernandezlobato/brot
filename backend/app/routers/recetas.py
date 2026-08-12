@@ -125,32 +125,36 @@ def get_receta_completo(
     hijos = []
 
     if prod:
-        stock_actual = (
-            db.query(func.coalesce(func.sum(StockCongelado.cantidad), 0))
-            .filter(StockCongelado.producto_congelado_id == prod.id, StockCongelado.is_active.is_(True))
-            .scalar()
-        ) or 0
-
-        # Build cumulative stock history by date
-        raw_entries = (
-            db.query(StockCongelado)
-            .filter(StockCongelado.producto_congelado_id == prod.id)
-            .order_by(StockCongelado.fecha_entrada)
+        # Build cumulative stock history from MovimientoStock (shows both production AND consumption)
+        movs_for_chart = (
+            db.query(MovimientoStock)
+            .filter(
+                MovimientoStock.tipo_stock == "congelado",
+                MovimientoStock.referencia_producto_id == prod.id,
+            )
+            .order_by(MovimientoStock.fecha, MovimientoStock.id)
             .all()
         )
-        # Group by date, sum quantities, then make cumulative
         by_date: dict[str, float] = {}
-        for s in raw_entries:
-            key = str(s.fecha_entrada)
-            by_date[key] = by_date.get(key, 0) + s.cantidad
+        for m in movs_for_chart:
+            key = str(m.fecha)
+            by_date[key] = by_date.get(key, 0) + m.cantidad
         running = 0.0
         stock_history_list = []
         for fecha_str in sorted(by_date.keys()):
             running += by_date[fecha_str]
-            stock_history_list.append({"fecha": fecha_str, "cantidad": running})
-        stock_history = [
-            entry for entry in stock_history_list
-        ]
+            stock_history_list.append({"fecha": fecha_str, "cantidad": round(running, 2)})
+        stock_history = stock_history_list
+
+        # Stock actual: from movements if available, fallback to StockCongelado sum
+        if movs_for_chart:
+            stock_actual = round(sum(m.cantidad for m in movs_for_chart), 2)
+        else:
+            stock_actual = (
+                db.query(func.coalesce(func.sum(StockCongelado.cantidad), 0))
+                .filter(StockCongelado.producto_congelado_id == prod.id, StockCongelado.is_active.is_(True))
+                .scalar()
+            ) or 0
 
         movimientos = [
             {
