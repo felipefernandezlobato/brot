@@ -3,9 +3,18 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
+from sqlalchemy import func
+
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import ProductoCongelado, StockCongelado, User
+from app.models import (
+    LineaReceta,
+    MovimientoStock,
+    ProductoCongelado,
+    Receta,
+    StockCongelado,
+    User,
+)
 from app.permissions import require_permission
 from app.schemas import (
     ProductoCongeladoCreate,
@@ -61,6 +70,93 @@ def create_producto_congelado(
     db.commit()
     db.refresh(prod)
     return prod
+
+
+@router.get("/productos/{prod_id}/detalle")
+def get_producto_detalle(
+    prod_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod_id).first()
+    if not prod:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    # Parent
+    padre = None
+    if prod.producto_padre_id:
+        p = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod.producto_padre_id).first()
+        if p:
+            padre = {"id": p.id, "nombre": p.nombre, "nivel": p.nivel, "unidad": p.unidad}
+
+    # Children
+    hijos = [
+        {"id": h.id, "nombre": h.nombre, "nivel": h.nivel, "cantidad_por_padre": h.cantidad_por_padre}
+        for h in db.query(ProductoCongelado).filter(ProductoCongelado.producto_padre_id == prod_id).all()
+    ]
+
+    # Recipe info
+    receta_info = None
+    if prod.receta_id:
+        r = db.query(Receta).filter(Receta.id == prod.receta_id).first()
+        if r:
+            lineas = db.query(LineaReceta).filter(LineaReceta.receta_id == r.id).all()
+            from app.services.costes import costo_receta
+            total, porcion = costo_receta(r, db)
+            receta_info = {
+                "id": r.id,
+                "nombre": r.nombre,
+                "porciones_por_lote": r.porciones_por_lote,
+                "costo_total": round(total, 2),
+                "costo_porcion": round(porcion, 2),
+                "precio_venta": r.precio_venta,
+                "num_ingredientes": len(lineas),
+            }
+
+    # Stock actual
+    stock_total = (
+        db.query(func.coalesce(func.sum(StockCongelado.cantidad), 0))
+        .filter(StockCongelado.producto_congelado_id == prod_id, StockCongelado.is_active.is_(True))
+        .scalar()
+    ) or 0
+
+    # Stock history
+    stock_history = [
+        {"fecha": s.fecha_entrada, "cantidad": s.cantidad}
+        for s in db.query(StockCongelado)
+        .filter(StockCongelado.producto_congelado_id == prod_id)
+        .order_by(StockCongelado.fecha_entrada)
+        .all()
+    ]
+
+    # Recent movements
+    movimientos = [
+        {
+            "id": m.id, "tipo_movimiento": m.tipo_movimiento,
+            "cantidad": m.cantidad, "fecha": m.fecha,
+            "referencia_origen": m.referencia_origen, "saldo_despues": m.saldo_despues,
+        }
+        for m in db.query(MovimientoStock)
+        .filter(MovimientoStock.tipo_stock == "congelado", MovimientoStock.referencia_producto_id == prod_id)
+        .order_by(MovimientoStock.id.desc())
+        .limit(20)
+        .all()
+    ]
+
+    return {
+        "id": prod.id,
+        "nombre": prod.nombre,
+        "categoria": prod.categoria,
+        "unidad": prod.unidad,
+        "nivel": prod.nivel,
+        "cantidad_por_padre": prod.cantidad_por_padre,
+        "stock_actual": stock_total,
+        "padre": padre,
+        "hijos": hijos,
+        "receta": receta_info,
+        "stock_history": stock_history,
+        "movimientos": movimientos,
+    }
 
 
 @router.put("/productos/{prod_id}", response_model=ProductoCongeladoOut)
