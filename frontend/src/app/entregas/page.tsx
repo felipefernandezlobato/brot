@@ -27,9 +27,17 @@ interface ProductoCatalogo {
   receta_id: number | null;
 }
 
-type Tab = "entregas" | "historial";
+interface LineaForm {
+  producto_id: number | null;
+  cantidad: string;
+}
+
+const DRAFT_KEY = "brot_entrega_b2b_draft";
+
+type Tab = "entregas" | "nueva" | "historial";
 const TABS: { key: Tab; label: string }[] = [
   { key: "entregas", label: "Entregas" },
+  { key: "nueva", label: "Nueva" },
   { key: "historial", label: "Historial" },
 ];
 
@@ -96,7 +104,10 @@ export default function EntregasPage() {
       ) : (
         <>
           {tab === "entregas" && (
-            <TabEntregas entregas={entregas} clientes={clientes} productos={productos} onReload={load} />
+            <TabEntregas entregas={entregas} clientes={clientes} productos={productos} onReload={load} onNueva={() => switchTab("nueva")} />
+          )}
+          {tab === "nueva" && (
+            <TabNueva clientes={clientes} productos={productos} onCreated={() => { switchTab("entregas"); load(); }} />
           )}
           {tab === "historial" && (
             <TabHistorial entregas={entregas} clientes={clientes} productos={productos} />
@@ -114,11 +125,13 @@ function TabEntregas({
   clientes,
   productos,
   onReload,
+  onNueva,
 }: {
   entregas: EntregaB2B[];
   clientes: ClienteB2B[];
   productos: ProductoCatalogo[];
   onReload: () => void;
+  onNueva: () => void;
 }) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
@@ -144,6 +157,12 @@ function TabEntregas({
 
   return (
     <div className="space-y-3">
+      <button
+        onClick={onNueva}
+        className="w-full px-4 py-3 bg-brot text-white rounded-xl text-sm font-medium hover:bg-brot-dark transition-colors min-h-[44px]"
+      >
+        + Nueva Entrega
+      </button>
       {entregas.length === 0 ? (
         <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           No hay entregas.
@@ -217,6 +236,189 @@ function TabEntregas({
           );
         })
       )}
+    </div>
+  );
+}
+
+// ── Tab: Nueva Entrega ──────────────────────────────────────────────────────
+
+function TabNueva({
+  clientes,
+  productos,
+  onCreated,
+}: {
+  clientes: ClienteB2B[];
+  productos: ProductoCatalogo[];
+  onCreated: () => void;
+}) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+
+  const loadDraft = (): { clienteId: string; fecha: string; notas: string; lineas: LineaForm[] } => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return { clienteId: "", fecha: new Date().toISOString().split("T")[0], notas: "", lineas: [{ producto_id: null, cantidad: "" }] };
+  };
+
+  const [clienteId, setClienteId] = useState(() => loadDraft().clienteId);
+  const [fecha, setFecha] = useState(() => loadDraft().fecha);
+  const [notas, setNotas] = useState(() => loadDraft().notas);
+  const [lineas, setLineas] = useState<LineaForm[]>(() => loadDraft().lineas);
+
+  useEffect(() => {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ clienteId, fecha, notas, lineas }));
+  }, [clienteId, fecha, notas, lineas]);
+
+  const clearDraft = () => sessionStorage.removeItem(DRAFT_KEY);
+
+  const updateLinea = (idx: number, field: keyof LineaForm, value: string | number | null) => {
+    setLineas((prev) => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l));
+  };
+
+  const addLinea = () => setLineas((prev) => [...prev, { producto_id: null, cantidad: "" }]);
+
+  const removeLinea = (idx: number) => {
+    setLineas((prev) => prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx));
+  };
+
+  const usedProductIds = new Set(lineas.map((l) => l.producto_id).filter(Boolean));
+
+  const validLineas = lineas.filter((l) => l.producto_id && parseFloat(l.cantidad) > 0);
+  const canSubmit = clienteId && fecha && validLineas.length > 0;
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSaving(true);
+    try {
+      await apiFetch("/api/entregas-b2b", {
+        method: "POST",
+        body: JSON.stringify({
+          cliente_b2b_id: parseInt(clienteId),
+          fecha_entrega: fecha,
+          estado: "pendiente",
+          notas: notas || null,
+          lineas: validLineas.map((l) => ({
+            producto_id: l.producto_id,
+            cantidad: parseFloat(l.cantidad),
+            precio_unitario: 0,
+          })),
+        }),
+      });
+      clearDraft();
+      toast("Entrega creada");
+      onCreated();
+    } catch {
+      toast("Error al crear entrega", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+      <div className="px-4 py-3 bg-cream/50 border-b border-cream-dark">
+        <p className="font-medium text-brot">Nueva Entrega</p>
+      </div>
+
+      <div className="p-4 space-y-4">
+        {/* Cliente + Fecha */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-warm-gray mb-1">Cliente</label>
+            <select
+              value={clienteId}
+              onChange={(e) => setClienteId(e.target.value)}
+              className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+            >
+              <option value="">Seleccionar cliente...</option>
+              {clientes.map((c) => (
+                <option key={c.id} value={c.id}>{c.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-warm-gray mb-1">Fecha entrega</label>
+            <input
+              type="date"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+              className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+            />
+          </div>
+        </div>
+
+        {/* Product lines */}
+        <div>
+          <label className="block text-xs font-medium text-warm-gray mb-2">Productos</label>
+          <div className="space-y-2">
+            {lineas.map((l, idx) => (
+              <div key={idx} className="flex gap-2 items-center">
+                <select
+                  value={l.producto_id ?? ""}
+                  onChange={(e) => updateLinea(idx, "producto_id", e.target.value ? parseInt(e.target.value) : null)}
+                  className="flex-1 px-3 py-2.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                >
+                  <option value="">Producto...</option>
+                  {productos.map((p) => (
+                    <option key={p.id} value={p.id} disabled={usedProductIds.has(p.id) && l.producto_id !== p.id}>
+                      {p.nombre}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Cant."
+                  value={l.cantidad}
+                  onChange={(e) => updateLinea(idx, "cantidad", e.target.value.replace(",", "."))}
+                  className="w-20 px-3 py-2.5 border border-cream-dark rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] tabular-nums"
+                />
+                <button
+                  onClick={() => removeLinea(idx)}
+                  disabled={lineas.length <= 1}
+                  className="p-2 text-warm-gray hover:text-red-500 transition-colors disabled:opacity-30 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                >
+                  x
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={addLinea}
+            className="mt-2 text-sm text-brot hover:text-brot-dark transition-colors"
+          >
+            + Agregar producto
+          </button>
+        </div>
+
+        {/* Notas */}
+        <div>
+          <label className="block text-xs font-medium text-warm-gray mb-1">Notas (opcional)</label>
+          <input
+            type="text"
+            value={notas}
+            onChange={(e) => setNotas(e.target.value)}
+            placeholder="Notas sobre la entrega..."
+            className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+          />
+        </div>
+      </div>
+
+      {/* Submit bar */}
+      <div className="px-4 py-3 border-t border-cream-dark flex items-center justify-between bg-cream/30">
+        <p className="text-xs text-warm-gray">
+          {validLineas.length} producto{validLineas.length !== 1 ? "s" : ""}
+        </p>
+        <button
+          onClick={submit}
+          disabled={!canSubmit || saving}
+          className="px-6 py-2.5 bg-brot text-white rounded-lg text-sm font-medium hover:bg-brot-dark transition-colors disabled:opacity-50 min-h-[44px]"
+        >
+          {saving ? "Guardando..." : "Crear Entrega"}
+        </button>
+      </div>
     </div>
   );
 }
