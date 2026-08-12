@@ -80,6 +80,16 @@ interface StockRecord {
   ubicacion: string | null;
 }
 
+interface Movimiento {
+  id: number;
+  tipo_movimiento: string;
+  cantidad: number;
+  unidad: string;
+  fecha: string;
+  referencia_origen: string | null;
+  saldo_despues: number | null;
+}
+
 interface EditForm {
   nombre: string;
   categoria_id: string;
@@ -105,6 +115,7 @@ export default function IngredienteDetailPage() {
   const [preciosProveedores, setPreciosProveedores] = useState<PrecioProveedor[]>([]);
   const [stockInfo, setStockInfo] = useState<StockInfo | null>(null);
   const [stockHistory, setStockHistory] = useState<StockRecord[]>([]);
+  const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -124,8 +135,9 @@ export default function IngredienteDetailPage() {
       apiFetch<PrecioProveedor[]>(`/api/ingredientes/${id}/precios-proveedores`),
       apiFetch<StockInfo>(`/api/ingredientes/${id}/stock`),
       apiFetch<StockRecord[]>(`/api/inventario?ingrediente_id=${id}`),
+      apiFetch<Movimiento[]>(`/api/ingredientes/${id}/movimientos`),
     ])
-      .then(([ing, hist, cats, recs, precios, stock, stockHist]) => {
+      .then(([ing, hist, cats, recs, precios, stock, stockHist, movs]) => {
         setIngrediente(ing);
         setHistorial(hist);
         setCategorias(cats);
@@ -133,6 +145,7 @@ export default function IngredienteDetailPage() {
         setPreciosProveedores(precios);
         setStockInfo(stock);
         setStockHistory(stockHist);
+        setMovimientos(movs);
         initEditForm(ing);
       })
       .catch(() => toast("Error al cargar el ingrediente", "error"))
@@ -443,6 +456,49 @@ export default function IngredienteDetailPage() {
             </div>
             );
           })()}
+
+          {/* Recent movements */}
+          {movimientos.length > 0 && (
+            <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+              <div className="px-4 py-3 border-b border-cream-dark">
+                <h2 className="font-medium text-text">Movimientos recientes</h2>
+              </div>
+              <div className="divide-y divide-cream-dark max-h-[300px] overflow-y-auto">
+                {movimientos.map((m) => {
+                  const isPositive = m.cantidad > 0;
+                  const label = m.tipo_movimiento === "produccion_consumo" ? "Consumido"
+                    : m.tipo_movimiento === "recepcion" ? "Recibido"
+                    : m.tipo_movimiento === "merma" ? "Merma"
+                    : m.tipo_movimiento === "ajuste" ? "Ajuste"
+                    : m.tipo_movimiento;
+                  let para = "";
+                  if (m.referencia_origen) {
+                    const parts = m.referencia_origen.split(":");
+                    if (parts.length >= 2 && parts[0] === "produccion") {
+                      para = ` para ${parts[1]}`;
+                    } else if (parts[0] === "pedido_recibido") {
+                      para = " (pedido)";
+                    }
+                  }
+                  return (
+                    <div key={m.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${
+                          isPositive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                        }`}>
+                          {isPositive ? "+" : ""}{Math.round(m.cantidad * 100) / 100} {m.unidad}
+                        </span>
+                        <span className="text-sm text-text">
+                          {label}{para}
+                        </span>
+                      </div>
+                      <span className="text-xs text-warm-gray whitespace-nowrap">{formatDate(m.fecha)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Price history */}
           <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">

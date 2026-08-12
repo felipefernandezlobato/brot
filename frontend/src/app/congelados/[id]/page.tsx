@@ -195,17 +195,28 @@ export default function CongeladoPage() {
             <p className="text-sm font-medium text-text">Movimientos recientes</p>
           </div>
           <div className="divide-y divide-cream-dark max-h-[250px] overflow-y-auto">
-            {data.movimientos.map((m) => (
-              <div key={m.id} className="px-4 py-2 flex items-center justify-between gap-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                    m.cantidad > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                  }`}>{m.cantidad > 0 ? "+" : ""}{m.cantidad}</span>
-                  <span className="text-warm-gray">{MOV_LABELS[m.tipo_movimiento] || m.tipo_movimiento}</span>
+            {data.movimientos.map((m) => {
+              let para = "";
+              if (m.referencia_origen) {
+                const parts = m.referencia_origen.split(":");
+                if (parts.length >= 2 && parts[0] === "produccion") {
+                  para = ` para ${parts[1]}`;
+                } else if (parts[0] === "entrega_b2b") {
+                  para = ` #${parts[1]}`;
+                }
+              }
+              return (
+                <div key={m.id} className="px-4 py-2 flex items-center justify-between gap-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${
+                      m.cantidad > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    }`}>{m.cantidad > 0 ? "+" : ""}{m.cantidad}</span>
+                    <span className="text-warm-gray">{MOV_LABELS[m.tipo_movimiento] || m.tipo_movimiento}{para}</span>
+                  </div>
+                  <span className="text-xs text-warm-gray">{formatDate(m.fecha)}</span>
                 </div>
-                <span className="text-xs text-warm-gray">{formatDate(m.fecha)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -10,6 +10,7 @@ from app.models import (
     Ingrediente,
     InventarioRegistro,
     LineaReceta,
+    MovimientoStock,
     PrecioProveedor,
     Proveedor,
     Receta,
@@ -244,3 +245,38 @@ def get_stock_ingrediente(
         "unidad": latest.unidad if latest else "",
         "fecha_ultimo_conteo": str(latest.fecha_registro) if latest else None,
     }
+
+
+@router.get("/{ing_id}/movimientos")
+def get_movimientos_ingrediente(
+    ing_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ing = db.query(Ingrediente).filter(Ingrediente.id == ing_id).first()
+    if not ing:
+        raise HTTPException(status_code=404, detail="Ingrediente no encontrado")
+
+    movs = (
+        db.query(MovimientoStock)
+        .filter(
+            MovimientoStock.tipo_stock == "materia_prima",
+            MovimientoStock.referencia_producto_id == ing_id,
+        )
+        .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
+        .limit(30)
+        .all()
+    )
+
+    return [
+        {
+            "id": m.id,
+            "tipo_movimiento": m.tipo_movimiento,
+            "cantidad": m.cantidad,
+            "unidad": m.unidad,
+            "fecha": m.fecha,
+            "referencia_origen": m.referencia_origen,
+            "saldo_despues": m.saldo_despues,
+        }
+        for m in movs
+    ]
