@@ -442,6 +442,8 @@ GET  /api/export/csv
 2. Render auto-deploys backend on push to `main`
 3. Wait ~2-3 min, then verify: `curl -s -o /dev/null -w "%{http_code}" https://brot-api.onrender.com/api/auth/users` (expect 200)
 
+**IMPORTANT:** Always `git push` immediately after committing any change. Felipe only tests on production — if you don't push, he can't see the change. Never wait for him to ask you to push.
+
 **Environment variables (already configured):**
 - Render: `DATABASE_URL` (Neon URL), `SECRET_KEY`, `CORS_ORIGINS` (https://brot-bruteam.vercel.app)
 - Vercel: `NEXT_PUBLIC_API_URL` = `https://brot-api.onrender.com`
