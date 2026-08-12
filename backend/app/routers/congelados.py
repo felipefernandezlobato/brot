@@ -82,18 +82,32 @@ def get_producto_detalle(
     if not prod:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-    # Parent
-    padre = None
-    if prod.producto_padre_id:
-        p = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod.producto_padre_id).first()
-        if p:
-            padre = {"id": p.id, "nombre": p.nombre, "nivel": p.nivel, "unidad": p.unidad}
+    # Full ancestor chain (walk up)
+    ancestors = []
+    current = prod
+    while current and current.producto_padre_id:
+        p = db.query(ProductoCongelado).filter(ProductoCongelado.id == current.producto_padre_id).first()
+        if not p:
+            break
+        ancestors.insert(0, {
+            "id": p.id, "nombre": p.nombre, "nivel": p.nivel, "unidad": p.unidad,
+            "receta_id": p.receta_id, "cantidad_por_padre": current.cantidad_por_padre,
+        })
+        current = p
+    padre = ancestors[0] if ancestors else None
 
-    # Children
-    hijos = [
-        {"id": h.id, "nombre": h.nombre, "nivel": h.nivel, "cantidad_por_padre": h.cantidad_por_padre}
-        for h in db.query(ProductoCongelado).filter(ProductoCongelado.producto_padre_id == prod_id).all()
-    ]
+    # Full descendant tree (walk down)
+    def build_tree(pid: int, depth: int = 0) -> list:
+        if depth > 5:
+            return []
+        children = db.query(ProductoCongelado).filter(ProductoCongelado.producto_padre_id == pid).all()
+        return [
+            {"id": c.id, "nombre": c.nombre, "nivel": c.nivel,
+             "cantidad_por_padre": c.cantidad_por_padre, "receta_id": c.receta_id,
+             "hijos": build_tree(c.id, depth + 1)}
+            for c in children
+        ]
+    hijos = build_tree(prod_id)
 
     # Recipe info
     receta_info = None
@@ -151,6 +165,7 @@ def get_producto_detalle(
         "nivel": prod.nivel,
         "cantidad_por_padre": prod.cantidad_por_padre,
         "stock_actual": stock_total,
+        "ancestors": ancestors,
         "padre": padre,
         "hijos": hijos,
         "receta": receta_info,

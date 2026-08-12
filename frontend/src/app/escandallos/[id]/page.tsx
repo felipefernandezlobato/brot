@@ -119,23 +119,32 @@ export default function RecetaCompletoPage() {
 
   const { receta, producto, stock_actual, stock_history, movimientos, ancestors, padre, hijos, usado_en, consume_productos } = data;
 
-  function renderHijos(nodes: typeof hijos): React.ReactNode {
-    return nodes.map((h, i) => (
-      <span key={h.id} className="flex items-center gap-1.5">
-        <Link href={h.receta_id ? `/escandallos/${h.receta_id}` : `/congelados/${h.id}`}
-          className={`px-2.5 py-1 rounded-lg border text-xs hover:opacity-80 transition-opacity ${NIVEL_COLORS[h.nivel] || "border-cream-dark"}`}>
-          {h.nombre}
-          {h.cantidad_por_padre && <span className="opacity-60 ml-1">({h.cantidad_por_padre}u)</span>}
+  function TreeNode({ node }: { node: { id: number; nombre: string; nivel: string; cantidad_por_padre?: number | null; receta_id?: number | null; hijos?: any[] } }) {
+    const color = NIVEL_COLORS[node.nivel] || "border-cream-dark";
+    const children = node.hijos || [];
+    return (
+      <div className="flex items-start gap-1.5">
+        <Link href={node.receta_id ? `/escandallos/${node.receta_id}` : `/congelados/${node.id}`}
+          className={`px-2.5 py-1 rounded-lg border text-xs hover:opacity-80 whitespace-nowrap shrink-0 ${color}`}>
+          {node.nombre}
+          {node.cantidad_por_padre && <span className="opacity-60 ml-1">({node.cantidad_por_padre}u)</span>}
         </Link>
-        {h.hijos && h.hijos.length > 0 && (
-          <>
-            <span className="text-warm-gray text-xs">→</span>
-            {renderHijos(h.hijos)}
-          </>
+        {children.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-warm-gray text-xs shrink-0">→</span>
+            {children.length === 1 ? (
+              <TreeNode node={children[0]} />
+            ) : (
+              <div className="flex flex-col gap-1 border-l-2 border-cream-dark pl-2">
+                {children.map((c: any) => (
+                  <TreeNode key={c.id} node={c} />
+                ))}
+              </div>
+            )}
+          </div>
         )}
-        {i < nodes.length - 1 && !h.hijos?.length && <span className="text-warm-gray text-xs">,</span>}
-      </span>
-    ));
+      </div>
+    );
   }
 
   const chartData = stock_history
@@ -201,22 +210,30 @@ export default function RecetaCompletoPage() {
         <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
           <p className="text-xs font-medium text-warm-gray mb-3">Cadena de produccion completa</p>
 
-          {/* Full chain visualization */}
-          <div className="flex items-center gap-1.5 flex-wrap text-sm mb-3">
-            {ancestors.map((a, i) => (
-              <span key={a.id} className="flex items-center gap-1.5">
+          {/* Full chain visualization as tree */}
+          <div className="flex items-start gap-1.5 overflow-x-auto pb-2 mb-3">
+            {ancestors.map((a) => (
+              <div key={a.id} className="flex items-center gap-1.5 shrink-0">
                 <Link href={a.receta_id ? `/escandallos/${a.receta_id}` : `/congelados/${a.id}`}
-                  className={`px-2.5 py-1 rounded-lg border text-xs hover:opacity-80 transition-opacity ${NIVEL_COLORS[a.nivel] || "border-cream-dark"}`}>
+                  className={`px-2.5 py-1 rounded-lg border text-xs hover:opacity-80 whitespace-nowrap ${NIVEL_COLORS[a.nivel] || "border-cream-dark"}`}>
                   {a.nombre}
                 </Link>
                 <span className="text-warm-gray text-xs">→</span>
-              </span>
+              </div>
             ))}
             {producto && (
-              <span className="px-2.5 py-1 rounded-lg bg-brot text-white font-medium text-xs">{producto.nombre}</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="px-2.5 py-1 rounded-lg bg-brot text-white font-medium text-xs whitespace-nowrap">{producto.nombre}</span>
+                {hijos.length > 0 && <span className="text-warm-gray text-xs">→</span>}
+              </div>
             )}
-            {hijos.length > 0 && <span className="text-warm-gray text-xs">→</span>}
-            {renderHijos(hijos)}
+            {hijos.length === 1 ? (
+              <TreeNode node={hijos[0]} />
+            ) : hijos.length > 1 ? (
+              <div className="flex flex-col gap-1 border-l-2 border-cream-dark pl-2">
+                {hijos.map((h) => <TreeNode key={h.id} node={h} />)}
+              </div>
+            ) : null}
           </div>
 
           {/* What it consumes from stock */}

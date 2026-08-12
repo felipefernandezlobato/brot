@@ -26,8 +26,9 @@ interface ProductoDetalle {
   nivel: string;
   cantidad_por_padre: number | null;
   stock_actual: number;
+  ancestors: { id: number; nombre: string; nivel: string; unidad: string; receta_id?: number | null; cantidad_por_padre?: number | null }[];
   padre: { id: number; nombre: string; nivel: string; unidad: string; receta_id?: number | null } | null;
-  hijos: { id: number; nombre: string; nivel: string; cantidad_por_padre: number | null; receta_id?: number | null }[];
+  hijos: { id: number; nombre: string; nivel: string; cantidad_por_padre: number | null; receta_id?: number | null; hijos?: any[] }[];
   receta: { id: number; nombre: string; porciones_por_lote: number; costo_total: number; costo_porcion: number; precio_venta: number | null; num_ingredientes: number } | null;
   stock_history: { fecha: string; cantidad: number }[];
   movimientos: { id: number; tipo_movimiento: string; cantidad: number; fecha: string; referencia_origen: string | null; saldo_despues: number | null }[];
@@ -62,6 +63,34 @@ export default function CongeladoPage() {
       })
       .catch(() => { toast("Error al cargar", "error"); setLoading(false); });
   }, [params?.id, router]);
+
+  function TreeNode({ node }: { node: { id: number; nombre: string; nivel: string; cantidad_por_padre?: number | null; receta_id?: number | null; hijos?: any[] } }) {
+    const color = NIVEL_COLORS[node.nivel] || "border-cream-dark";
+    const children = node.hijos || [];
+    return (
+      <div className="flex items-start gap-1.5">
+        <Link href={node.receta_id ? `/escandallos/${node.receta_id}` : `/congelados/${node.id}`}
+          className={`px-2.5 py-1 rounded-lg border text-xs hover:opacity-80 whitespace-nowrap shrink-0 ${color}`}>
+          {node.nombre}
+          {node.cantidad_por_padre && <span className="opacity-60 ml-1">({node.cantidad_por_padre}u)</span>}
+        </Link>
+        {children.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-warm-gray text-xs shrink-0">→</span>
+            {children.length === 1 ? (
+              <TreeNode node={children[0]} />
+            ) : (
+              <div className="flex flex-col gap-1 border-l-2 border-cream-dark pl-2">
+                {children.map((c: any) => (
+                  <TreeNode key={c.id} node={c} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (loading) return <div className="p-8 text-center text-warm-gray">Cargando...</div>;
   if (!data) return <div className="p-8 text-center text-warm-gray">Producto no encontrado.</div>;
@@ -111,29 +140,30 @@ export default function CongeladoPage() {
         )}
       </div>
 
-      {/* Chain */}
+      {/* Full chain as tree */}
       <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
-        <p className="text-xs font-medium text-warm-gray mb-2">Cadena de produccion</p>
-        <div className="flex items-center gap-1.5 flex-wrap text-sm">
-          {data.padre && (
-            <>
-              <Link href={`/congelados/${data.padre.id}`}
-                className={`px-2.5 py-1 rounded-lg border text-xs hover:opacity-80 ${NIVEL_COLORS[data.padre.nivel] || "border-cream-dark"}`}>
-                {data.padre.nombre}
+        <p className="text-xs font-medium text-warm-gray mb-2">Cadena de produccion completa</p>
+        <div className="flex items-start gap-1.5 overflow-x-auto pb-2">
+          {data.ancestors.map((a) => (
+            <div key={a.id} className="flex items-center gap-1.5 shrink-0">
+              <Link href={a.receta_id ? `/escandallos/${a.receta_id}` : `/congelados/${a.id}`}
+                className={`px-2.5 py-1 rounded-lg border text-xs hover:opacity-80 whitespace-nowrap ${NIVEL_COLORS[a.nivel] || "border-cream-dark"}`}>
+                {a.nombre}
               </Link>
               <span className="text-warm-gray text-xs">→</span>
-            </>
-          )}
-          <span className="px-2.5 py-1 rounded-lg bg-brot text-white font-medium text-xs">{data.nombre}</span>
-          {data.hijos.map((h) => (
-            <span key={h.id} className="flex items-center gap-1.5">
-              <span className="text-warm-gray text-xs">→</span>
-              <Link href={h.receta_id ? `/escandallos/${h.receta_id}` : `/congelados/${h.id}`}
-                className={`px-2.5 py-1 rounded-lg border text-xs hover:opacity-80 ${NIVEL_COLORS[h.nivel] || "border-cream-dark"}`}>
-                {h.nombre} {h.cantidad_por_padre && <span className="opacity-60">({h.cantidad_por_padre}u)</span>}
-              </Link>
-            </span>
+            </div>
           ))}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="px-2.5 py-1 rounded-lg bg-brot text-white font-medium text-xs whitespace-nowrap">{data.nombre}</span>
+            {data.hijos.length > 0 && <span className="text-warm-gray text-xs">→</span>}
+          </div>
+          {data.hijos.length === 1 ? (
+            <TreeNode node={data.hijos[0]} />
+          ) : data.hijos.length > 1 ? (
+            <div className="flex flex-col gap-1 border-l-2 border-cream-dark pl-2">
+              {data.hijos.map((h) => <TreeNode key={h.id} node={h} />)}
+            </div>
+          ) : null}
         </div>
       </div>
 
