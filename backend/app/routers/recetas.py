@@ -146,15 +146,36 @@ def get_receta_completo(
             .all()
         ]
 
-        if prod.producto_padre_id:
-            p = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod.producto_padre_id).first()
-            if p:
-                padre = {"id": p.id, "nombre": p.nombre, "nivel": p.nivel, "receta_id": p.receta_id}
+        # Build full ancestor chain (walk up)
+        ancestors = []
+        current = prod
+        while current and current.producto_padre_id:
+            p = db.query(ProductoCongelado).filter(ProductoCongelado.id == current.producto_padre_id).first()
+            if not p:
+                break
+            ancestors.insert(0, {
+                "id": p.id, "nombre": p.nombre, "nivel": p.nivel,
+                "receta_id": p.receta_id, "cantidad_por_padre": current.cantidad_por_padre,
+            })
+            current = p
+        if ancestors:
+            padre = ancestors[0]
 
-        hijos = [
-            {"id": h.id, "nombre": h.nombre, "nivel": h.nivel, "cantidad_por_padre": h.cantidad_por_padre, "receta_id": h.receta_id}
-            for h in db.query(ProductoCongelado).filter(ProductoCongelado.producto_padre_id == prod.id).all()
-        ]
+        # Build full descendant tree (walk down recursively)
+        def build_tree(pid: int, depth: int = 0) -> list:
+            if depth > 5:
+                return []
+            children = db.query(ProductoCongelado).filter(ProductoCongelado.producto_padre_id == pid).all()
+            return [
+                {
+                    "id": c.id, "nombre": c.nombre, "nivel": c.nivel,
+                    "cantidad_por_padre": c.cantidad_por_padre, "receta_id": c.receta_id,
+                    "hijos": build_tree(c.id, depth + 1),
+                }
+                for c in children
+            ]
+
+        hijos = build_tree(prod.id)
 
         producto = {
             "id": prod.id,
@@ -188,6 +209,7 @@ def get_receta_completo(
         "stock_actual": stock_actual,
         "stock_history": stock_history,
         "movimientos": movimientos,
+        "ancestors": ancestors,
         "padre": padre,
         "hijos": hijos,
         "usado_en": usado_en,

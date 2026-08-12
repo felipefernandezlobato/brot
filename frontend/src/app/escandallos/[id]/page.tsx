@@ -70,8 +70,9 @@ interface CompletoData {
     referencia_origen: string | null;
     saldo_despues: number | null;
   }[];
+  ancestors: { id: number; nombre: string; nivel: string; receta_id: number | null; cantidad_por_padre: number | null }[];
   padre: { id: number; nombre: string; nivel: string; receta_id: number | null } | null;
-  hijos: { id: number; nombre: string; nivel: string; cantidad_por_padre: number | null; receta_id: number | null }[];
+  hijos: { id: number; nombre: string; nivel: string; cantidad_por_padre: number | null; receta_id: number | null; hijos?: any[] }[];
   usado_en: { id: number; nombre: string }[];
   consume_productos: { id: number; nombre: string; nivel: string; cantidad: number | null; receta_id: number | null }[];
 }
@@ -116,7 +117,26 @@ export default function RecetaCompletoPage() {
   if (loading) return <div className="p-8 text-center text-warm-gray">Cargando...</div>;
   if (!data) return <div className="p-8 text-center text-warm-gray">Receta no encontrada.</div>;
 
-  const { receta, producto, stock_actual, stock_history, movimientos, padre, hijos, usado_en, consume_productos } = data;
+  const { receta, producto, stock_actual, stock_history, movimientos, ancestors, padre, hijos, usado_en, consume_productos } = data;
+
+  function renderHijos(nodes: typeof hijos): React.ReactNode {
+    return nodes.map((h, i) => (
+      <span key={h.id} className="flex items-center gap-1.5">
+        <Link href={h.receta_id ? `/escandallos/${h.receta_id}` : `/congelados/${h.id}`}
+          className={`px-2.5 py-1 rounded-lg border text-xs hover:opacity-80 transition-opacity ${NIVEL_COLORS[h.nivel] || "border-cream-dark"}`}>
+          {h.nombre}
+          {h.cantidad_por_padre && <span className="opacity-60 ml-1">({h.cantidad_por_padre}u)</span>}
+        </Link>
+        {h.hijos && h.hijos.length > 0 && (
+          <>
+            <span className="text-warm-gray text-xs">→</span>
+            {renderHijos(h.hijos)}
+          </>
+        )}
+        {i < nodes.length - 1 && !h.hijos?.length && <span className="text-warm-gray text-xs">,</span>}
+      </span>
+    ));
+  }
 
   const chartData = stock_history
     .sort((a, b) => a.fecha.localeCompare(b.fecha))
@@ -177,14 +197,32 @@ export default function RecetaCompletoPage() {
       </div>
 
       {/* Production chain */}
-      {(padre || hijos.length > 0 || consume_productos.length > 0) && (
+      {(ancestors.length > 0 || hijos.length > 0 || consume_productos.length > 0) && (
         <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
-          <p className="text-xs font-medium text-warm-gray mb-3">Cadena de produccion</p>
+          <p className="text-xs font-medium text-warm-gray mb-3">Cadena de produccion completa</p>
 
-          {/* What it consumes */}
+          {/* Full chain visualization */}
+          <div className="flex items-center gap-1.5 flex-wrap text-sm mb-3">
+            {ancestors.map((a, i) => (
+              <span key={a.id} className="flex items-center gap-1.5">
+                <Link href={a.receta_id ? `/escandallos/${a.receta_id}` : `/congelados/${a.id}`}
+                  className={`px-2.5 py-1 rounded-lg border text-xs hover:opacity-80 transition-opacity ${NIVEL_COLORS[a.nivel] || "border-cream-dark"}`}>
+                  {a.nombre}
+                </Link>
+                <span className="text-warm-gray text-xs">→</span>
+              </span>
+            ))}
+            {producto && (
+              <span className="px-2.5 py-1 rounded-lg bg-brot text-white font-medium text-xs">{producto.nombre}</span>
+            )}
+            {hijos.length > 0 && <span className="text-warm-gray text-xs">→</span>}
+            {renderHijos(hijos)}
+          </div>
+
+          {/* What it consumes from stock */}
           {(receta.lineas.filter(l => l.ingrediente_id).length > 0 || consume_productos.length > 0) && (
-            <div className="mb-3">
-              <p className="text-xs text-warm-gray mb-1">Consume</p>
+            <div className="pt-3 border-t border-cream-dark">
+              <p className="text-xs text-warm-gray mb-1">Consume de stock</p>
               <div className="flex flex-wrap gap-1.5">
                 {receta.lineas.filter(l => l.ingrediente_id).map((l) => (
                   <Link key={l.id} href={`/ingredientes/${l.ingrediente_id}`}
@@ -202,36 +240,8 @@ export default function RecetaCompletoPage() {
             </div>
           )}
 
-          {/* Chain: padre -> this -> hijos */}
-          <div className="flex items-center gap-2 flex-wrap text-sm">
-            {padre && (
-              <>
-                <Link href={padre.receta_id ? `/escandallos/${padre.receta_id}` : `/congelados/${padre.id}`}
-                  className={`px-3 py-1.5 rounded-lg border text-sm hover:opacity-80 transition-opacity ${NIVEL_COLORS[padre.nivel] || "border-cream-dark"}`}>
-                  {padre.nombre}
-                </Link>
-                <span className="text-warm-gray">→</span>
-              </>
-            )}
-            {producto && (
-              <span className="px-3 py-1.5 rounded-lg bg-brot text-white font-medium text-sm">{producto.nombre}</span>
-            )}
-            {hijos.length > 0 && (
-              <>
-                <span className="text-warm-gray">→</span>
-                {hijos.map((h) => (
-                  <Link key={h.id} href={h.receta_id ? `/escandallos/${h.receta_id}` : `/congelados/${h.id}`}
-                    className={`px-3 py-1.5 rounded-lg border text-sm hover:opacity-80 transition-opacity ${NIVEL_COLORS[h.nivel] || "border-cream-dark"}`}>
-                    {h.nombre}
-                    {h.cantidad_por_padre && <span className="text-xs opacity-70 ml-1">({h.cantidad_por_padre}u)</span>}
-                  </Link>
-                ))}
-              </>
-            )}
-          </div>
-
           {usado_en.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-cream-dark">
+            <div className="pt-3 border-t border-cream-dark">
               <p className="text-xs text-warm-gray mb-1">Usado en</p>
               <div className="flex flex-wrap gap-1.5">
                 {usado_en.map((r) => (
