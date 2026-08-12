@@ -373,9 +373,17 @@ export default function ProduccionHoy() {
                         <span className="text-xs text-gray-400 font-mono">
                           {tarea.hora?.replace(":00", "h")}
                         </span>
-                        <span className={`text-sm font-medium ${tarea.completada ? "text-gray-500 line-through" : "text-gray-900"}`}>
-                          {tarea.titulo}
-                        </span>
+                        {tarea.producto_congelado_id ? (
+                          <Link href={`/congelados/${tarea.producto_congelado_id}`}
+                            className={`text-sm font-medium hover:text-brot hover:underline ${tarea.completada ? "text-gray-500 line-through" : "text-gray-900"}`}
+                            onClick={(e) => e.stopPropagation()}>
+                            {tarea.titulo}
+                          </Link>
+                        ) : (
+                          <span className={`text-sm font-medium ${tarea.completada ? "text-gray-500 line-through" : "text-gray-900"}`}>
+                            {tarea.titulo}
+                          </span>
+                        )}
                         {isSaving && <span className="text-[10px] text-gray-400">...</span>}
                       </div>
                       {tarea.descripcion && (

@@ -232,7 +232,7 @@ def upsert_registro(
         existing.cantidad_real = data.cantidad_real
         existing.duracion_real = data.duracion_real
         existing.notas = data.notas
-        _aplicar_efectos_stock(db, existing, user.id)
+
         db.commit()
         db.refresh(existing)
         return _registro_to_out(existing)
@@ -248,7 +248,7 @@ def upsert_registro(
     )
     db.add(reg)
     db.flush()
-    _aplicar_efectos_stock(db, reg, user.id)
+
     db.commit()
     db.refresh(reg)
     return _registro_to_out(reg)
@@ -276,7 +276,7 @@ def create_extra(
     )
     db.add(reg)
     db.flush()
-    _aplicar_efectos_stock(db, reg, user.id)
+
     db.commit()
     db.refresh(reg)
     return _registro_to_out(reg)
