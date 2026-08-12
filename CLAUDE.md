@@ -318,8 +318,19 @@ Products have 4 levels tracked in `ProductoCongelado.nivel`:
 - `terminado` → Producto final listo para venta (consume crudos 1:1)
 
 Each product has `producto_padre_id` (FK to parent) and `cantidad_por_padre` (how many from 1 parent).
-Production via `POST /api/produccion/producir` with `producto_id`, `cantidad_producida`, optional `bastones_consumidos`.
+Production via `POST /api/produccion/producir` with `producto_id`, `cantidad_producida`, `fecha`, optional `bastones_consumidos`.
 Stock service: `services/stock.py` → `producir_producto()`.
+Calendar tasks have `producto_congelado_id` and `necesita_bastones` for correct stock handling.
+Stock effects ONLY via `/produccion/producir` (removed old `_aplicar_efectos_stock`).
+
+### Unified Product Pages
+- `/escandallos/[id]` — single page with recipe + costs + stock + chart + chain + movements
+- `/congelados/[id]` — redirects to escandallos for terminados, shows full detail for crudos/semis/masas
+- Endpoint: `GET /api/recetas/{id}/completo` returns everything in one call
+
+### KNOWN ISSUE: Stock Charts
+Charts built from StockCongelado entries (only adds). Need to rebuild using MovimientoStock
+(which tracks both +production and -consumption with correct dates) for accurate evolution display.
 
 ### End-to-End Traceability
 All stock movements recorded in `MovimientoStock` table with tipo_movimiento and referencia_origen.
