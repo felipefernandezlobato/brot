@@ -83,12 +83,14 @@ export default function ProduccionHoy() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<number | null>(null);
   const [showExtraForm, setShowExtraForm] = useState(false);
-  const [extraRecetaId, setExtraRecetaId] = useState("");
+  const [extraProductoId, setExtraProductoId] = useState("");
+  const [extraBastones, setExtraBastones] = useState("");
   const [extraCantidad, setExtraCantidad] = useState("");
   const [extraDuracion, setExtraDuracion] = useState("");
   const [extraNotas, setExtraNotas] = useState("");
   const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
   const [recetas, setRecetas] = useState<RecetaDropdown[]>([]);
+  const [productosCongelados, setProductosCongelados] = useState<{id:number;nombre:string;nivel:string;necesita_bastones?:boolean}[]>([]);
   const [bastonesMap, setBastonesMap] = useState<Record<number, string>>({});
   const { toast } = useToast();
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -98,12 +100,21 @@ export default function ProduccionHoy() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [d, recs] = await Promise.all([
+      const [d, recs, prods] = await Promise.all([
         apiFetch<DiaData>(`/api/produccion/dia?fecha=${fecha}`),
         apiFetch<RecetaDropdown[]>("/api/produccion/productos-dropdown"),
+        apiFetch<{id:number;nombre:string;nivel:string;producto_padre_id:number|null;cantidad_por_padre:number|null}[]>("/api/congelados/productos"),
       ]);
       setData(d);
       setRecetas(recs);
+      const prodMap = new Map(prods.map(p => [p.id, p]));
+      setProductosCongelados(prods.filter((p: any) => p.is_active).map((p: any) => {
+        const padre = p.producto_padre_id ? prodMap.get(p.producto_padre_id) : null;
+        return {
+          ...p,
+          necesita_bastones: padre && (padre as any).nivel === "semi" && (padre as any).nombre.toLowerCase().includes("baston"),
+        };
+      }).sort((a: any, b: any) => a.nombre.localeCompare(b.nombre)));
     } catch {
       toast("Error cargando datos", "error");
     } finally {
@@ -197,24 +208,27 @@ export default function ProduccionHoy() {
   }
 
   async function submitExtra() {
-    if (!extraRecetaId) return;
+    if (!extraProductoId || !extraCantidad) return;
     try {
-      await apiFetch("/api/produccion/registro/extra", {
+      const body: Record<string, unknown> = {
+        producto_id: parseInt(extraProductoId),
+        cantidad_producida: parseFloat(extraCantidad.replace(",", ".")),
+        fecha,
+      };
+      if (extraBastones && parseFloat(extraBastones) > 0) {
+        body.bastones_consumidos = parseFloat(extraBastones);
+      }
+      await apiFetch("/api/produccion/producir", {
         method: "POST",
-        body: JSON.stringify({
-          fecha,
-          receta_id: parseInt(extraRecetaId),
-          cantidad_real: extraCantidad ? parseFloat(extraCantidad.replace(",", ".")) : null,
-          duracion_real: extraDuracion ? parseInt(extraDuracion) : null,
-          notas: extraNotas || null,
-        }),
+        body: JSON.stringify(body),
       });
       setShowExtraForm(false);
-      setExtraRecetaId("");
+      setExtraProductoId("");
+      setExtraBastones("");
       setExtraCantidad("");
       setExtraDuracion("");
       setExtraNotas("");
-      toast("Produccion extra registrada", "success");
+      toast("Produccion extra registrada");
       load();
     } catch {
       toast("Error al registrar", "error");
@@ -557,18 +571,34 @@ export default function ProduccionHoy() {
             </p>
             <div className="space-y-2">
               <select
-                value={extraRecetaId}
-                onChange={(e) => setExtraRecetaId(e.target.value)}
+                value={extraProductoId}
+                onChange={(e) => { setExtraProductoId(e.target.value); setExtraBastones(""); }}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
                 style={{ minHeight: 44 }}
               >
                 <option value="">Seleccionar producto...</option>
-                {recetas.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.nombre}
-                  </option>
-                ))}
+                {["masa","semi","crudo","terminado"].map(nivel => {
+                  const items = productosCongelados.filter(p => p.nivel === nivel);
+                  if (!items.length) return null;
+                  const labels: Record<string,string> = {masa:"Masas",semi:"Semi-elaborados",crudo:"Crudos",terminado:"Terminados"};
+                  return (
+                    <optgroup key={nivel} label={labels[nivel] || nivel}>
+                      {items.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </optgroup>
+                  );
+                })}
               </select>
+              {extraProductoId && productosCongelados.find(p => p.id === parseInt(extraProductoId))?.necesita_bastones && (
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Bastones consumidos"
+                  value={extraBastones}
+                  onChange={(e) => setExtraBastones(e.target.value)}
+                  className="w-full border border-blue-200 bg-blue-50/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400/30 outline-none"
+                  style={{ minHeight: 44 }}
+                />
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <input
                   type="number"
@@ -599,7 +629,7 @@ export default function ProduccionHoy() {
               <div className="flex gap-2">
                 <button
                   onClick={submitExtra}
-                  disabled={!extraRecetaId}
+                  disabled={!extraProductoId || !extraCantidad}
                   className="flex-1 bg-[#004225] text-white py-2.5 rounded-lg text-sm font-medium hover:bg-[#003319] disabled:opacity-50 transition-colors"
                   style={{ touchAction: "manipulation", minHeight: 44 }}
                 >
