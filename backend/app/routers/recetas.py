@@ -110,7 +110,10 @@ def get_receta_completo(
 
     # Find linked ProductoCongelado (prefer masa > semi > crudo > terminado)
     prods_linked = db.query(ProductoCongelado).filter(ProductoCongelado.receta_id == rec_id).all()
-    nivel_order = {"masa": 0, "semi": 1, "crudo": 2, "terminado": 3}
+    if receta.es_subreceta:
+        nivel_order = {"masa": 0, "semi": 1, "crudo": 2, "terminado": 3}
+    else:
+        nivel_order = {"terminado": 0, "crudo": 1, "semi": 2, "masa": 3}
     prods_linked.sort(key=lambda p: nivel_order.get(p.nivel, 9))
     prod = prods_linked[0] if prods_linked else None
 
