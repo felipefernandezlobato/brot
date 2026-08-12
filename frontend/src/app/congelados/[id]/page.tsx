@@ -199,8 +199,10 @@ export default function CongeladoPage() {
               let para = "";
               if (m.referencia_origen) {
                 const parts = m.referencia_origen.split(":");
-                if (parts.length >= 2 && parts[0] === "produccion") {
+                if (parts.length >= 2 && parts[0] === "produccion" && m.tipo_movimiento === "produccion_consumo") {
                   para = ` para ${parts[1]}`;
+                } else if (parts[0] === "entrega_b2b" && parts.length >= 3) {
+                  para = ` ${parts.slice(2).join(":")}`;
                 } else if (parts[0] === "entrega_b2b") {
                   para = ` #${parts[1]}`;
                 }

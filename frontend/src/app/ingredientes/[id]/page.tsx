@@ -406,18 +406,21 @@ export default function IngredienteDetailPage() {
           {stockHistory.length > 1 && (() => {
             const sorted = stockHistory
               .slice()
-              .sort((a, b) => a.fecha_registro.localeCompare(b.fecha_registro));
-            const chartData = sorted.map((r, i) => {
+              .sort((a, b) => a.fecha_registro.localeCompare(b.fecha_registro) || a.id - b.id);
+            const byDate = new Map<string, StockRecord>();
+            for (const r of sorted) byDate.set(r.fecha_registro.split("T")[0], r);
+            const deduped = Array.from(byDate.values());
+            const chartData = deduped.map((r, i) => {
               let consumo = 0;
               if (i > 0) {
-                const prev = sorted[i - 1];
+                const prev = deduped[i - 1];
                 const dias = (new Date(r.fecha_registro).getTime() - new Date(prev.fecha_registro).getTime()) / (1000 * 60 * 60 * 24);
                 if (dias > 0) {
                   const diff = prev.cantidad - r.cantidad;
                   consumo = Math.max(0, Math.round((diff / dias) * 7 * 10) / 10);
                 }
               }
-              return { fecha: r.fecha_registro, stock: r.cantidad, consumo };
+              return { fecha: r.fecha_registro, stock: Math.round(r.cantidad * 100) / 100, consumo };
             });
             return (
             <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">
@@ -474,8 +477,10 @@ export default function IngredienteDetailPage() {
                   let para = "";
                   if (m.referencia_origen) {
                     const parts = m.referencia_origen.split(":");
-                    if (parts.length >= 2 && parts[0] === "produccion") {
+                    if (parts.length >= 2 && parts[0] === "produccion" && m.tipo_movimiento === "produccion_consumo") {
                       para = ` para ${parts[1]}`;
+                    } else if (parts[0] === "pedido_recibido" && parts.length >= 3) {
+                      para = ` ${parts.slice(2).join(":")}`;
                     } else if (parts[0] === "pedido_recibido") {
                       para = " (pedido)";
                     }

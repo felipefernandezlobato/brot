@@ -187,6 +187,8 @@ def create_entrega_b2b(
     user: User = require_permission("entregas_b2b", "create"),
     db: Session = Depends(get_db),
 ):
+    cliente = db.query(ClienteB2B).filter(ClienteB2B.id == data.cliente_b2b_id).first()
+    cliente_nombre = cliente.nombre if cliente else ""
     entrega = EntregaB2B(
         cliente_b2b_id=data.cliente_b2b_id,
         fecha_entrega=data.fecha_entrega,
@@ -195,6 +197,7 @@ def create_entrega_b2b(
     )
     db.add(entrega)
     db.flush()
+    ref = f"entrega_b2b:{entrega.id}:{cliente_nombre}"
     for l in data.lineas:
         linea = LineaEntregaB2B(
             entrega_id=entrega.id,
@@ -206,7 +209,7 @@ def create_entrega_b2b(
         if data.estado == "entregado":
             deducir_congelado_por_catalogo(
                 db, l.producto_id, l.cantidad,
-                f"entrega_b2b:{entrega.id}", "entrega_b2b", user.id,
+                ref, "entrega_b2b", user.id,
                 fecha=data.fecha_entrega,
             )
     db.commit()
@@ -289,10 +292,13 @@ def update_estado_entrega_b2b(
     was_entregado = entrega.estado == "entregado"
     entrega.estado = body.estado
     if body.estado == "entregado" and not was_entregado:
+        cliente = db.query(ClienteB2B).filter(ClienteB2B.id == entrega.cliente_b2b_id).first()
+        cliente_nombre = cliente.nombre if cliente else ""
+        ref = f"entrega_b2b:{entrega.id}:{cliente_nombre}"
         for l in entrega.lineas:
             deducir_congelado_por_catalogo(
                 db, l.producto_id, l.cantidad,
-                f"entrega_b2b:{entrega.id}", "entrega_b2b", user.id,
+                ref, "entrega_b2b", user.id,
                 fecha=entrega.fecha_entrega,
             )
     db.commit()
