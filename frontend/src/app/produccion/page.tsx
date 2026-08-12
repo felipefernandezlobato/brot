@@ -17,6 +17,7 @@ interface TareaDia {
   receta_id: number | null;
   receta_nombre: string | null;
   producto_congelado_id: number | null;
+  necesita_bastones: boolean;
   tipo: string;
   registro_id: number | null;
   completada: boolean;
@@ -397,7 +398,7 @@ export default function ProduccionHoy() {
                   {/* Row 2: inputs */}
                   <div className="flex items-center gap-2 mt-2 ml-10 flex-wrap">
                     {/* Bastones input for tasks that consume bastones */}
-                    {tarea.descripcion && tarea.descripcion.toLowerCase().includes("baston") && (
+                    {tarea.necesita_bastones && (
                       <div className="flex items-center gap-1">
                         <input
                           type="number"

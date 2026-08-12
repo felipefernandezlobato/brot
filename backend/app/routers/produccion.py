@@ -22,6 +22,16 @@ from app.schemas import (
 
 router = APIRouter(prefix="/api/produccion", tags=["produccion"])
 
+
+def _necesita_bastones(db: Session, producto_congelado_id: int | None) -> bool:
+    if not producto_congelado_id:
+        return False
+    prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == producto_congelado_id).first()
+    if not prod or not prod.producto_padre_id:
+        return False
+    padre = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod.producto_padre_id).first()
+    return padre is not None and padre.nivel == "semi" and "baston" in padre.nombre.lower()
+
 DIAS = {1: "Lunes", 2: "Martes", 3: "Miercoles", 4: "Jueves", 5: "Viernes", 6: "Sabado"}
 
 
@@ -154,6 +164,7 @@ def get_dia(
             "receta_id": t.receta_id,
             "receta_nombre": t.receta.nombre if t.receta else None,
             "producto_congelado_id": t.producto_congelado_id,
+            "necesita_bastones": _necesita_bastones(db, t.producto_congelado_id),
             "tipo": t.tipo,
             "registro_id": reg.id if reg else None,
             "completada": reg.completada if reg else False,
