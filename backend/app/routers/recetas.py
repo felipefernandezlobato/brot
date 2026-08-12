@@ -131,12 +131,25 @@ def get_receta_completo(
             .scalar()
         ) or 0
 
-        stock_history = [
-            {"fecha": str(s.fecha_entrada), "cantidad": s.cantidad}
-            for s in db.query(StockCongelado)
+        # Build cumulative stock history by date
+        raw_entries = (
+            db.query(StockCongelado)
             .filter(StockCongelado.producto_congelado_id == prod.id)
             .order_by(StockCongelado.fecha_entrada)
             .all()
+        )
+        # Group by date, sum quantities, then make cumulative
+        by_date: dict[str, float] = {}
+        for s in raw_entries:
+            key = str(s.fecha_entrada)
+            by_date[key] = by_date.get(key, 0) + s.cantidad
+        running = 0.0
+        stock_history_list = []
+        for fecha_str in sorted(by_date.keys()):
+            running += by_date[fecha_str]
+            stock_history_list.append({"fecha": fecha_str, "cantidad": running})
+        stock_history = [
+            entry for entry in stock_history_list
         ]
 
         movimientos = [
