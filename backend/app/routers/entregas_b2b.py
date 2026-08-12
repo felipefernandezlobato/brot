@@ -207,6 +207,7 @@ def create_entrega_b2b(
             deducir_congelado_por_catalogo(
                 db, l.producto_id, l.cantidad,
                 f"entrega_b2b:{entrega.id}", "entrega_b2b", user.id,
+                fecha=data.fecha_entrega,
             )
     db.commit()
     db.refresh(entrega, ["lineas"])
@@ -292,6 +293,7 @@ def update_estado_entrega_b2b(
             deducir_congelado_por_catalogo(
                 db, l.producto_id, l.cantidad,
                 f"entrega_b2b:{entrega.id}", "entrega_b2b", user.id,
+                fecha=entrega.fecha_entrega,
             )
     db.commit()
     db.refresh(entrega)

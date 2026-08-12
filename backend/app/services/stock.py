@@ -298,6 +298,7 @@ def deducir_congelado_por_catalogo(
     referencia: str,
     tipo_movimiento: str = "entrega_b2b",
     user_id: Optional[int] = None,
+    fecha: Optional[date] = None,
 ) -> Optional[MovimientoStock]:
     cat = db.query(ProductoCatalogo).filter(ProductoCatalogo.id == producto_catalogo_id).first()
     if not cat or not cat.receta_id:
@@ -311,4 +312,4 @@ def deducir_congelado_por_catalogo(
     if not prod_cong:
         return None
 
-    return deducir_congelado_fifo(db, prod_cong.id, cantidad, referencia, user_id)
+    return deducir_congelado_fifo(db, prod_cong.id, cantidad, referencia, user_id, fecha=fecha)
