@@ -365,7 +365,20 @@ export default function ProduccionHoy() {
                   </div>
 
                   {/* Row 2: inputs */}
-                  <div className="flex items-center gap-2 mt-2 ml-10">
+                  <div className="flex items-center gap-2 mt-2 ml-10 flex-wrap">
+                    {/* Bastones input for tasks that consume bastones */}
+                    {tarea.descripcion && tarea.descripcion.toLowerCase().includes("baston") && (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          placeholder="1"
+                          className="w-14 border border-blue-200 bg-blue-50/50 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 outline-none"
+                          style={{ minHeight: 36 }}
+                        />
+                        <span className="text-xs text-blue-500">bast.</span>
+                      </div>
+                    )}
                     {tarea.cantidad_planificada !== null && (
                       <div className="flex items-center gap-1">
                         <input
