@@ -16,6 +16,7 @@ interface TareaDia {
   unidad_cantidad: string | null;
   receta_id: number | null;
   receta_nombre: string | null;
+  producto_congelado_id: number | null;
   tipo: string;
   registro_id: number | null;
   completada: boolean;
@@ -87,6 +88,7 @@ export default function ProduccionHoy() {
   const [extraNotas, setExtraNotas] = useState("");
   const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
   const [recetas, setRecetas] = useState<RecetaDropdown[]>([]);
+  const [bastonesMap, setBastonesMap] = useState<Record<number, string>>({});
   const { toast } = useToast();
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -170,6 +172,26 @@ export default function ProduccionHoy() {
   async function toggleComplete(tarea: TareaDia) {
     const newVal = !tarea.completada;
     await saveRegistro(tarea, { completada: newVal });
+
+    if (newVal && tarea.producto_congelado_id && tarea.cantidad_real) {
+      try {
+        const body: Record<string, unknown> = {
+          producto_id: tarea.producto_congelado_id,
+          cantidad_producida: tarea.cantidad_real,
+        };
+        const bast = bastonesMap[tarea.tarea_id];
+        if (bast && parseFloat(bast) > 0) {
+          body.bastones_consumidos = parseFloat(bast);
+        }
+        await apiFetch("/api/produccion/producir", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        toast("Stock actualizado");
+      } catch {
+        toast("Error al actualizar stock", "error");
+      }
+    }
   }
 
   async function submitExtra() {
@@ -373,6 +395,8 @@ export default function ProduccionHoy() {
                           type="number"
                           inputMode="decimal"
                           placeholder="1"
+                          value={bastonesMap[tarea.tarea_id] ?? ""}
+                          onChange={(e) => setBastonesMap((prev) => ({ ...prev, [tarea.tarea_id]: e.target.value }))}
                           className="w-14 border border-blue-200 bg-blue-50/50 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 outline-none"
                           style={{ minHeight: 36 }}
                         />

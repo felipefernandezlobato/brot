@@ -315,6 +315,7 @@ class TareaProduccion(Base):
     cantidad_planificada: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
     unidad_cantidad: Mapped[Optional[str]] = mapped_column(sa.String(20), nullable=True)
     receta_id: Mapped[Optional[int]] = mapped_column(ForeignKey("recetas.id"), nullable=True)
+    producto_congelado_id: Mapped[Optional[int]] = mapped_column(ForeignKey("productos_congelados.id"), nullable=True)
     tipo: Mapped[str] = mapped_column(sa.String(20), default="produccion")
     posicion: Mapped[int] = mapped_column(sa.Integer, default=0)
     is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))

@@ -153,6 +153,7 @@ def get_dia(
             "unidad_cantidad": t.unidad_cantidad,
             "receta_id": t.receta_id,
             "receta_nombre": t.receta.nombre if t.receta else None,
+            "producto_congelado_id": t.producto_congelado_id,
             "tipo": t.tipo,
             "registro_id": reg.id if reg else None,
             "completada": reg.completada if reg else False,
