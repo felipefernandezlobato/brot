@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Ingrediente, LineaReceta, ProductoCongelado, Receta, User
+from sqlalchemy import func
+
+from app.models import Ingrediente, LineaReceta, MovimientoStock, ProductoCongelado, Receta, StockCongelado, User
 from app.permissions import require_permission
 from app.schemas import RecetaCreate, RecetaOut, RecetaUpdate, LineaRecetaOut
 from app.services.costes import costo_linea, costo_receta
@@ -87,6 +89,110 @@ def get_receta(rec_id: int, user: User = Depends(get_current_user), db: Session 
     if not receta:
         raise HTTPException(status_code=404, detail="Receta no encontrada")
     return _to_out(receta, db)
+
+
+@router.get("/{rec_id}/completo")
+def get_receta_completo(
+    rec_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Unified view: recipe + product + stock + flow — everything in one call."""
+    receta = db.query(Receta).options(
+        joinedload(Receta.categoria_rel),
+        joinedload(Receta.lineas).joinedload(LineaReceta.ingrediente_rel),
+        joinedload(Receta.lineas).joinedload(LineaReceta.subreceta_rel),
+    ).filter(Receta.id == rec_id).first()
+    if not receta:
+        raise HTTPException(status_code=404, detail="Receta no encontrada")
+
+    receta_out = _to_out(receta, db)
+
+    # Find linked ProductoCongelado
+    prod = db.query(ProductoCongelado).filter(ProductoCongelado.receta_id == rec_id).first()
+
+    producto = None
+    stock_actual = 0
+    stock_history = []
+    movimientos = []
+    padre = None
+    hijos = []
+
+    if prod:
+        stock_actual = (
+            db.query(func.coalesce(func.sum(StockCongelado.cantidad), 0))
+            .filter(StockCongelado.producto_congelado_id == prod.id, StockCongelado.is_active.is_(True))
+            .scalar()
+        ) or 0
+
+        stock_history = [
+            {"fecha": str(s.fecha_entrada), "cantidad": s.cantidad}
+            for s in db.query(StockCongelado)
+            .filter(StockCongelado.producto_congelado_id == prod.id)
+            .order_by(StockCongelado.fecha_entrada)
+            .all()
+        ]
+
+        movimientos = [
+            {
+                "id": m.id, "tipo_movimiento": m.tipo_movimiento,
+                "cantidad": m.cantidad, "fecha": str(m.fecha),
+                "referencia_origen": m.referencia_origen, "saldo_despues": m.saldo_despues,
+            }
+            for m in db.query(MovimientoStock)
+            .filter(MovimientoStock.tipo_stock == "congelado", MovimientoStock.referencia_producto_id == prod.id)
+            .order_by(MovimientoStock.id.desc())
+            .limit(20)
+            .all()
+        ]
+
+        if prod.producto_padre_id:
+            p = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod.producto_padre_id).first()
+            if p:
+                padre = {"id": p.id, "nombre": p.nombre, "nivel": p.nivel, "receta_id": p.receta_id}
+
+        hijos = [
+            {"id": h.id, "nombre": h.nombre, "nivel": h.nivel, "cantidad_por_padre": h.cantidad_por_padre, "receta_id": h.receta_id}
+            for h in db.query(ProductoCongelado).filter(ProductoCongelado.producto_padre_id == prod.id).all()
+        ]
+
+        producto = {
+            "id": prod.id,
+            "nombre": prod.nombre,
+            "nivel": prod.nivel,
+            "categoria": prod.categoria,
+            "unidad": prod.unidad,
+            "cantidad_por_padre": prod.cantidad_por_padre,
+        }
+
+    # Recipes that use this as sub-recipe
+    usado_en = []
+    for l in db.query(LineaReceta).filter(LineaReceta.subreceta_id == rec_id).all():
+        r = db.get(Receta, l.receta_id)
+        if r:
+            usado_en.append({"id": r.id, "nombre": r.nombre})
+
+    # Real stock consumption (productos padre)
+    consume_productos = []
+    if prod and prod.producto_padre_id:
+        p = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod.producto_padre_id).first()
+        if p:
+            consume_productos.append({
+                "id": p.id, "nombre": p.nombre, "nivel": p.nivel,
+                "cantidad": prod.cantidad_por_padre, "receta_id": p.receta_id,
+            })
+
+    return {
+        "receta": receta_out,
+        "producto": producto,
+        "stock_actual": stock_actual,
+        "stock_history": stock_history,
+        "movimientos": movimientos,
+        "padre": padre,
+        "hijos": hijos,
+        "usado_en": usado_en,
+        "consume_productos": consume_productos,
+    }
 
 
 @router.get("/{rec_id}/flujo")
