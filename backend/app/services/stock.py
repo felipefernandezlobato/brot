@@ -28,6 +28,7 @@ def registrar_movimiento(
     saldo_despues: Optional[float] = None,
     user_id: Optional[int] = None,
     notas: Optional[str] = None,
+    fecha: Optional[date] = None,
 ) -> MovimientoStock:
     mov = MovimientoStock(
         tipo_stock=tipo_stock,
@@ -37,7 +38,7 @@ def registrar_movimiento(
         tipo_movimiento=tipo_movimiento,
         referencia_origen=referencia_origen,
         saldo_despues=saldo_despues,
-        fecha=date.today(),
+        fecha=fecha or date.today(),
         notas=notas,
         registrado_por=user_id,
         registrado_at=datetime.now(timezone.utc),
@@ -75,6 +76,7 @@ def deducir_materia_prima(
     unidad_receta: str,
     referencia: str,
     user_id: Optional[int] = None,
+    fecha: Optional[date] = None,
 ) -> MovimientoStock:
     ing = db.query(Ingrediente).filter(Ingrediente.id == ingrediente_id).first()
     if not ing:
@@ -88,13 +90,13 @@ def deducir_materia_prima(
         ingrediente_id=ingrediente_id,
         cantidad=nuevo_saldo,
         unidad=ing.unidad_uso,
-        fecha_registro=date.today(),
+        fecha_registro=fecha or date.today(),
         notas=f"Consumo automatico: {referencia}",
     ))
 
     return registrar_movimiento(
         db, "materia_prima", ingrediente_id, -consumo, ing.unidad_uso,
-        "produccion_consumo", referencia, nuevo_saldo, user_id,
+        "produccion_consumo", referencia, nuevo_saldo, user_id, fecha=fecha,
     )
 
 
@@ -104,6 +106,7 @@ def deducir_congelado_fifo(
     cantidad: float,
     referencia: str,
     user_id: Optional[int] = None,
+    fecha: Optional[date] = None,
 ) -> MovimientoStock:
     restante = cantidad
     entries = (
@@ -132,7 +135,7 @@ def deducir_congelado_fifo(
     return registrar_movimiento(
         db, "congelado", producto_congelado_id, -cantidad, "u",
         "produccion_consumo" if "produccion" in referencia else "entrega_b2b",
-        referencia, saldo, user_id,
+        referencia, saldo, user_id, fecha=fecha,
     )
 
 
@@ -232,6 +235,8 @@ def producir_producto(
 
     movimientos: list[MovimientoStock] = []
 
+    fecha = fecha_produccion or date.today()
+
     # 1. Consume ingredients from Stock MP (if product has a recipe with ingredient lines)
     if prod.receta_id:
         receta = db.query(Receta).filter(Receta.id == prod.receta_id).first()
@@ -242,7 +247,7 @@ def producir_producto(
                 if linea.ingrediente_id:
                     consumo = linea.cantidad * lotes
                     mov = deducir_materia_prima(
-                        db, linea.ingrediente_id, consumo, linea.unidad, referencia, user_id
+                        db, linea.ingrediente_id, consumo, linea.unidad, referencia, user_id, fecha=fecha
                     )
                     if mov:
                         movimientos.append(mov)
@@ -258,13 +263,12 @@ def producir_producto(
                 consumo_padre = cantidad_producida / prod.cantidad_por_padre
 
             mov = deducir_congelado_fifo(
-                db, padre.id, consumo_padre, referencia, user_id
+                db, padre.id, consumo_padre, referencia, user_id, fecha=fecha
             )
             if mov:
                 movimientos.append(mov)
 
     # 3. Add produced quantity to StockCongelado
-    fecha = fecha_produccion or date.today()
     entry = StockCongelado(
         producto_congelado_id=prod.id,
         cantidad=cantidad_producida,
@@ -277,7 +281,7 @@ def producir_producto(
     saldo = get_saldo_congelado(db, prod.id) + cantidad_producida
     mov = registrar_movimiento(
         db, "congelado", prod.id, +cantidad_producida, prod.unidad,
-        "produccion_salida", referencia, saldo, user_id,
+        "produccion_salida", referencia, saldo, user_id, fecha=fecha,
     )
     movimientos.append(mov)
 
