@@ -100,10 +100,10 @@ def get_flujo_receta(
     if not receta:
         raise HTTPException(status_code=404, detail="Receta no encontrada")
 
-    # Ingredients consumed
+    # Ingredients consumed (only real ingredient lines, not sub-recipes which are for costing)
     lineas = db.query(LineaReceta).filter(LineaReceta.receta_id == rec_id).all()
     ingredientes = []
-    sub_recetas = []
+    sub_recetas_coste = []
     for l in lineas:
         if l.ingrediente_id:
             ing = db.get(Ingrediente, l.ingrediente_id)
@@ -112,7 +112,18 @@ def get_flujo_receta(
         elif l.subreceta_id:
             sr = db.get(Receta, l.subreceta_id)
             if sr:
-                sub_recetas.append({"id": sr.id, "nombre": sr.nombre, "cantidad": l.cantidad, "unidad": l.unidad})
+                sub_recetas_coste.append({"id": sr.id, "nombre": sr.nombre, "cantidad": l.cantidad, "unidad": l.unidad, "solo_coste": True})
+
+    # Real stock consumption: what ProductoCongelado padre this product consumes
+    consume_productos = []
+    for p in db.query(ProductoCongelado).filter(ProductoCongelado.receta_id == rec_id).all():
+        if p.producto_padre_id:
+            padre = db.query(ProductoCongelado).filter(ProductoCongelado.id == p.producto_padre_id).first()
+            if padre:
+                consume_productos.append({
+                    "id": padre.id, "nombre": padre.nombre, "nivel": padre.nivel,
+                    "cantidad": p.cantidad_por_padre,
+                })
 
     # Products that use this recipe (ProductoCongelado with receta_id = this)
     productos_directos = db.query(ProductoCongelado).filter(ProductoCongelado.receta_id == rec_id).all()
@@ -156,7 +167,8 @@ def get_flujo_receta(
         },
         "consume": {
             "ingredientes": ingredientes,
-            "sub_recetas": sub_recetas,
+            "productos": consume_productos,
+            "sub_recetas_coste": sub_recetas_coste,
         },
         "produce": cadena,
         "usado_en": recetas_padre,

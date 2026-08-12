@@ -763,7 +763,8 @@ interface FlujoData {
   };
   consume: {
     ingredientes: { id: number; nombre: string; cantidad: number; unidad: string }[];
-    sub_recetas: { id: number; nombre: string; cantidad: number; unidad: string }[];
+    productos: { id: number; nombre: string; nivel: string; cantidad: number | null }[];
+    sub_recetas_coste: { id: number; nombre: string; cantidad: number; unidad: string; solo_coste: boolean }[];
   };
   produce: FlujoNode[];
   usado_en: { id: number; nombre: string }[];
@@ -794,7 +795,7 @@ function FlujoProduccion({ recetaId }: { recetaId: number }) {
 
   if (!flujo) return null;
 
-  const hasFlow = flujo.consume.ingredientes.length > 0 || flujo.consume.sub_recetas.length > 0 || flujo.produce.length > 0 || flujo.usado_en.length > 0;
+  const hasFlow = flujo.consume.ingredientes.length > 0 || flujo.consume.productos.length > 0 || flujo.produce.length > 0 || flujo.usado_en.length > 0;
   if (!hasFlow) return null;
 
   function renderNode(node: FlujoNode, depth: number = 0): React.ReactNode {
@@ -832,9 +833,9 @@ function FlujoProduccion({ recetaId }: { recetaId: number }) {
 
       <div className="space-y-4">
         {/* What this recipe consumes */}
-        {(flujo.consume.ingredientes.length > 0 || flujo.consume.sub_recetas.length > 0) && (
+        {(flujo.consume.ingredientes.length > 0 || flujo.consume.productos.length > 0) && (
           <div>
-            <p className="text-xs font-medium text-warm-gray mb-2">Consume</p>
+            <p className="text-xs font-medium text-warm-gray mb-2">Consume (mueve stock)</p>
             <div className="flex flex-wrap gap-2">
               {flujo.consume.ingredientes.map((ing) => (
                 <Link
@@ -846,14 +847,14 @@ function FlujoProduccion({ recetaId }: { recetaId: number }) {
                   <span className="opacity-60">{ing.cantidad}{ing.unidad}</span>
                 </Link>
               ))}
-              {flujo.consume.sub_recetas.map((sr) => (
+              {flujo.consume.productos.map((p) => (
                 <Link
-                  key={sr.id}
-                  href={`/escandallos/${sr.id}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-xs hover:opacity-80"
+                  key={p.id}
+                  href={`/congelados/${p.id}`}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs hover:opacity-80 ${NIVEL_COLORS[p.nivel] || "bg-cream text-text border-cream-dark"}`}
                 >
-                  {sr.nombre}
-                  <span className="opacity-60">{sr.cantidad}{sr.unidad}</span>
+                  {p.nombre}
+                  {p.cantidad && <span className="opacity-60">{p.cantidad}u</span>}
                 </Link>
               ))}
             </div>
@@ -861,7 +862,7 @@ function FlujoProduccion({ recetaId }: { recetaId: number }) {
         )}
 
         {/* Arrow */}
-        {flujo.consume.ingredientes.length > 0 && flujo.produce.length > 0 && (
+        {(flujo.consume.ingredientes.length > 0 || flujo.consume.productos.length > 0) && flujo.produce.length > 0 && (
           <div className="flex items-center gap-2 text-warm-gray">
             <div className="flex-1 border-t border-dashed border-cream-dark" />
             <span className="text-xs">produce →</span>
