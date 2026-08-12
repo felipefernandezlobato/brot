@@ -328,9 +328,11 @@ Stock effects ONLY via `/produccion/producir` (removed old `_aplicar_efectos_sto
 - `/congelados/[id]` — redirects to escandallos for terminados, shows full detail for crudos/semis/masas
 - Endpoint: `GET /api/recetas/{id}/completo` returns everything in one call
 
-### KNOWN ISSUE: Stock Charts
-Charts built from StockCongelado entries (only adds). Need to rebuild using MovimientoStock
-(which tracks both +production and -consumption with correct dates) for accurate evolution display.
+### Stock Charts (FIXED)
+Charts built from MovimientoStock (not StockCongelado). Shows cumulative running balance:
+goes UP on production (+produccion_salida), DOWN on consumption (-produccion_consumo).
+Both `/api/recetas/{id}/completo` and `/api/congelados/productos/{id}/detalle` use this.
+`stock_actual` also calculated from MovimientoStock sum (fallback to StockCongelado for legacy data).
 
 ### End-to-End Traceability
 All stock movements recorded in `MovimientoStock` table with tipo_movimiento and referencia_origen.
