@@ -27,6 +27,17 @@ interface ProductoCatalogo {
   receta_id: number | null;
 }
 
+interface EntregaUnificada {
+  id: number;
+  tipo: "b2b" | "portal";
+  cliente_nombre: string;
+  fecha_entrega: string;
+  estado: string;
+  notas: string | null;
+  total: number;
+  lineas: { producto_nombre: string; cantidad: number; precio_unitario: number }[];
+}
+
 interface LineaForm {
   producto_id: number | null;
   cantidad: string;
@@ -34,19 +45,34 @@ interface LineaForm {
 
 const DRAFT_KEY = "brot_entrega_b2b_draft";
 
-type Tab = "entregas" | "nueva" | "historial";
+type Tab = "calendario" | "entregas" | "nueva" | "historial";
 const TABS: { key: Tab; label: string }[] = [
+  { key: "calendario", label: "Calendario" },
   { key: "entregas", label: "Entregas" },
   { key: "nueva", label: "Nueva" },
   { key: "historial", label: "Historial" },
 ];
 
+const MONTH_NAMES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+const DAY_LABELS = ["L", "M", "X", "J", "V", "S", "D"];
+
+const ESTADOS_PEDIDO = ["pendiente", "confirmado", "en_preparacion", "listo", "entregado"];
+const ESTADOS_B2B = ["pendiente", "entregado"];
+
+function toLocalISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function EntregasPage() {
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("historial");
+  const [tab, setTab] = useState<Tab>("calendario");
   const [entregas, setEntregas] = useState<EntregaB2B[]>([]);
   const [clientes, setClientes] = useState<ClienteB2B[]>([]);
   const [productos, setProductos] = useState<ProductoCatalogo[]>([]);
+  const [todasEntregas, setTodasEntregas] = useState<EntregaUnificada[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
@@ -55,8 +81,9 @@ export default function EntregasPage() {
       apiFetch<EntregaB2B[]>("/api/entregas-b2b"),
       apiFetch<ClienteB2B[]>("/api/clientes-b2b"),
       apiFetch<ProductoCatalogo[]>("/api/catalogo"),
+      apiFetch<EntregaUnificada[]>("/api/entregas-b2b/todas"),
     ])
-      .then(([e, c, p]) => { setEntregas(e); setClientes(c); setProductos(p); })
+      .then(([e, c, p, t]) => { setEntregas(e); setClientes(c); setProductos(p); setTodasEntregas(t); })
       .catch(() => toast("Error al cargar entregas", "error"))
       .finally(() => setLoading(false));
   }, [toast]);
@@ -78,19 +105,19 @@ export default function EntregasPage() {
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
         <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
-          Entregas B2B
+          Entregas
         </h1>
         <Link href="/entregas/clientes" className="text-sm text-brot hover:text-brot-dark transition-colors">
           Clientes →
         </Link>
       </div>
 
-      <div className="flex gap-1 bg-white rounded-xl border border-cream-dark p-1 mb-6">
+      <div className="flex gap-1 bg-white rounded-xl border border-cream-dark p-1 mb-6 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => switchTab(t.key)}
-            className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
+            className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] whitespace-nowrap ${
               tab === t.key ? "bg-brot text-white" : "text-warm-gray hover:text-text hover:bg-cream/50"
             }`}
           >
@@ -103,16 +130,290 @@ export default function EntregasPage() {
         <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>
       ) : (
         <>
+          {tab === "calendario" && (
+            <TabCalendario entregas={todasEntregas} onReload={load} />
+          )}
           {tab === "entregas" && (
             <TabEntregas entregas={entregas} clientes={clientes} productos={productos} onReload={load} onNueva={() => switchTab("nueva")} />
           )}
           {tab === "nueva" && (
-            <TabNueva clientes={clientes} productos={productos} onCreated={() => { switchTab("entregas"); load(); }} />
+            <TabNueva clientes={clientes} productos={productos} onCreated={() => { switchTab("calendario"); load(); }} />
           )}
           {tab === "historial" && (
             <TabHistorial entregas={entregas} clientes={clientes} productos={productos} />
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: Calendario ─────────────────────────────────────────────────────────
+
+function TabCalendario({
+  entregas,
+  onReload,
+}: {
+  entregas: EntregaUnificada[];
+  onReload: () => void;
+}) {
+  const { toast } = useToast();
+  const now = new Date();
+  const [calYear, setCalYear] = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(now.getMonth());
+  const [selectedDate, setSelectedDate] = useState(toLocalISO(now));
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const entregasByDate = useMemo(() => {
+    const map = new Map<string, EntregaUnificada[]>();
+    for (const e of entregas) {
+      const d = e.fecha_entrega;
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(e);
+    }
+    return map;
+  }, [entregas]);
+
+  const calendarWeeks = useMemo(() => {
+    const first = new Date(calYear, calMonth, 1);
+    let startDay = first.getDay();
+    if (startDay === 0) startDay = 7;
+    const start = new Date(first);
+    start.setDate(start.getDate() - (startDay - 1));
+
+    const weeks: Date[][] = [];
+    const cursor = new Date(start);
+    for (let w = 0; w < 6; w++) {
+      const week: Date[] = [];
+      for (let d = 0; d < 7; d++) {
+        week.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      weeks.push(week);
+      if (cursor.getMonth() !== calMonth && cursor.getDate() > 7) break;
+    }
+    return weeks;
+  }, [calYear, calMonth]);
+
+  const prevMonth = () => {
+    if (calMonth === 0) { setCalYear((y) => y - 1); setCalMonth(11); }
+    else setCalMonth((m) => m - 1);
+  };
+  const nextMonth = () => {
+    if (calMonth === 11) { setCalYear((y) => y + 1); setCalMonth(0); }
+    else setCalMonth((m) => m + 1);
+  };
+  const goToday = () => {
+    const t = new Date();
+    setCalYear(t.getFullYear());
+    setCalMonth(t.getMonth());
+    setSelectedDate(toLocalISO(t));
+  };
+
+  const selectedEntregas = useMemo(() => {
+    return (entregasByDate.get(selectedDate) ?? []).sort((a, b) => a.cliente_nombre.localeCompare(b.cliente_nombre));
+  }, [entregasByDate, selectedDate]);
+
+  const pendientes = useMemo(() => {
+    return entregas
+      .filter((e) => e.estado !== "entregado")
+      .sort((a, b) => a.fecha_entrega.localeCompare(b.fecha_entrega));
+  }, [entregas]);
+
+  const updateEstado = async (e: EntregaUnificada, nuevoEstado: string) => {
+    setSaving(true);
+    try {
+      const url = e.tipo === "b2b"
+        ? `/api/entregas-b2b/${e.id}/estado`
+        : `/api/entregas-b2b/pedido-portal/${e.id}/estado`;
+      await apiFetch(url, { method: "PUT", body: JSON.stringify({ estado: nuevoEstado }) });
+      toast("Estado actualizado");
+      onReload();
+    } catch {
+      toast("Error al actualizar estado", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const entregaKey = (e: EntregaUnificada) => `${e.tipo}-${e.id}`;
+
+  const todayISO = toLocalISO(new Date());
+
+  return (
+    <div className="space-y-6">
+      {/* Calendar grid */}
+      <div className="bg-white rounded-xl border border-cream-dark p-4">
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={prevMonth} className="p-2 hover:bg-cream rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center text-warm-gray">
+            &lt;
+          </button>
+          <div className="text-center">
+            <button onClick={goToday} className="font-medium text-brot hover:underline">
+              {MONTH_NAMES[calMonth]} {calYear}
+            </button>
+          </div>
+          <button onClick={nextMonth} className="p-2 hover:bg-cream rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center text-warm-gray">
+            &gt;
+          </button>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {DAY_LABELS.map((label) => (
+            <div key={label} className="text-center text-xs font-medium text-warm-gray py-1">{label}</div>
+          ))}
+        </div>
+
+        {calendarWeeks.map((week, wi) => (
+          <div key={wi} className="grid grid-cols-7 gap-1">
+            {week.map((day) => {
+              const iso = toLocalISO(day);
+              const isCurrentMonth = day.getMonth() === calMonth;
+              const isToday = iso === todayISO;
+              const isSelected = iso === selectedDate;
+              const count = entregasByDate.get(iso)?.length ?? 0;
+              const hasEntregas = count > 0;
+
+              return (
+                <button
+                  key={iso}
+                  onClick={() => setSelectedDate(iso)}
+                  className={`
+                    py-1.5 rounded-lg text-sm transition-colors min-h-[44px] flex flex-col items-center justify-center gap-0.5
+                    ${isSelected
+                      ? "bg-brot text-white font-semibold"
+                      : isCurrentMonth
+                        ? "text-text hover:bg-cream"
+                        : "text-warm-gray/30"
+                    }
+                    ${isToday && !isSelected ? "ring-1 ring-brot/40" : ""}
+                  `}
+                >
+                  <span>{day.getDate()}</span>
+                  {hasEntregas && (
+                    <span className={`text-[10px] leading-none font-medium ${isSelected ? "text-white/80" : "text-brot"}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Selected day deliveries */}
+      <div>
+        <h2 className="text-sm font-semibold text-brot uppercase tracking-wider mb-3">
+          {formatDate(selectedDate)} — {selectedEntregas.length} entrega{selectedEntregas.length !== 1 ? "s" : ""}
+        </h2>
+
+        {selectedEntregas.length === 0 ? (
+          <div className="bg-white rounded-xl border border-cream-dark p-6 text-center text-warm-gray text-sm">
+            No hay entregas para este dia.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {selectedEntregas.map((e) => {
+              const key = entregaKey(e);
+              const expanded = expandedId === key;
+              const estados = e.tipo === "portal" ? ESTADOS_PEDIDO : ESTADOS_B2B;
+
+              return (
+                <div key={key} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+                  <button
+                    onClick={() => setExpandedId(expanded ? null : key)}
+                    className="w-full text-left px-4 py-3 hover:bg-cream/30 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-text truncate">{e.cliente_nombre}</p>
+                        <p className="text-xs text-warm-gray">{e.lineas.length} producto{e.lineas.length !== 1 ? "s" : ""}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          e.estado === "entregado" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                        }`}>
+                          {e.estado}
+                        </span>
+                        <span className="text-warm-gray text-sm">{expanded ? "−" : "+"}</span>
+                      </div>
+                    </div>
+                  </button>
+
+                  {expanded && (
+                    <div className="border-t border-cream-dark">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-cream/30">
+                            <th className="text-left px-4 py-2 font-medium text-warm-gray">Producto</th>
+                            <th className="text-right px-4 py-2 font-medium text-warm-gray">Cantidad</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {e.lineas.map((l, idx) => (
+                            <tr key={idx} className={idx < e.lineas.length - 1 ? "border-b border-cream-dark" : ""}>
+                              <td className="px-4 py-2 text-text">{l.producto_nombre}</td>
+                              <td className="px-4 py-2 text-right font-medium text-text tabular-nums">{l.cantidad}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+
+                      <div className="px-4 py-3 border-t border-cream-dark flex items-center gap-3">
+                        <label className="text-xs text-warm-gray">Estado:</label>
+                        <select
+                          value={e.estado}
+                          disabled={saving}
+                          onChange={(ev) => updateEstado(e, ev.target.value)}
+                          className="px-2 py-1.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+                        >
+                          {estados.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Pending deliveries */}
+      {pendientes.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-brot uppercase tracking-wider mb-3">
+            Pendientes ({pendientes.length})
+          </h2>
+          <div className="space-y-2">
+            {pendientes.map((e) => (
+              <button
+                key={entregaKey(e)}
+                onClick={() => {
+                  const [y, m] = e.fecha_entrega.split("-").map(Number);
+                  setCalYear(y);
+                  setCalMonth(m - 1);
+                  setSelectedDate(e.fecha_entrega);
+                }}
+                className="w-full bg-white rounded-xl border border-cream-dark px-4 py-3 text-left hover:bg-cream/30 transition-colors"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-text text-sm">{e.cliente_nombre}</p>
+                    <p className="text-xs text-warm-gray">{formatDate(e.fecha_entrega)} · {e.lineas.length} productos</p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                    {e.estado}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -323,7 +624,6 @@ function TabNueva({
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Cliente + Fecha */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-warm-gray mb-1">Cliente</label>
@@ -349,7 +649,6 @@ function TabNueva({
           </div>
         </div>
 
-        {/* Product lines */}
         <div>
           <label className="block text-xs font-medium text-warm-gray mb-2">Productos</label>
           <div className="space-y-2">
@@ -393,7 +692,6 @@ function TabNueva({
           </button>
         </div>
 
-        {/* Notas */}
         <div>
           <label className="block text-xs font-medium text-warm-gray mb-1">Notas (opcional)</label>
           <input
@@ -406,7 +704,6 @@ function TabNueva({
         </div>
       </div>
 
-      {/* Submit bar */}
       <div className="px-4 py-3 border-t border-cream-dark flex items-center justify-between bg-cream/30">
         <p className="text-xs text-warm-gray">
           {validLineas.length} producto{validLineas.length !== 1 ? "s" : ""}
@@ -437,7 +734,6 @@ function TabHistorial({
   const prodMap = useMemo(() => new Map(productos.map((p) => [p.id, p])), [productos]);
   const clienteMap = useMemo(() => new Map(clientes.map((c) => [c.id, c.nombre])), [clientes]);
 
-  // Group entregas by client
   const byClient = useMemo(() => {
     const map = new Map<number, EntregaB2B[]>();
     for (const e of entregas) {
@@ -469,11 +765,9 @@ function TabHistorial({
   return (
     <div className="space-y-6">
       {byClient.map(({ clienteId, clienteNombre, entregas: clienteEntregas }) => {
-        // Dates for this client, most recent first
         const dates = Array.from(new Set(clienteEntregas.map((e) => e.fecha_entrega.split("T")[0])))
           .sort((a, b) => b.localeCompare(a));
 
-        // All products delivered to this client
         const prodIds = new Set<number>();
         for (const e of clienteEntregas) {
           for (const l of e.lineas) prodIds.add(l.producto_id);
@@ -483,7 +777,6 @@ function TabHistorial({
           .filter(Boolean) as ProductoCatalogo[];
         clienteProducts.sort((a, b) => a.nombre.localeCompare(b.nombre));
 
-        // Pivot: (producto_id, fecha) -> cantidad
         const pivot = new Map<string, number>();
         for (const e of clienteEntregas) {
           const fecha = e.fecha_entrega.split("T")[0];

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import ClienteB2B, EntregaB2B, LineaEntregaB2B, ProductoCatalogo, User
+from app.models import ClienteB2B, EntregaB2B, LineaEntregaB2B, PedidoCliente, ProductoCatalogo, User
 from app.services.stock import deducir_congelado_por_catalogo
 from app.permissions import require_permission
 from app.schemas import (
@@ -117,6 +117,82 @@ def _entrega_out(entrega: EntregaB2B) -> dict:
             for l in entrega.lineas
         ],
     }
+
+
+PEDIDO_ESTADOS = ["pendiente", "confirmado", "en_preparacion", "listo", "entregado"]
+
+
+@router.get("/todas")
+def list_todas_entregas(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return B2B deliveries + portal orders in a unified format."""
+    b2b = db.query(EntregaB2B).options(joinedload(EntregaB2B.lineas)).all()
+    portal = (
+        db.query(PedidoCliente)
+        .options(joinedload(PedidoCliente.lineas), joinedload(PedidoCliente.cliente))
+        .all()
+    )
+
+    clientes_map = {c.id: c.nombre for c in db.query(ClienteB2B).all()}
+    productos_map = {p.id: p.nombre for p in db.query(ProductoCatalogo).all()}
+
+    result = []
+    for e in b2b:
+        result.append({
+            "id": e.id,
+            "tipo": "b2b",
+            "cliente_nombre": clientes_map.get(e.cliente_b2b_id, f"#{e.cliente_b2b_id}"),
+            "fecha_entrega": str(e.fecha_entrega),
+            "estado": e.estado,
+            "notas": e.notas,
+            "total": sum(l.cantidad * l.precio_unitario for l in e.lineas),
+            "lineas": [
+                {
+                    "producto_nombre": productos_map.get(l.producto_id, f"#{l.producto_id}"),
+                    "cantidad": l.cantidad,
+                    "precio_unitario": l.precio_unitario,
+                }
+                for l in e.lineas
+            ],
+        })
+    for p in portal:
+        result.append({
+            "id": p.id,
+            "tipo": "portal",
+            "cliente_nombre": p.cliente.nombre if p.cliente else f"#{p.cliente_id}",
+            "fecha_entrega": str(p.fecha_entrega),
+            "estado": p.estado,
+            "notas": p.notas,
+            "total": p.total,
+            "lineas": [
+                {
+                    "producto_nombre": productos_map.get(l.producto_id, f"#{l.producto_id}"),
+                    "cantidad": l.cantidad,
+                    "precio_unitario": l.precio_unitario_snapshot,
+                }
+                for l in p.lineas
+            ],
+        })
+    return result
+
+
+@router.put("/pedido-portal/{pedido_id}/estado")
+def update_estado_pedido_portal(
+    pedido_id: int,
+    body: EstadoUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if body.estado not in PEDIDO_ESTADOS:
+        raise HTTPException(status_code=422, detail=f"Estado invalido: {body.estado}")
+    pedido = db.query(PedidoCliente).filter(PedidoCliente.id == pedido_id).first()
+    if not pedido:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+    pedido.estado = body.estado
+    db.commit()
+    return {"id": pedido.id, "estado": pedido.estado}
 
 
 # NOTE: /volumen must be declared before /{entrega_id} so FastAPI matches the
