@@ -86,7 +86,12 @@ def create_pedido(
     db.add(p)
     db.flush()
     for linea_data in data.lineas:
-        linea = LineaPedido(pedido_id=p.id, **linea_data.model_dump())
+        ld = linea_data.model_dump()
+        if not ld.get("precio_unitario"):
+            ing = db.query(Ingrediente).filter(Ingrediente.id == ld["ingrediente_id"]).first()
+            if ing and ing.precio_compra:
+                ld["precio_unitario"] = ing.precio_compra
+        linea = LineaPedido(pedido_id=p.id, **ld)
         db.add(linea)
     db.commit()
     p = _load_pedido(db, p.id)
