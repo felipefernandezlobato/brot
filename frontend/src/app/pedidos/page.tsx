@@ -269,13 +269,12 @@ function TabActivos({
           <div className="space-y-3">
             {enviados.map((p) => (
               <PedidoCard key={p.id} p={p} actions={
-                <button
-                  onClick={() => recibir(p.id)}
-                  disabled={acting}
-                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition-colors min-h-[36px] disabled:opacity-50"
+                <Link
+                  href={`/pedidos/${p.id}`}
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition-colors min-h-[36px] inline-flex items-center"
                 >
-                  Recibir
-                </button>
+                  Registrar Recepcion
+                </Link>
               } />
             ))}
           </div>
