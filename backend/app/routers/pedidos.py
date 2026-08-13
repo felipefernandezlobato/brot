@@ -1,6 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
@@ -171,21 +172,43 @@ def enviar_pedido(
     return _pedido_out(p)
 
 
+class _LineaRecepcion(BaseModel):
+    linea_id: int
+    cantidad_recibida: float
+    precio_unitario: float | None = None
+
+
+class _RecepcionRequest(BaseModel):
+    lineas: list[_LineaRecepcion] = []
+
+
 @router.post("/{pedido_id}/recibir", response_model=PedidoOut)
 def recibir_pedido(
     pedido_id: int,
+    data: _RecepcionRequest | None = None,
     user: User = require_permission("pedidos_proveedores", "edit"),
     db: Session = Depends(get_db),
 ):
-    """Transition: enviado → recibido. Auto-creates InventarioRegistro for each line."""
+    """Transition: enviado → recibido. Accepts optional received quantities per line."""
     p = _load_pedido(db, pedido_id)
     if not p:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
     if p.estado != "enviado":
         raise HTTPException(status_code=409, detail="El pedido debe estar enviado para recibirse")
+
+    recepcion_map = {}
+    if data and data.lineas:
+        for lr in data.lineas:
+            recepcion_map[lr.linea_id] = lr
+
     p.estado = "recibido"
     p.fecha_recepcion = date.today()
     for linea in p.lineas:
+        rec = recepcion_map.get(linea.id)
+        if rec:
+            linea.cantidad_recibida = rec.cantidad_recibida
+            if rec.precio_unitario is not None:
+                linea.precio_unitario = rec.precio_unitario
         cantidad_recibida = (
             linea.cantidad_recibida
             if linea.cantidad_recibida is not None
