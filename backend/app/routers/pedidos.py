@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import HistorialPrecio, Ingrediente, InventarioRegistro, LineaPedido, Pedido, Proveedor, User
+from app.models import HistorialPrecio, Ingrediente, InventarioRegistro, LineaPedido, MovimientoStock, Pedido, Proveedor, User
 from app.services.stock import get_saldo_materia_prima, registrar_movimiento
 from app.permissions import require_permission
 from app.schemas import (
@@ -142,11 +142,29 @@ def delete_pedido(
     user: User = require_permission("pedidos_proveedores", "delete"),
     db: Session = Depends(get_db),
 ):
-    p = db.query(Pedido).filter(Pedido.id == pedido_id).first()
+    p = _load_pedido(db, pedido_id)
     if not p:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
-    if p.estado != "borrador":
-        raise HTTPException(status_code=409, detail="Solo se pueden eliminar pedidos en borrador")
+
+    if p.estado == "recibido":
+        ref = f"pedido:{pedido_id}"
+        for linea in p.lineas:
+            cantidad = linea.cantidad_recibida if linea.cantidad_recibida is not None else linea.cantidad_pedida
+            saldo_actual = get_saldo_materia_prima(db, linea.ingrediente_id)
+            nuevo_saldo = saldo_actual - cantidad
+            db.add(InventarioRegistro(
+                ingrediente_id=linea.ingrediente_id,
+                cantidad=nuevo_saldo,
+                unidad=linea.unidad,
+                fecha_registro=date.today(),
+                notas=f"Pedido #{pedido_id} eliminado (-{cantidad})",
+            ))
+            registrar_movimiento(
+                db, "materia_prima", linea.ingrediente_id, -cantidad,
+                linea.unidad, "correccion", f"pedido_borrado:{pedido_id}", nuevo_saldo, user.id,
+            )
+        db.query(MovimientoStock).filter(MovimientoStock.referencia_origen == ref).delete()
+
     db.delete(p)
     db.commit()
     return {"ok": True}
