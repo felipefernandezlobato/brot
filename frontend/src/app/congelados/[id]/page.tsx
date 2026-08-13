@@ -54,7 +54,7 @@ export default function CongeladoPage() {
     if (!params?.id) return;
     apiFetch<ProductoDetalle>(`/api/congelados/productos/${params.id}/detalle`)
       .then((d) => {
-        if (d.receta?.id && d.nivel === "terminado") {
+        if (d.receta?.id) {
           router.replace(`/escandallos/${d.receta.id}`);
         } else {
           setData(d);
