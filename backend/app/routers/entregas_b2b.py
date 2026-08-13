@@ -195,6 +195,22 @@ def update_estado_pedido_portal(
     return {"id": pedido.id, "estado": pedido.estado}
 
 
+@router.delete("/pedido-portal/{pedido_id}")
+def delete_pedido_portal(
+    pedido_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.models import LineaPedidoCliente
+    pedido = db.query(PedidoCliente).filter(PedidoCliente.id == pedido_id).first()
+    if not pedido:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+    db.query(LineaPedidoCliente).filter(LineaPedidoCliente.pedido_cliente_id == pedido_id).delete()
+    db.delete(pedido)
+    db.commit()
+    return {"ok": True}
+
+
 # NOTE: /volumen must be declared before /{entrega_id} so FastAPI matches the
 # literal segment first.
 @router.get("/volumen")
