@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth_cliente import get_current_cliente
 from app.database import get_db
-from app.models import Cliente, LineaPedidoCliente, PedidoCliente, ProductoCatalogo
+from app.models import ClienteB2B, LineaPedidoCliente, PedidoCliente, ProductoCatalogo
 from app.schemas import PedidoClienteOut
 
 router = APIRouter(prefix="/api/cliente/pedidos", tags=["pedidos-clientes"])
@@ -55,7 +55,7 @@ def _build_pedido_out(pedido: PedidoCliente) -> PedidoClienteOut:
 @router.post("", response_model=PedidoClienteOut, status_code=201)
 def create_pedido(
     data: _PedidoRequest,
-    cliente: Cliente = Depends(get_current_cliente),
+    cliente: ClienteB2B = Depends(get_current_cliente),
     db: Session = Depends(get_db),
 ):
     if data.fecha_entrega.weekday() not in VALID_DELIVERY_DAYS:
@@ -114,7 +114,7 @@ def create_pedido(
 
 @router.get("", response_model=list[PedidoClienteOut])
 def list_pedidos(
-    cliente: Cliente = Depends(get_current_cliente),
+    cliente: ClienteB2B = Depends(get_current_cliente),
     db: Session = Depends(get_db),
 ):
     pedidos = (
@@ -129,7 +129,7 @@ def list_pedidos(
 @router.get("/{pedido_id}", response_model=PedidoClienteOut)
 def get_pedido(
     pedido_id: int,
-    cliente: Cliente = Depends(get_current_cliente),
+    cliente: ClienteB2B = Depends(get_current_cliente),
     db: Session = Depends(get_db),
 ):
     pedido = (

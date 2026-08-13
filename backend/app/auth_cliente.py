@@ -8,7 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Cliente
+from app.models import ClienteB2B
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
 ALGORITHM = "HS256"
@@ -37,7 +37,7 @@ def create_cliente_token(cliente_id: int) -> str:
 def get_current_cliente(
     db: Session = Depends(get_db),
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
-) -> Cliente:
+) -> ClienteB2B:
     if not credentials:
         raise HTTPException(status_code=401, detail="Token requerido")
     try:
@@ -50,7 +50,7 @@ def get_current_cliente(
     if payload.get("type") != "cliente":
         raise HTTPException(status_code=401, detail="Token de tipo incorrecto")
 
-    cliente = db.query(Cliente).filter(Cliente.id == payload["cliente_id"]).first()
+    cliente = db.query(ClienteB2B).filter(ClienteB2B.id == payload["cliente_id"]).first()
     if not cliente or not cliente.is_active:
         raise HTTPException(status_code=401, detail="Cliente no encontrado")
     return cliente

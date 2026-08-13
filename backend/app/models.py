@@ -516,13 +516,13 @@ class PedidoRecurrente(Base):
     __tablename__ = "pedidos_recurrentes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id"))
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes_b2b.id"))
     dia_entrega: Mapped[str] = mapped_column(sa.String(10))
     activo: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
     fecha_inicio: Mapped[date] = mapped_column(sa.Date, default=date.today)
     notas: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
 
-    cliente: Mapped["Cliente"] = relationship()
+    cliente: Mapped["ClienteB2B"] = relationship()
     lineas: Mapped[list["LineaPedidoRecurrente"]] = relationship(
         back_populates="pedido_recurrente", cascade="all, delete-orphan"
     )
@@ -544,7 +544,7 @@ class PedidoCliente(Base):
     __tablename__ = "pedidos_clientes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id"))
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes_b2b.id"))
     fecha_pedido: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
     fecha_entrega: Mapped[date] = mapped_column(sa.Date)
     estado: Mapped[str] = mapped_column(sa.String(20), default="pendiente")
@@ -554,7 +554,7 @@ class PedidoCliente(Base):
         ForeignKey("pedidos_recurrentes.id"), nullable=True
     )
 
-    cliente: Mapped["Cliente"] = relationship()
+    cliente: Mapped["ClienteB2B"] = relationship()
     lineas: Mapped[list["LineaPedidoCliente"]] = relationship(
         back_populates="pedido", cascade="all, delete-orphan"
     )
@@ -585,12 +585,15 @@ class ClienteB2B(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(sa.String(200))
+    email: Mapped[Optional[str]] = mapped_column(sa.String(200), unique=True, nullable=True)
+    password_hash: Mapped[Optional[str]] = mapped_column(sa.String(200), nullable=True)
     direccion: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
     telefono: Mapped[Optional[str]] = mapped_column(sa.String(50), nullable=True)
     contacto: Mapped[Optional[str]] = mapped_column(sa.String(200), nullable=True)
     notas: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
     dia_entrega_preferido: Mapped[Optional[str]] = mapped_column(sa.String(10), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
+    created_at: Mapped[Optional[datetime]] = mapped_column(sa.DateTime, nullable=True)
 
 
 class EntregaB2B(Base):
