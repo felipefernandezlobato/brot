@@ -39,18 +39,24 @@ function isDeliveryDay(d: Date): boolean {
   return dow === 3 || dow === 6; // Wed or Sat
 }
 
+function getMinDeliveryDate(): Date {
+  const d = new Date();
+  d.setHours(d.getHours() + 48);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 function buildCalendarWeeks(): Date[][] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Start from next Monday
+  // Start from this week's Monday
   const start = new Date(today);
-  start.setDate(start.getDate() + 1);
-  while (start.getDay() !== 1) start.setDate(start.getDate() + 1);
+  while (start.getDay() !== 1) start.setDate(start.getDate() - 1);
 
   const weeks: Date[][] = [];
   const cursor = new Date(start);
-  for (let w = 0; w < 4; w++) {
+  for (let w = 0; w < 5; w++) {
     const week: Date[] = [];
     for (let d = 0; d < 7; d++) {
       week.push(new Date(cursor));
@@ -106,17 +112,19 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
     return d;
   }, []);
 
-  // Auto-select first available delivery date
+  const minDelivery = useMemo(() => getMinDeliveryDate(), []);
+
+  // Auto-select first available delivery date (48h minimum)
   useEffect(() => {
     for (const week of calendarWeeks) {
       for (const day of week) {
-        if (isDeliveryDay(day) && day > today) {
+        if (isDeliveryDay(day) && day >= minDelivery) {
           setFechaEntrega(toLocalISODate(day));
           return;
         }
       }
     }
-  }, [calendarWeeks, today]);
+  }, [calendarWeeks, minDelivery]);
 
   const loadProductos = useCallback(() => {
     setLoadingProductos(true);
@@ -265,9 +273,10 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
               {week.map((day) => {
                 const iso = toLocalISODate(day);
                 const delivery = isDeliveryDay(day);
-                const past = day <= today;
+                const past = day < today;
+                const tooSoon = day < minDelivery;
                 const selected = iso === fechaEntrega;
-                const selectable = delivery && !past;
+                const selectable = delivery && !past && !tooSoon;
 
                 return (
                   <button
@@ -280,8 +289,11 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
                         ? "bg-brot text-white font-semibold"
                         : selectable
                           ? "bg-brot/10 text-brot font-medium hover:bg-brot/20"
-                          : "text-warm-gray/40"
+                          : past
+                            ? "text-warm-gray/20"
+                            : "text-warm-gray/40"
                       }
+                      ${toLocalISODate(day) === toLocalISODate(today) ? "ring-1 ring-warm-gray/30" : ""}
                     `}
                   >
                     {day.getDate()}
