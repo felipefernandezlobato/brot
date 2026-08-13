@@ -368,18 +368,27 @@ function TabCalendario({
                         </tbody>
                       </table>
 
-                      <div className="px-4 py-3 border-t border-cream-dark flex items-center gap-3">
-                        <label className="text-xs text-warm-gray">Estado:</label>
-                        <select
-                          value={e.estado}
+                      <div className="px-4 py-3 border-t border-cream-dark flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <label className="text-xs text-warm-gray">Estado:</label>
+                          <select
+                            value={e.estado}
+                            disabled={saving}
+                            onChange={(ev) => updateEstado(e, ev.target.value)}
+                            className="px-2 py-1.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+                          >
+                            {estados.map((s) => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <button
+                          onClick={() => deleteEntrega(e)}
                           disabled={saving}
-                          onChange={(ev) => updateEstado(e, ev.target.value)}
-                          className="px-2 py-1.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+                          className="px-3 py-1.5 text-red-600 text-xs hover:bg-red-50 rounded-lg transition-colors min-h-[36px]"
                         >
-                          {estados.map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
+                          Eliminar
+                        </button>
                       </div>
                     </div>
                   )}
