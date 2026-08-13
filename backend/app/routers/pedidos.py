@@ -197,27 +197,28 @@ class _LineaRecepcion(BaseModel):
 
 
 class _RecepcionRequest(BaseModel):
-    lineas: list[_LineaRecepcion] = []
+    lineas: list[_LineaRecepcion]
 
 
 @router.post("/{pedido_id}/recibir", response_model=PedidoOut)
 def recibir_pedido(
     pedido_id: int,
-    data: _RecepcionRequest | None = None,
+    data: _RecepcionRequest,
     user: User = require_permission("pedidos_proveedores", "edit"),
     db: Session = Depends(get_db),
 ):
-    """Transition: enviado → recibido. Accepts optional received quantities per line."""
+    """Transition: enviado → recibido. REQUIRES received quantities per line."""
     p = _load_pedido(db, pedido_id)
     if not p:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
     if p.estado != "enviado":
         raise HTTPException(status_code=409, detail="El pedido debe estar enviado para recibirse")
+    if not data.lineas:
+        raise HTTPException(status_code=422, detail="Debes confirmar las cantidades recibidas")
 
     recepcion_map = {}
-    if data and data.lineas:
-        for lr in data.lineas:
-            recepcion_map[lr.linea_id] = lr
+    for lr in data.lineas:
+        recepcion_map[lr.linea_id] = lr
 
     p.estado = "recibido"
     p.fecha_recepcion = date.today()
