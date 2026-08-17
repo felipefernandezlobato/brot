@@ -85,7 +85,11 @@ def main(apply: bool) -> None:
                 db.add(pure)
                 db.flush()
                 db.add(LineaReceta(receta_id=pure.id, ingrediente_id=papa.id, cantidad=125.0, unidad="g"))
-                db.add(LineaReceta(receta_id=pure.id, ingrediente_id=agua.id, cantidad=700.0, unidad="g"))
+                # Agua's unidad_uso is "litro" (volumen), not "g" (peso) --
+                # convertir() refuses cross-family conversions, so a "g" line
+                # here throws the moment Amasar Focaccia (which uses Pure as
+                # a subreceta) actually gets produced.
+                db.add(LineaReceta(receta_id=pure.id, ingrediente_id=agua.id, cantidad=0.7, unidad="litro"))
 
         print(f"3) Receta 'Amasar Focaccia' (id={amasar.id}): reemplazar lineas")
         lineas_actuales = db.query(LineaReceta).filter(LineaReceta.receta_id == amasar.id).all()
