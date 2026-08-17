@@ -89,7 +89,7 @@ const NIVEL_LABELS: Record<string, string> = {
 };
 const MOV_LABELS: Record<string, string> = {
   produccion_salida: "Producido", produccion_consumo: "Consumido",
-  entrega_b2b: "Entrega B2B", merma: "Merma",
+  entrega_b2b: "Entrega B2B", merma: "Merma", carga_inicial: "Carga inicial",
 };
 
 function MargenBadge({ margen }: { margen: number | null }) {

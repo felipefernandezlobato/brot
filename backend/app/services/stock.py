@@ -162,11 +162,26 @@ def deducir_congelado_fifo(
             entry.cantidad -= restante
             restante = 0
 
+    # Session is autoflush=False: the lot updates above are only pending in the
+    # ORM until flushed, so get_saldo_congelado() would otherwise read the
+    # pre-consumption balance (same class of bug fixed in deducir_materia_prima).
+    db.flush()
+
+    # Record what actually left the shelf, not the theoretical demand. Without
+    # this, a delivery bigger than what's on hand silently records the full
+    # amount, sending the ledger negative forever with nothing to reconcile it
+    # against (unlike materia_prima, there was no clamp/faltante note here).
+    consumo_real = cantidad - restante
+    faltante = restante
+    notas = None
+    if faltante > 1e-9:
+        notas = f"Stock insuficiente: se pidieron {cantidad:.3f}, habia {consumo_real:.3f}. Faltante: {faltante:.3f}."
+
     saldo = get_saldo_congelado(db, producto_congelado_id)
     mov = registrar_movimiento(
-        db, "congelado", producto_congelado_id, -cantidad, "u",
+        db, "congelado", producto_congelado_id, -consumo_real, "u",
         "produccion_consumo" if "produccion" in referencia else "entrega_b2b",
-        referencia, saldo, user_id, fecha=fecha,
+        referencia, saldo, user_id, notas=notas, fecha=fecha,
     )
 
     if tomado:
@@ -269,6 +284,7 @@ def producir_producto(
     db: Session,
     producto_congelado_id: int,
     cantidad_producida: float,
+    lotes: float,
     bastones_consumidos: Optional[float],
     referencia: str,
     user_id: Optional[int] = None,
@@ -278,12 +294,17 @@ def producir_producto(
     """
     Register production of a product. Handles the full chain:
 
-    1. If product has receta_id with ingredient lines -> auto-deduct from Stock MP
+    1. If product has receta_id with ingredient lines -> auto-deduct from Stock MP,
+       scaled by `lotes` (how many full recipe batches this represents -- see
+       lotes_de_receta() in produccion_registro.py; NOT derived from
+       cantidad_producida here, since for some recipes (masas) those two numbers
+       are the same and for others (terminados) they aren't)
     2. If product has producto_padre_id:
        - If padre is a baston -> use bastones_consumidos (manual input)
        - Otherwise -> auto-calculate from cantidad_producida / cantidad_por_padre
        Deducts from padre's StockCongelado
-    3. Adds produced quantity to this product's StockCongelado
+    3. Adds produced quantity (cantidad_producida, in this product's own unit) to
+       its StockCongelado
     """
     prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == producto_congelado_id).first()
     if not prod:
@@ -296,8 +317,7 @@ def producir_producto(
     # 1. Consume ingredients from Stock MP (if product has a recipe with ingredient lines)
     if prod.receta_id:
         receta = db.query(Receta).filter(Receta.id == prod.receta_id).first()
-        if receta and receta.porciones_por_lote:
-            lotes = cantidad_producida / receta.porciones_por_lote
+        if receta:
             lineas = db.query(LineaReceta).filter(LineaReceta.receta_id == receta.id).all()
             for linea in lineas:
                 if linea.ingrediente_id:

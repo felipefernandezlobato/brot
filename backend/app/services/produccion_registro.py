@@ -47,13 +47,19 @@ def tiene_efectos_stock(db: Session, referencia: str) -> bool:
     )
 
 
-def cantidad_en_porciones(db: Session, reg: RegistroProduccion) -> float:
-    """Translate what the operator typed into what producir_producto expects.
+def lotes_de_receta(db: Session, reg: RegistroProduccion) -> float:
+    """How many full recipe batches this record represents, for scaling ingredient lines.
 
-    producir_producto works in PORTIONS (it divides by receta.porciones_por_lote).
-    Tasks ask the operator for "u receta" — whole batches. Without this conversion,
-    typing "1 receta" for Masa Croissant (porciones_por_lote=9) deducted a ninth of
-    the recipe.
+    Two different things get called "cantidad" depending on the task:
+      - "u receta" tasks (Masa de Croissant/Medialuna/Hojaldre): the operator
+        enters batches directly ("1.5" means 1.5 lotes). That IS the lotes
+        count already -- for these, `u` of physical stock also means "lotes",
+        not "portions" (1.5u of masa stays 1.5u of masa; it becomes 13.5
+        bastones only once combined with butter downstream).
+      - Everything else (e.g. "6" croissants): the operator enters a count of
+        finished pieces, so lotes = pieces / porciones_por_lote.
+    Getting this wrong previously inflated a masa's own stock by porciones_por_lote
+    (1.5 lotes recorded as 13.5) while fixing ingredient deduction only by accident.
     """
     cantidad = reg.cantidad_real or 0.0
 
@@ -63,12 +69,12 @@ def cantidad_en_porciones(db: Session, reg: RegistroProduccion) -> float:
         unidad = reg.tarea.unidad_cantidad
         receta_id = reg.tarea.receta_id or receta_id
 
-    if unidad != "u receta" or not receta_id:
+    if unidad == "u receta" or not receta_id:
         return cantidad
 
     receta = db.query(Receta).filter(Receta.id == receta_id).first()
     if receta and receta.porciones_por_lote:
-        return cantidad * receta.porciones_por_lote
+        return cantidad / receta.porciones_por_lote
     return cantidad
 
 
@@ -159,7 +165,8 @@ def aplicar_efectos(db: Session, reg: RegistroProduccion, user_id: int) -> int:
     movimientos = producir_producto(
         db,
         producto_id,
-        cantidad_en_porciones(db, reg),
+        reg.cantidad_real,
+        lotes_de_receta(db, reg),
         reg.bastones_consumidos,
         ref,
         user_id,

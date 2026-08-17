@@ -41,7 +41,7 @@ const NIVEL_COLORS: Record<string, string> = {
   terminado: "bg-green-100 text-green-700 border-green-200",
 };
 const NIVEL_LABELS: Record<string, string> = { masa: "Masa", semi: "Semi", crudo: "Crudo", terminado: "Final" };
-const MOV_LABELS: Record<string, string> = { produccion_salida: "Producido", produccion_consumo: "Consumido", entrega_b2b: "Entrega B2B", merma: "Merma" };
+const MOV_LABELS: Record<string, string> = { produccion_salida: "Producido", produccion_consumo: "Consumido", entrega_b2b: "Entrega B2B", merma: "Merma", carga_inicial: "Carga inicial" };
 
 export default function CongeladoPage() {
   const params = useParams<{ id: string }>();

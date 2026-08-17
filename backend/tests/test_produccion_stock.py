@@ -150,6 +150,21 @@ def test_una_receta_descuenta_la_receta_completa(client, db):
     assert _saldo(db, ing.id) == 80.5  # 100 - 19.5, NOT 100 - 2.167
 
 
+def test_lote_de_masa_no_infla_su_propio_stock(client, db):
+    """For a masa recipe, `u` of stock IS a lote -- 1.5 lotes must show as 1.5u,
+    not 13.5u (porciones_por_lote inflated), even though ingredient deduction
+    correctly scales by the same 1.5."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=100.0)
+    _, masa_prod, _ = _masa(db, ing, harina_g=19500.0, porciones=9.0)
+    tarea = db.query(TareaProduccion).first()
+
+    _guardar(client, headers, tarea.id, 1.5)
+
+    assert _stock_congelado(db, masa_prod.id) == pytest.approx(1.5)
+    assert _saldo(db, ing.id) == pytest.approx(100.0 - 19500.0 * 1.5 / 1000)
+
+
 def test_media_receta_descuenta_la_mitad(client, db):
     headers = _auth(client, db)
     ing = _harina(db, stock_kg=100.0)
@@ -358,7 +373,7 @@ def test_consumo_de_padre_se_revierte_al_lote_original(client, db):
     ing = _harina(db, stock_kg=200.0)
     masa_prod, masa_tarea, baston, t_bast = _cadena(db, ing)
 
-    _guardar(client, headers, masa_tarea.id, 1)       # 1 receta -> 9 u de masa
+    _guardar(client, headers, masa_tarea.id, 9)       # 9 lotes -> 9 u de masa (u == lote)
     assert _stock_congelado(db, masa_prod.id) == 9.0
 
     _guardar(client, headers, t_bast.id, 4)           # consume 4 u de masa
@@ -381,15 +396,15 @@ def test_editar_produccion_ya_consumida_aguas_abajo(client, db):
     ing = _harina(db, stock_kg=200.0)
     masa_prod, masa_tarea, baston, t_bast = _cadena(db, ing)
 
-    _guardar(client, headers, masa_tarea.id, 1)   # 9 u de masa
-    _guardar(client, headers, t_bast.id, 9)       # se consume TODA la masa
+    _guardar(client, headers, masa_tarea.id, 1)   # 1 lote -> 1 u de masa
+    _guardar(client, headers, t_bast.id, 1)       # se consume TODA la masa
     assert _stock_congelado(db, masa_prod.id) == 0.0
 
-    res = _guardar(client, headers, masa_tarea.id, 2)  # ahora fueron 2 recetas
+    res = _guardar(client, headers, masa_tarea.id, 2)  # ahora fueron 2 lotes
     assert res.status_code == 201, res.text
 
-    # 18 produced, 9 already consumed -> 9 left. Net stays honest.
-    assert _stock_congelado(db, masa_prod.id) == 9.0
+    # 2 produced, 1 already consumed -> 1 left. Net stays honest.
+    assert _stock_congelado(db, masa_prod.id) == 1.0
     assert _saldo(db, ing.id) == 161.0  # 200 - 39
 
 

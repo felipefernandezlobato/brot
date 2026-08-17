@@ -12,6 +12,7 @@ from app.models import (
     ClienteB2B,
     Ingrediente,
     InventarioRegistro,
+    MovimientoStock,
     ProductoCatalogo,
     ProductoCongelado,
     Receta,
@@ -214,3 +215,33 @@ def test_entrega_no_entregada_no_toca_stock(client, db):
     client.delete(f"/api/entregas-b2b/{eid}", headers=headers)
 
     assert _stock(db, prod.id) == 20.0
+
+
+def test_entrega_mayor_al_stock_no_deja_el_ledger_negativo(client, db):
+    """Pedir mas de lo que hay debe clampear en el stock real, no restar el pedido completo.
+
+    Antes, el movimiento registraba -cantidad (lo pedido) sin importar cuanto
+    habia realmente: pedir 9 con solo 5 disponibles restaba 9 del ledger aunque
+    fisicamente solo salieron 5 unidades.
+    """
+    headers = _auth(client, db)
+    prod, catalogo, cli = _catalogo_con_stock(db, unidades=5.0)
+
+    res = client.post(
+        "/api/entregas-b2b",
+        json={
+            "cliente_b2b_id": cli.id, "fecha_entrega": HOY, "estado": "entregado",
+            "lineas": [{"producto_id": catalogo.id, "cantidad": 9, "precio_unitario": 1262.0}],
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert _stock(db, prod.id) == 0.0
+
+    mov = db.query(MovimientoStock).filter(
+        MovimientoStock.tipo_stock == "congelado",
+        MovimientoStock.referencia_producto_id == prod.id,
+        MovimientoStock.tipo_movimiento == "entrega_b2b",
+    ).one()
+    assert mov.cantidad == -5.0  # lo que realmente salio, not -9
+    assert "insuficiente" in (mov.notas or "").lower()
