@@ -7,6 +7,8 @@ These cover the two bugs this module was built to fix:
 
 from datetime import date, timedelta
 
+import pytest
+
 from app.auth import hash_pin
 from app.main import app
 from app.models import (
@@ -394,6 +396,121 @@ def test_editar_produccion_ya_consumida_aguas_abajo(client, db):
 # ==============================================================
 # Tasks with no product still work as plain checkboxes
 # ==============================================================
+
+
+# ==============================================================
+# Subrecetas sin stock propio (e.g. Masa Madre): se resuelven a sus
+# ingredientes en el momento. Subrecetas CON stock propio (bastones) no.
+# ==============================================================
+
+
+def _agua(db, stock_litros=50.0):
+    cat = Categoria(nombre="Otros", tipo="ingrediente")
+    db.add(cat)
+    db.flush()
+    ing = Ingrediente(
+        nombre="Agua", categoria_id=cat.id, unidad_compra="litro", unidad_uso="litro",
+        precio_compra=0.0, cantidad_compra=1.0,
+    )
+    db.add(ing)
+    db.flush()
+    db.add(InventarioRegistro(
+        ingrediente_id=ing.id, cantidad=stock_litros, unidad="litro", fecha_registro=date.today(),
+    ))
+    db.commit()
+    return ing
+
+
+def _masa_con_subreceta_sin_stock(db, ing_harina, ing_agua):
+    """Masa Pan Blanco: harina directa + Masa Madre (subreceta sin ProductoCongelado propio)."""
+    cat = Categoria(nombre="Masas", tipo="receta")
+    db.add(cat)
+    db.flush()
+
+    masa_madre = Receta(nombre="Masa Madre", categoria_id=cat.id, porciones_por_lote=1.0,
+                        es_subreceta=True, unidad_rendimiento="kg")
+    db.add(masa_madre)
+    db.flush()
+    db.add(LineaReceta(receta_id=masa_madre.id, ingrediente_id=ing_harina.id, cantidad=0.5, unidad="kg"))
+    db.add(LineaReceta(receta_id=masa_madre.id, ingrediente_id=ing_agua.id, cantidad=0.5, unidad="litro"))
+    # A proposito: ningun ProductoCongelado apunta a masa_madre -> no tiene stock propio.
+
+    pan = Receta(nombre="Masa Pan Blanco", categoria_id=cat.id, porciones_por_lote=1.0, es_subreceta=True)
+    db.add(pan)
+    db.flush()
+    db.add(LineaReceta(receta_id=pan.id, ingrediente_id=ing_harina.id, cantidad=12000.0, unidad="g"))
+    db.add(LineaReceta(receta_id=pan.id, subreceta_id=masa_madre.id, cantidad=1200.0, unidad="g"))
+
+    prod = ProductoCongelado(nombre="Masa Pan Blanco", categoria="masas", unidad="u",
+                             receta_id=pan.id, nivel="masa")
+    db.add(prod)
+    db.flush()
+
+    tarea = TareaProduccion(
+        dia_semana=1, hora="08:00", titulo="Amasar Pan Blanco",
+        cantidad_planificada=1.0, unidad_cantidad="u receta",
+        receta_id=pan.id, producto_congelado_id=prod.id, tipo="produccion",
+    )
+    db.add(tarea)
+    db.commit()
+    return pan, masa_madre, prod, tarea
+
+
+def test_subreceta_sin_stock_descuenta_sus_ingredientes(client, db):
+    headers = _auth(client, db)
+    ing_harina = _harina(db, stock_kg=100.0)
+    ing_agua = _agua(db, stock_litros=50.0)
+    _masa_con_subreceta_sin_stock(db, ing_harina, ing_agua)
+    tarea = db.query(TareaProduccion).first()
+
+    _guardar(client, headers, tarea.id, 1)
+
+    # 12kg harina directa + 1200g de Masa Madre (1.2kg -> 0.6kg harina + 0.6L agua)
+    assert _saldo(db, ing_harina.id) == pytest.approx(100.0 - 12.0 - 0.6)
+    assert _saldo(db, ing_agua.id) == pytest.approx(50.0 - 0.6)
+
+
+def test_subreceta_con_stock_propio_no_descuenta_de_nuevo(client, db):
+    """Baston ya tiene su propio ProductoCongelado: producir el terminado no debe
+    volver a tocar la harina de la masa que ya se descontó al hacer el baston."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=100.0)
+
+    cat = Categoria(nombre="Masas", tipo="receta")
+    db.add(cat)
+    db.flush()
+
+    r_bast = Receta(nombre="Baston Croissant", categoria_id=cat.id, porciones_por_lote=1.0, es_subreceta=True)
+    db.add(r_bast)
+    db.flush()
+    db.add(LineaReceta(receta_id=r_bast.id, ingrediente_id=ing.id, cantidad=19500.0, unidad="g"))
+
+    baston_prod = ProductoCongelado(nombre="Baston Croissant", categoria="semis", unidad="u",
+                                    receta_id=r_bast.id, nivel="semi")
+    db.add(baston_prod)
+    db.flush()
+
+    terminado = Receta(nombre="Croissant", categoria_id=cat.id, porciones_por_lote=1.0)
+    db.add(terminado)
+    db.flush()
+    db.add(LineaReceta(receta_id=terminado.id, subreceta_id=r_bast.id, cantidad=1.0, unidad="u"))
+
+    prod_term = ProductoCongelado(nombre="Croissant", categoria="terminados", unidad="u",
+                                  receta_id=terminado.id, nivel="terminado")
+    db.add(prod_term)
+    db.flush()
+
+    tarea = TareaProduccion(
+        dia_semana=1, hora="10:00", titulo="Armar Croissant",
+        cantidad_planificada=1.0, unidad_cantidad="u receta",
+        receta_id=terminado.id, producto_congelado_id=prod_term.id, tipo="produccion",
+    )
+    db.add(tarea)
+    db.commit()
+
+    _guardar(client, headers, tarea.id, 1)
+
+    assert _saldo(db, ing.id) == 100.0
 
 
 def test_tarea_sin_producto_se_completa_sin_cantidad(client, db):

@@ -100,6 +100,10 @@ def deducir_materia_prima(
         fecha_registro=fecha or date.today(),
         notas=f"Consumo automatico: {referencia}",
     ))
+    # Session is autoflush=False: without this, a second deduction against the
+    # same ingredient later in this same production (e.g. a direct line plus a
+    # subreceta that also uses it) would read the pre-consumption balance.
+    db.flush()
 
     notas = None
     if faltante > 1e-9:
@@ -170,6 +174,66 @@ def deducir_congelado_fifo(
     return mov
 
 
+def _tiene_stock_propio(db: Session, receta_id: int) -> bool:
+    """True if a recipe is produced/stocked on its own (has a ProductoCongelado).
+
+    Subrecetas like Masa de Croissant already get their ingredients deducted
+    when THEY are produced, so a bastón/terminado line pointing at them must
+    not deduct ingredients again -- that consumption already happened.
+    """
+    return (
+        db.query(ProductoCongelado)
+        .filter(ProductoCongelado.receta_id == receta_id)
+        .first()
+        is not None
+    )
+
+
+def _consumir_ingredientes_subreceta(
+    db: Session,
+    receta_id: int,
+    cantidad_necesaria: float,
+    unidad_necesaria: str,
+    referencia: str,
+    user_id: Optional[int],
+    fecha: date,
+    movimientos: list[MovimientoStock],
+    visited: set[int],
+) -> None:
+    """Deduct raw ingredients for a subreceta with no stock of its own (e.g. Masa Madre).
+
+    Recurses through nested subreceta lines the same way, stopping at any
+    subreceta that DOES have its own stock (already handled elsewhere).
+    """
+    if receta_id in visited:
+        return
+    visited.add(receta_id)
+
+    receta = db.query(Receta).filter(Receta.id == receta_id).first()
+    if not receta or not receta.porciones_por_lote:
+        return
+
+    rendimiento_unidad = receta.unidad_rendimiento or unidad_necesaria
+    cantidad_en_rendimiento = convertir(cantidad_necesaria, unidad_necesaria, rendimiento_unidad)
+    lotes = cantidad_en_rendimiento / receta.porciones_por_lote
+
+    lineas = db.query(LineaReceta).filter(LineaReceta.receta_id == receta.id).all()
+    for linea in lineas:
+        if linea.ingrediente_id:
+            consumo = linea.cantidad * lotes
+            mov = deducir_materia_prima(
+                db, linea.ingrediente_id, consumo, linea.unidad, referencia, user_id, fecha=fecha
+            )
+            if mov:
+                movimientos.append(mov)
+        elif linea.subreceta_id and not _tiene_stock_propio(db, linea.subreceta_id):
+            consumo = linea.cantidad * lotes
+            _consumir_ingredientes_subreceta(
+                db, linea.subreceta_id, consumo, linea.unidad, referencia, user_id, fecha,
+                movimientos, visited,
+            )
+
+
 def producir_producto(
     db: Session,
     producto_congelado_id: int,
@@ -212,6 +276,12 @@ def producir_producto(
                     )
                     if mov:
                         movimientos.append(mov)
+                elif linea.subreceta_id and not _tiene_stock_propio(db, linea.subreceta_id):
+                    consumo = linea.cantidad * lotes
+                    _consumir_ingredientes_subreceta(
+                        db, linea.subreceta_id, consumo, linea.unidad, referencia, user_id, fecha,
+                        movimientos, visited={receta.id},
+                    )
 
     # 2. Consume from parent product's StockCongelado
     if prod.producto_padre_id and prod.cantidad_por_padre:
