@@ -78,6 +78,7 @@ def deducir_materia_prima(
     referencia: str,
     user_id: Optional[int] = None,
     fecha: Optional[date] = None,
+    origen_subreceta: Optional[str] = None,
 ) -> MovimientoStock:
     ing = db.query(Ingrediente).filter(Ingrediente.id == ingrediente_id).first()
     if not ing:
@@ -105,12 +106,18 @@ def deducir_materia_prima(
     # subreceta that also uses it) would read the pre-consumption balance.
     db.flush()
 
-    notas = None
+    # Both lines share the same referencia_origen (revertir_consumos matches on it
+    # exactly, so splitting it would break edit/delete reversal). The subreceta tag
+    # rides in `notas` instead, parsed by nombre_origen_movimiento() for display, so
+    # "Consumido para Masa Pan Blanco" and "Consumido para Masa Madre" show as two
+    # separate movements even though both belong to the same production event.
+    notas = f"subreceta:{origen_subreceta}" if origen_subreceta else None
     if faltante > 1e-9:
-        notas = (
+        aviso = (
             f"Stock insuficiente: la receta pedia {consumo:.3f} {ing.unidad_uso}, "
             f"habia {saldo_actual:.3f}. Faltante: {faltante:.3f}."
         )
+        notas = f"{notas} | {aviso}" if notas else aviso
 
     return registrar_movimiento(
         db, "materia_prima", ingrediente_id, -consumo_real, ing.unidad_uso,
@@ -222,7 +229,8 @@ def _consumir_ingredientes_subreceta(
         if linea.ingrediente_id:
             consumo = linea.cantidad * lotes
             mov = deducir_materia_prima(
-                db, linea.ingrediente_id, consumo, linea.unidad, referencia, user_id, fecha=fecha
+                db, linea.ingrediente_id, consumo, linea.unidad, referencia, user_id, fecha=fecha,
+                origen_subreceta=receta.nombre,
             )
             if mov:
                 movimientos.append(mov)

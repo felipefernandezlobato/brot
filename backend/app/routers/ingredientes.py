@@ -24,7 +24,7 @@ from app.schemas import (
     IngredienteUpdate,
 )
 from app.services.costes import costo_por_unidad_uso
-from app.services.produccion_registro import describir_referencia
+from app.services.produccion_registro import nombre_origen_movimiento
 
 router = APIRouter(prefix="/api/ingredientes", tags=["ingredientes"])
 
@@ -277,7 +277,7 @@ def get_movimientos_ingrediente(
             "unidad": m.unidad,
             "fecha": m.fecha,
             "referencia_origen": m.referencia_origen,
-            "nombre_origen": describir_referencia(db, m.referencia_origen),
+            "nombre_origen": nombre_origen_movimiento(db, m),
             "saldo_despues": m.saldo_despues,
         }
         for m in movs

@@ -470,6 +470,30 @@ def test_subreceta_sin_stock_descuenta_sus_ingredientes(client, db):
     assert _saldo(db, ing_agua.id) == pytest.approx(50.0 - 0.6)
 
 
+def test_subreceta_sin_stock_queda_en_movimiento_separado(client, db):
+    """La harina consumida via Masa Madre debe verse como 'Masa Madre', no
+    mezclada bajo el nombre de la receta que la usa (Masa Pan Blanco)."""
+    from app.models import MovimientoStock
+    from app.services.produccion_registro import nombre_origen_movimiento
+
+    headers = _auth(client, db)
+    ing_harina = _harina(db, stock_kg=100.0)
+    ing_agua = _agua(db, stock_litros=50.0)
+    _masa_con_subreceta_sin_stock(db, ing_harina, ing_agua)
+    tarea = db.query(TareaProduccion).first()
+
+    _guardar(client, headers, tarea.id, 1)
+
+    movs = (
+        db.query(MovimientoStock)
+        .filter(MovimientoStock.tipo_stock == "materia_prima",
+                MovimientoStock.referencia_producto_id == ing_harina.id)
+        .all()
+    )
+    nombres = sorted(nombre_origen_movimiento(db, m) for m in movs)
+    assert nombres == ["Masa Madre", "Masa Pan Blanco"]
+
+
 def test_subreceta_con_stock_propio_no_descuenta_de_nuevo(client, db):
     """Baston ya tiene su propio ProductoCongelado: producir el terminado no debe
     volver a tocar la harina de la masa que ya se descontó al hacer el baston."""

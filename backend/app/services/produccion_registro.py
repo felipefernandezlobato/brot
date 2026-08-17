@@ -111,6 +111,20 @@ def describir_referencia(db: Session, referencia_origen: Optional[str]) -> Optio
     return None
 
 
+def nombre_origen_movimiento(db: Session, m: MovimientoStock) -> Optional[str]:
+    """Display label for one movement: its own subreceta tag if it has one,
+    otherwise the production's recipe/product name.
+
+    A stockless subreceta (e.g. Masa Madre) resolves to its own ingredients at
+    the moment it's used inline, so its consumption movements are tagged with
+    the subreceta's own name -- see deducir_materia_prima() -- instead of
+    inheriting the parent recipe's name from referencia_origen.
+    """
+    if m.notas and m.notas.startswith("subreceta:"):
+        return m.notas[len("subreceta:"):].split(" | ", 1)[0].strip()
+    return describir_referencia(db, m.referencia_origen)
+
+
 def resolver_producto_congelado(db: Session, reg: RegistroProduccion) -> Optional[int]:
     """Which frozen product this record produces, if any."""
     if reg.producto_congelado_id:
