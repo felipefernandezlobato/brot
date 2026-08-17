@@ -9,7 +9,7 @@ from app.models import Ingrediente, LineaReceta, MovimientoStock, ProductoCongel
 from app.permissions import require_permission
 from app.schemas import RecetaCreate, RecetaOut, RecetaUpdate, LineaRecetaOut
 from app.services.costes import costo_linea, costo_receta
-from app.services.produccion_registro import describir_referencia
+from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
 
 router = APIRouter(prefix="/api/recetas", tags=["recetas"])
 
@@ -166,7 +166,11 @@ def get_receta_completo(
                 "saldo_despues": m.saldo_despues,
             }
             for m in db.query(MovimientoStock)
-            .filter(MovimientoStock.tipo_stock == "congelado", MovimientoStock.referencia_producto_id == prod.id)
+            .filter(
+                MovimientoStock.tipo_stock == "congelado",
+                MovimientoStock.referencia_producto_id == prod.id,
+                movimiento_no_revertido(),
+            )
             .order_by(MovimientoStock.id.desc())
             .limit(20)
             .all()

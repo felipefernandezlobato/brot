@@ -15,6 +15,7 @@ audit trail survives, and the live tag is freed for the next apply.
 from datetime import date
 from typing import Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -32,6 +33,23 @@ from app.services.stock import (
 )
 
 EPSILON = 1e-9
+
+
+def movimiento_no_revertido():
+    """SQLAlchemy filter clause: excludes movements superseded by a reversal.
+
+    A reversed movement and its compensating give-back BOTH end up tagged
+    `{referencia}:rev` (see the module docstring above) -- e.g. editing "1.5"
+    down to a corrected value leaves "+1.5 Producido" / "-1.5 Producido" sitting
+    in the ledger forever, net zero but nonsensical to read in an activity list
+    ("-13.5 Producido"?). Recent-activity displays should use this; sums used
+    for reconciliation are fine either way since a reversed pair always nets
+    to zero.
+    """
+    return or_(
+        MovimientoStock.referencia_origen.is_(None),
+        ~MovimientoStock.referencia_origen.like("%:rev"),
+    )
 
 
 def referencia_de(reg: RegistroProduccion) -> str:

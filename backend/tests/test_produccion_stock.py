@@ -196,6 +196,24 @@ def test_editar_sobrescribe_no_suma(client, db):
     assert _saldo(db, ing.id) == 76.0
 
 
+def test_movimientos_revertidos_no_aparecen_en_completo(client, db):
+    """Editar una produccion deja un par de reversion en la base (para el
+    ledger), pero no debe verse en 'Movimientos recientes' -- lee como ruido
+    sin sentido ("-13.5 Producido") aunque neto a cero."""
+    headers = _auth(client, db)
+    ing = _harina(db)
+    receta, prod, tarea = _masa(db, ing)
+
+    _guardar(client, headers, tarea.id, 1)
+    _guardar(client, headers, tarea.id, 2)  # edita -> dispara revertir + reaplicar
+
+    res = client.get(f"/api/recetas/{receta.id}/completo", headers=headers)
+    assert res.status_code == 200, res.text
+    referencias = [m["referencia_origen"] for m in res.json()["movimientos"]]
+    assert referencias  # algo quedo (la reaplicacion viva)
+    assert not any(r and r.endswith(":rev") for r in referencias)
+
+
 def test_editar_hacia_abajo_devuelve_stock(client, db):
     headers = _auth(client, db)
     ing = _harina(db)

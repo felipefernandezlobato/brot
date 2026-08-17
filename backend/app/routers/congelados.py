@@ -24,7 +24,7 @@ from app.schemas import (
     StockCongeladoOut,
     StockCongeladoUpdate,
 )
-from app.services.produccion_registro import describir_referencia
+from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
 
 router = APIRouter(prefix="/api/congelados", tags=["congelados"])
 
@@ -165,7 +165,11 @@ def get_producto_detalle(
             "saldo_despues": m.saldo_despues,
         }
         for m in db.query(MovimientoStock)
-        .filter(MovimientoStock.tipo_stock == "congelado", MovimientoStock.referencia_producto_id == prod_id)
+        .filter(
+            MovimientoStock.tipo_stock == "congelado",
+            MovimientoStock.referencia_producto_id == prod_id,
+            movimiento_no_revertido(),
+        )
         .order_by(MovimientoStock.id.desc())
         .limit(20)
         .all()

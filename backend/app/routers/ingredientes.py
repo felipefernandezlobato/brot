@@ -24,7 +24,7 @@ from app.schemas import (
     IngredienteUpdate,
 )
 from app.services.costes import costo_por_unidad_uso
-from app.services.produccion_registro import nombre_origen_movimiento
+from app.services.produccion_registro import movimiento_no_revertido, nombre_origen_movimiento
 
 router = APIRouter(prefix="/api/ingredientes", tags=["ingredientes"])
 
@@ -263,6 +263,7 @@ def get_movimientos_ingrediente(
         .filter(
             MovimientoStock.tipo_stock == "materia_prima",
             MovimientoStock.referencia_producto_id == ing_id,
+            movimiento_no_revertido(),
         )
         .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
         .limit(30)

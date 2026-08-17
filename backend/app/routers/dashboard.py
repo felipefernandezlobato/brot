@@ -25,6 +25,7 @@ from app.models import (
     User,
 )
 from app.services.conversiones import convertir
+from app.services.produccion_registro import movimiento_no_revertido
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -185,6 +186,7 @@ def flujo_completo(
         .filter(
             MovimientoStock.fecha >= fecha_desde,
             MovimientoStock.fecha <= fecha_hasta,
+            movimiento_no_revertido(),
         )
         .order_by(MovimientoStock.id.desc())
         .limit(50)
