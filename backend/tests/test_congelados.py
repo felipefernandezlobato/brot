@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 from app.auth import hash_pin
 from app.main import app
-from app.models import User
+from app.models import MovimientoStock, User
 from app.routers.congelados import router
 
 app.include_router(router)
@@ -243,3 +243,69 @@ def test_alertas_vencimiento_sin_fecha_no_aparece(client, db):
     res = client.get("/api/congelados/alertas-vencimiento", headers=_auth(token))
     assert res.status_code == 200
     assert len(res.json()) == 0
+
+
+# ── Calculado (ledger) tests ───────────────────────────────────────────────────
+
+def test_calculado_devuelve_saldo_acumulado_por_producto(client, db):
+    token = _admin_token(client, db)
+    prod = _create_producto(client, token)
+
+    db.add(MovimientoStock(
+        tipo_stock="congelado", referencia_producto_id=prod["id"], cantidad=1.5,
+        unidad="u", tipo_movimiento="produccion_salida", fecha=date(2026, 8, 14),
+    ))
+    db.add(MovimientoStock(
+        tipo_stock="congelado", referencia_producto_id=prod["id"], cantidad=-1.3333,
+        unidad="u", tipo_movimiento="produccion_consumo", fecha=date(2026, 8, 15),
+    ))
+    db.commit()
+
+    res = client.get("/api/congelados/calculado", headers=_auth(token))
+    assert res.status_code == 200
+    productos = {p["producto_congelado_id"]: p["historial"] for p in res.json()["productos"]}
+    assert productos[prod["id"]] == [
+        {"fecha": "2026-08-14", "cantidad": 1.5},
+        {"fecha": "2026-08-15", "cantidad": 0.17},
+    ]
+
+
+def test_calculado_sin_movimientos_no_aparece(client, db):
+    """A manually-counted-only product has no ledger entries -- absent from
+    the response, not a zero/error. The frontend falls back to raw-only."""
+    token = _admin_token(client, db)
+    prod = _create_producto(client, token)
+    client.post(
+        "/api/congelados",
+        json={"producto_congelado_id": prod["id"], "cantidad": 50},
+        headers=_auth(token),
+    )
+
+    res = client.get("/api/congelados/calculado", headers=_auth(token))
+    assert res.status_code == 200
+    ids = [p["producto_congelado_id"] for p in res.json()["productos"]]
+    assert prod["id"] not in ids
+
+
+def test_calculado_fecha_desde_conserva_saldo_de_apertura(client, db):
+    """Trimming to fecha_desde keeps the last point before it as an opening
+    balance, so a cell right at the start of the range still resolves."""
+    token = _admin_token(client, db)
+    prod = _create_producto(client, token)
+
+    for fecha, cantidad in [(date(2026, 8, 1), 10.0), (date(2026, 8, 10), -3.0), (date(2026, 8, 20), 2.0)]:
+        db.add(MovimientoStock(
+            tipo_stock="congelado", referencia_producto_id=prod["id"], cantidad=cantidad,
+            unidad="u", tipo_movimiento="produccion_salida", fecha=fecha,
+        ))
+    db.commit()
+
+    res = client.get(
+        "/api/congelados/calculado?fecha_desde=2026-08-15", headers=_auth(token)
+    )
+    assert res.status_code == 200
+    historial = next(p["historial"] for p in res.json()["productos"] if p["producto_congelado_id"] == prod["id"])
+    assert historial == [
+        {"fecha": "2026-08-10", "cantidad": 7.0},   # opening balance carried in
+        {"fecha": "2026-08-20", "cantidad": 9.0},
+    ]

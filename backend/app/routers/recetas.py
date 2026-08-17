@@ -10,6 +10,7 @@ from app.permissions import require_permission
 from app.schemas import RecetaCreate, RecetaOut, RecetaUpdate, LineaRecetaOut
 from app.services.costes import costo_linea, costo_receta
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
+from app.services.stock import historial_congelado_acumulado
 
 router = APIRouter(prefix="/api/recetas", tags=["recetas"])
 
@@ -126,30 +127,13 @@ def get_receta_completo(
     hijos = []
 
     if prod:
-        # Build cumulative stock history from MovimientoStock (shows both production AND consumption)
-        movs_for_chart = (
-            db.query(MovimientoStock)
-            .filter(
-                MovimientoStock.tipo_stock == "congelado",
-                MovimientoStock.referencia_producto_id == prod.id,
-            )
-            .order_by(MovimientoStock.fecha, MovimientoStock.id)
-            .all()
-        )
-        by_date: dict[str, float] = {}
-        for m in movs_for_chart:
-            key = str(m.fecha)
-            by_date[key] = by_date.get(key, 0) + m.cantidad
-        running = 0.0
-        stock_history_list = []
-        for fecha_str in sorted(by_date.keys()):
-            running += by_date[fecha_str]
-            stock_history_list.append({"fecha": fecha_str, "cantidad": round(running, 2)})
-        stock_history = stock_history_list
+        # Cumulative stock history from MovimientoStock (shows both production AND consumption)
+        stock_history = historial_congelado_acumulado(db, producto_ids=[prod.id]).get(prod.id, [])
 
-        # Stock actual: from movements if available, fallback to StockCongelado sum
-        if movs_for_chart:
-            stock_actual = round(sum(m.cantidad for m in movs_for_chart), 2)
+        # Stock actual: from movements if available (last point == sum of all
+        # movement cantidades), fallback to StockCongelado sum
+        if stock_history:
+            stock_actual = stock_history[-1]["cantidad"]
         else:
             stock_actual = (
                 db.query(func.coalesce(func.sum(StockCongelado.cantidad), 0))

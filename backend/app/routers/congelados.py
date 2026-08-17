@@ -25,6 +25,7 @@ from app.schemas import (
     StockCongeladoUpdate,
 )
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
+from app.services.stock import historial_congelado_acumulado
 
 router = APIRouter(prefix="/api/congelados", tags=["congelados"])
 
@@ -136,24 +137,7 @@ def get_producto_detalle(
     ) or 0
 
     # Cumulative stock history from MovimientoStock (shows both production AND consumption)
-    movs_for_chart = (
-        db.query(MovimientoStock)
-        .filter(
-            MovimientoStock.tipo_stock == "congelado",
-            MovimientoStock.referencia_producto_id == prod_id,
-        )
-        .order_by(MovimientoStock.fecha, MovimientoStock.id)
-        .all()
-    )
-    by_date: dict[str, float] = {}
-    for m in movs_for_chart:
-        key = str(m.fecha)
-        by_date[key] = by_date.get(key, 0) + m.cantidad
-    running = 0.0
-    stock_history = []
-    for fecha_str in sorted(by_date.keys()):
-        running += by_date[fecha_str]
-        stock_history.append({"fecha": fecha_str, "cantidad": round(running, 2)})
+    stock_history = historial_congelado_acumulado(db, producto_ids=[prod_id]).get(prod_id, [])
 
     # Recent movements
     movimientos = [
@@ -267,6 +251,38 @@ def list_stock_congelado(
     if fecha_hasta:
         q = q.filter(StockCongelado.fecha_entrada <= fecha_hasta)
     return [_stock_out(e) for e in q.order_by(StockCongelado.fecha_entrada.desc()).all()]
+
+
+@router.get("/calculado")
+def get_stock_calculado(
+    fecha_desde: date | None = Query(None),
+    fecha_hasta: date | None = Query(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Calculated (ledger) stock over time for every product with movements --
+    companion to GET /api/congelados (the manual/physical counts), for the
+    Historial pivot table's "physical vs calculated" comparison.
+
+    fecha_desde is NOT used to filter the underlying query: a running balance
+    is only correct when computed from full history up to fecha_hasta, so
+    trimming to fecha_desde would silently reset the baseline to zero at the
+    window edge. It's trimmed for the response instead, keeping the last
+    point before fecha_desde as an opening balance so a "nearest date <= X"
+    lookup on the frontend still works for dates right at the start of range.
+    """
+    historial = historial_congelado_acumulado(db, fecha_hasta=fecha_hasta)
+
+    productos_out = []
+    for pid, puntos in historial.items():
+        if fecha_desde:
+            corte = str(fecha_desde)
+            antes = [p for p in puntos if p["fecha"] < corte]
+            despues = [p for p in puntos if p["fecha"] >= corte]
+            puntos = ([antes[-1]] if antes else []) + despues
+        productos_out.append({"producto_congelado_id": pid, "historial": puntos})
+
+    return {"productos": productos_out}
 
 
 @router.post("", response_model=StockCongeladoOut, status_code=201)

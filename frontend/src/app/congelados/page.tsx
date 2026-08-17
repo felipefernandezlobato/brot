@@ -46,6 +46,16 @@ interface StockCongelado {
   is_active: boolean;
 }
 
+interface CalculadoPunto {
+  fecha: string;
+  cantidad: number;
+}
+
+interface CalculadoProducto {
+  producto_congelado_id: number;
+  historial: CalculadoPunto[];
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function diasHastaVencimiento(fecha: string | null): number | null {
@@ -62,6 +72,36 @@ function expiryBadge(dias: number | null): { text: string; cls: string } | null 
   if (dias === 0) return { text: "Vence hoy", cls: "bg-red-100 text-red-700" };
   if (dias <= 7) return { text: `${dias}d`, cls: "bg-amber-100 text-amber-700" };
   return null;
+}
+
+const DISCREPANCIA_TOLERANCIA = 0.5;
+
+/** Latest calculated point with fecha <= the given date (points are sorted ascending). */
+function valorCalculadoEnFecha(puntos: CalculadoPunto[] | undefined, fecha: string): number | null {
+  if (!puntos || puntos.length === 0) return null;
+  let result: number | null = null;
+  for (const p of puntos) {
+    if (p.fecha > fecha) break;
+    result = p.cantidad;
+  }
+  return result;
+}
+
+function formatCantidad(n: number): string {
+  return Number.isInteger(n) ? String(n) : (Math.round(n * 100) / 100).toString();
+}
+
+const NOTAS_AUTOMATICAS = ["Produccion:", "Ajuste por reversion", "Reversion de"];
+
+/** A StockCongelado row is a real physical count only if nothing wrote it
+ * automatically -- production output, FIFO shortfall adjustments, and
+ * reversal-rebuilt lots all carry a recognizable notas prefix. Comparing the
+ * calculated ledger value against one of THOSE (rather than an actual count)
+ * would flag a "discrepancy" between two numbers that came from the same
+ * production event in the first place. */
+function esConteoManual(notas: string | null): boolean {
+  if (!notas) return true;
+  return !NOTAS_AUTOMATICAS.some((p) => notas.startsWith(p));
 }
 
 // ── Tab navigation ───────────────────────────────────────────────────────────
@@ -715,6 +755,7 @@ function TabNuevaEntrada({
 function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
   const { toast } = useToast();
   const [entries, setEntries] = useState<StockCongelado[]>([]);
+  const [calculado, setCalculado] = useState<Map<number, CalculadoPunto[]>>(new Map());
   const [loading, setLoading] = useState(true);
 
   type Rango = "4sem" | "12sem" | "todo";
@@ -736,8 +777,14 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
     const params = new URLSearchParams();
     if (fechaDesde) params.set("fecha_desde", fechaDesde);
     if (fechaHasta) params.set("fecha_hasta", fechaHasta);
-    apiFetch<StockCongelado[]>(`/api/congelados?${params}`)
-      .then(setEntries)
+    Promise.all([
+      apiFetch<StockCongelado[]>(`/api/congelados?${params}`),
+      apiFetch<{ productos: CalculadoProducto[] }>(`/api/congelados/calculado?${params}`),
+    ])
+      .then(([e, c]) => {
+        setEntries(e);
+        setCalculado(new Map(c.productos.map((p) => [p.producto_congelado_id, p.historial])));
+      })
       .catch(() => toast("Error al cargar historial", "error"))
       .finally(() => setLoading(false));
   }, [fechaDesde, fechaHasta, toast]);
@@ -845,27 +892,42 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
     [selectedIds, productos]
   );
 
-  // Pivot table data
+  // Pivot table data. Only genuine manual counts feed the "raw" side (see
+  // esConteoManual) -- production-driven rows are already what `calculado`
+  // is built from, so a date/product can still show up here via `calculado`
+  // alone even with zero manual counts.
+  const conteosManuales = useMemo(() => entries.filter((e) => esConteoManual(e.notas)), [entries]);
+
   const allDates = useMemo(() => {
-    const dates = new Set(entries.map((e) => e.fecha_entrada));
+    const dates = new Set(conteosManuales.map((e) => e.fecha_entrada));
+    for (const puntos of calculado.values()) {
+      // The API carries in one out-of-range "opening balance" point per
+      // product (see get_stock_calculado's fecha_desde trimming) so cell
+      // lookups near the start of the range still resolve -- but it must
+      // not become a phantom column outside the selected range itself.
+      for (const p of puntos) {
+        if (p.fecha >= fechaDesde) dates.add(p.fecha);
+      }
+    }
     return Array.from(dates).sort((a, b) => b.localeCompare(a));
-  }, [entries]);
+  }, [conteosManuales, calculado, fechaDesde]);
 
   const allProductsWithData = useMemo(() => {
-    const ids = new Set(entries.map((e) => e.producto_congelado_id));
+    const ids = new Set(conteosManuales.map((e) => e.producto_congelado_id));
+    for (const pid of calculado.keys()) ids.add(pid);
     return productos.filter((p) => ids.has(p.id));
-  }, [entries, productos]);
+  }, [conteosManuales, calculado, productos]);
 
   // For congelados, aggregate quantities per (date, product) since there can be multiple entries
   const pivotData = useMemo(() => {
     const map = new Map<string, Map<number, number>>();
-    for (const e of entries) {
+    for (const e of conteosManuales) {
       if (!map.has(e.fecha_entrada)) map.set(e.fecha_entrada, new Map());
       const dateMap = map.get(e.fecha_entrada)!;
       dateMap.set(e.producto_congelado_id, (dateMap.get(e.producto_congelado_id) ?? 0) + e.cantidad);
     }
     return map;
-  }, [entries]);
+  }, [conteosManuales]);
 
   const shortDate = (d: string) => {
     const dt = new Date(d + "T00:00:00");
@@ -1047,18 +1109,29 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                       </td>
                       {allDates.map((d) => {
                         const val = pivotData.get(d)?.get(prod.id);
+                        const calc = valorCalculadoEnFecha(calculado.get(prod.id), d);
+                        const vacio = calc === null && val === undefined;
+                        const discrepa = calc !== null && val !== undefined && Math.abs(calc - val) > DISCREPANCIA_TOLERANCIA;
+                        const principal = calc !== null ? calc : val;
                         return (
                           <td
                             key={d}
+                            title={discrepa ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)}` : undefined}
                             className={`text-center px-2 py-1.5 tabular-nums ${
-                              val === undefined
+                              vacio
                                 ? "text-cream-dark"
-                                : val === 0
+                                : discrepa
+                                ? "text-red-600 font-semibold bg-red-50"
+                                : principal === 0
                                 ? "text-red-600 font-medium"
                                 : "text-text"
                             }`}
                           >
-                            {val !== undefined ? val : "--"}
+                            {vacio
+                              ? "--"
+                              : calc !== null
+                              ? <>{formatCantidad(calc)}{val !== undefined && <span className="text-warm-gray font-normal"> ({formatCantidad(val)})</span>}</>
+                              : formatCantidad(val!)}
                           </td>
                         );
                       })}
