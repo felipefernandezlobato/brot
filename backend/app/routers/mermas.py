@@ -10,7 +10,11 @@ from app.models import Ingrediente, MermaRegistro, ProductoCongelado, User
 from app.permissions import require_permission
 from app.schemas import MermaRegistroCreate, MermaRegistroOut, MermaRegistroUpdate
 from app.services.costes import costo_por_unidad_uso
-from app.services.stock import deducir_congelado_fifo, deducir_materia_prima
+from app.services.stock import (
+    deducir_congelado_fifo,
+    deducir_materia_prima,
+    revertir_consumos,
+)
 
 router = APIRouter(prefix="/api/mermas", tags=["mermas"])
 
@@ -148,22 +152,35 @@ def create_merma(
     db.add(merma)
     db.flush()
 
-    ref = f"merma:{merma.id}"
-    if data.ingrediente_id:
-        deducir_materia_prima(
-            db, data.ingrediente_id, data.cantidad,
-            ing.unidad_uso, ref, user.id,
-        )
-    elif data.receta_id:
-        prod_cong = db.query(ProductoCongelado).filter(
-            ProductoCongelado.receta_id == data.receta_id
-        ).first()
-        if prod_cong:
-            deducir_congelado_fifo(db, prod_cong.id, data.cantidad, ref, user.id)
+    _aplicar_stock_merma(db, merma, user.id)
 
     db.commit()
     db.refresh(merma)
     return merma
+
+
+def _ref_merma(merma: MermaRegistro) -> str:
+    return f"merma:{merma.id}"
+
+
+def _aplicar_stock_merma(db: Session, merma: MermaRegistro, user_id: int) -> None:
+    """Deduct what this waste record says was lost, dated to the record itself."""
+    ref = _ref_merma(merma)
+    if merma.ingrediente_id:
+        ing = db.get(Ingrediente, merma.ingrediente_id)
+        if ing:
+            deducir_materia_prima(
+                db, merma.ingrediente_id, merma.cantidad,
+                ing.unidad_uso, ref, user_id, fecha=merma.fecha,
+            )
+    elif merma.receta_id:
+        prod_cong = db.query(ProductoCongelado).filter(
+            ProductoCongelado.receta_id == merma.receta_id
+        ).first()
+        if prod_cong:
+            deducir_congelado_fifo(
+                db, prod_cong.id, merma.cantidad, ref, user_id, fecha=merma.fecha
+            )
 
 
 @router.put("/{merma_id}", response_model=MermaRegistroOut)
@@ -185,6 +202,11 @@ def update_merma(
             detail=f"Motivo inválido. Debe ser uno de: {', '.join(sorted(MOTIVOS_VALIDOS))}",
         )
 
+    # Anything that changes what was consumed means the old deduction is wrong.
+    afecta_stock = {"cantidad", "ingrediente_id", "receta_id", "fecha"} & updates.keys()
+    if afecta_stock:
+        revertir_consumos(db, _ref_merma(merma), user.id, fecha=merma.fecha)
+
     for key, val in updates.items():
         setattr(merma, key, val)
 
@@ -193,6 +215,9 @@ def update_merma(
     cpu_changed = "coste_unitario" in updates
     if cantidad_changed or cpu_changed:
         merma.coste_total = round(merma.coste_unitario * merma.cantidad, 4)
+
+    if afecta_stock:
+        _aplicar_stock_merma(db, merma, user.id)
 
     db.commit()
     db.refresh(merma)
@@ -208,6 +233,10 @@ def delete_merma(
     merma = db.get(MermaRegistro, merma_id)
     if not merma:
         raise HTTPException(status_code=404, detail="Merma no encontrada")
+
+    # The waste did not happen after all — put the stock back.
+    revertidos = revertir_consumos(db, _ref_merma(merma), user.id, fecha=merma.fecha)
+
     db.delete(merma)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "movimientos_revertidos": revertidos}

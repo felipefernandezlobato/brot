@@ -272,3 +272,93 @@ def deducir_congelado_por_catalogo(
         return None
 
     return deducir_congelado_fifo(db, prod_cong.id, cantidad, referencia, user_id, fecha=fecha)
+
+
+def revertir_consumos(
+    db: Session,
+    referencia: str,
+    user_id: Optional[int] = None,
+    fecha: Optional[date] = None,
+) -> int:
+    """Give back everything consumed under `referencia`. Returns movements reversed.
+
+    Used wherever a stock-consuming record can be deleted or edited: production,
+    mermas, B2B deliveries. Only handles consumption — production OUTPUT is
+    reversed by the caller that knows which lot it created.
+
+    The originals are kept and re-tagged to `{referencia}:rev` alongside a
+    compensating movement, so the ledger nets to zero (stock charts sum
+    MovimientoStock) and the live tag is freed for a re-apply.
+
+    Pass the record's own date, not today: get_saldo_materia_prima picks the
+    latest InventarioRegistro by (fecha_registro, id), so a today-dated give-back
+    would outrank a backdated re-apply and hide the corrected consumption.
+    """
+    movimientos = (
+        db.query(MovimientoStock)
+        .filter(MovimientoStock.referencia_origen == referencia)
+        .all()
+    )
+    if not movimientos:
+        return 0
+
+    rev_ref = f"{referencia}:rev"
+    f = fecha or date.today()
+    revertidos = 0
+
+    for mov in movimientos:
+        devuelto = -mov.cantidad  # consumption is stored negative
+        if devuelto <= 0:
+            continue  # not a consumption; caller deals with outputs
+
+        if mov.tipo_stock == "materia_prima":
+            saldo = get_saldo_materia_prima(db, mov.referencia_producto_id) + devuelto
+            db.add(InventarioRegistro(
+                ingrediente_id=mov.referencia_producto_id,
+                cantidad=saldo,
+                unidad=mov.unidad,
+                fecha_registro=f,
+                notas=f"Reversion de {referencia} (+{devuelto:.3f})",
+            ))
+        else:
+            _restaurar_lotes(db, mov, devuelto, f)
+            saldo = get_saldo_congelado(db, mov.referencia_producto_id)
+
+        # Same tipo_movimiento as what it cancels, so reports that bucket by type
+        # (dashboard reconciliation) net it out instead of ignoring it.
+        registrar_movimiento(
+            db, mov.tipo_stock, mov.referencia_producto_id, devuelto, mov.unidad,
+            mov.tipo_movimiento, rev_ref, saldo, user_id,
+            notas=f"Reversion de {referencia}", fecha=f,
+        )
+        mov.referencia_origen = rev_ref
+        revertidos += 1
+
+    db.flush()
+    return revertidos
+
+
+def _restaurar_lotes(db: Session, mov: MovimientoStock, devuelto: float, fecha: date) -> None:
+    """Put a FIFO consumption back on the exact lots it drew from."""
+    detalles = (
+        db.query(ConsumoFifoDetalle)
+        .filter(ConsumoFifoDetalle.movimiento_stock_id == mov.id)
+        .all()
+    )
+    if detalles:
+        for det in detalles:
+            lote = db.get(StockCongelado, det.stock_congelado_id)
+            if lote:
+                lote.cantidad += det.cantidad
+                if lote.cantidad > 1e-9:
+                    lote.is_active = True
+            db.delete(det)
+    else:
+        # Written before per-lot detail existed — a fresh lot is the best we can do.
+        db.add(StockCongelado(
+            producto_congelado_id=mov.referencia_producto_id,
+            cantidad=devuelto,
+            fecha_entrada=fecha,
+            is_active=True,
+            notas=f"Reversion de {mov.referencia_origen} (lote reconstruido)",
+        ))

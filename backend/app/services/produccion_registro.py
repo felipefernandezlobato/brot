@@ -18,8 +18,6 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models import (
-    ConsumoFifoDetalle,
-    InventarioRegistro,
     MovimientoStock,
     ProductoCongelado,
     Receta,
@@ -28,9 +26,9 @@ from app.models import (
 )
 from app.services.stock import (
     get_saldo_congelado,
-    get_saldo_materia_prima,
     producir_producto,
     registrar_movimiento,
+    revertir_consumos,
 )
 
 EPSILON = 1e-9
@@ -126,95 +124,24 @@ def revertir_efectos(db: Session, reg: RegistroProduccion, user_id: int) -> int:
     and re-applying 18 leaves 9 on hand even when the original 9 are already gone.
     """
     ref = referencia_de(reg)
-    movimientos = (
+    rev_ref = f"{ref}:rev"
+
+    # Reverse the production output first: revertir_consumos re-tags what it
+    # touches, so the output movement must be found while the live tag is intact.
+    salidas = (
         db.query(MovimientoStock)
-        .filter(MovimientoStock.referencia_origen == ref)
+        .filter(
+            MovimientoStock.referencia_origen == ref,
+            MovimientoStock.tipo_movimiento == "produccion_salida",
+        )
         .all()
     )
-    if not movimientos:
-        return 0
-
-    rev_ref = f"{ref}:rev"
-    # Date the reversal to the production it undoes, never to today. get_saldo_*
-    # picks the latest InventarioRegistro by (fecha_registro, id) — a today-dated
-    # give-back would outrank the same-transaction re-apply dated reg.fecha and the
-    # corrected consumption would become invisible. Same-dated, id order decides,
-    # and the re-apply wins because it is inserted second.
-    fecha_rev = reg.fecha
-
-    for mov in movimientos:
-        if mov.tipo_stock == "materia_prima":
-            _revertir_materia_prima(db, mov, ref, rev_ref, user_id, fecha_rev)
-        elif mov.tipo_movimiento == "produccion_consumo":
-            _revertir_consumo_congelado(db, mov, rev_ref, user_id, fecha_rev)
-        elif mov.tipo_movimiento == "produccion_salida":
-            _revertir_salida_congelado(db, reg, mov, rev_ref, user_id, fecha_rev)
-
-        # Keep the original for the audit trail but free the live tag, so the
-        # ledger nets to zero and the next apply starts clean.
+    for mov in salidas:
+        _revertir_salida_congelado(db, reg, mov, rev_ref, user_id, reg.fecha)
         mov.referencia_origen = rev_ref
 
-    # Push the re-tag out now: aplicar_efectos queries for the live tag straight
-    # after this, and the session may not autoflush.
-    db.flush()
-
-    return len(movimientos)
-
-
-def _revertir_materia_prima(db, mov, ref, rev_ref, user_id, fecha) -> None:
-    saldo_actual = get_saldo_materia_prima(db, mov.referencia_producto_id)
-    devuelto = -mov.cantidad  # stored negative, so this is positive
-    nuevo_saldo = saldo_actual + devuelto
-
-    db.add(InventarioRegistro(
-        ingrediente_id=mov.referencia_producto_id,
-        cantidad=nuevo_saldo,
-        unidad=mov.unidad,
-        fecha_registro=fecha,
-        notas=f"Reversion de {ref} (+{devuelto:.3f})",
-    ))
-    # Same tipo_movimiento as the consumption it cancels, so every report that
-    # buckets by tipo_movimiento (dashboard reconciliation) nets it out.
-    registrar_movimiento(
-        db, "materia_prima", mov.referencia_producto_id, devuelto, mov.unidad,
-        "produccion_consumo", rev_ref, nuevo_saldo, user_id,
-        notas="Reversion de produccion", fecha=fecha,
-    )
-
-
-def _revertir_consumo_congelado(db, mov, rev_ref, user_id, fecha) -> None:
-    detalles = (
-        db.query(ConsumoFifoDetalle)
-        .filter(ConsumoFifoDetalle.movimiento_stock_id == mov.id)
-        .all()
-    )
-    devuelto = -mov.cantidad
-
-    if detalles:
-        # Put each lot back exactly as it was, preserving fecha_entrada and FIFO order.
-        for det in detalles:
-            lote = db.get(StockCongelado, det.stock_congelado_id)
-            if lote:
-                lote.cantidad += det.cantidad
-                if lote.cantidad > EPSILON:
-                    lote.is_active = True
-            db.delete(det)
-    elif devuelto > EPSILON:
-        # Legacy movement with no per-lot detail — best we can do is a fresh lot.
-        db.add(StockCongelado(
-            producto_congelado_id=mov.referencia_producto_id,
-            cantidad=devuelto,
-            fecha_entrada=fecha,
-            is_active=True,
-            notas="Reversion de produccion (lote reconstruido)",
-        ))
-
-    saldo = get_saldo_congelado(db, mov.referencia_producto_id)
-    registrar_movimiento(
-        db, "congelado", mov.referencia_producto_id, devuelto, mov.unidad,
-        "produccion_consumo", rev_ref, saldo, user_id,
-        notas="Reversion de produccion", fecha=fecha,
-    )
+    # Dated to the production it undoes, never today — see revertir_consumos.
+    return len(salidas) + revertir_consumos(db, ref, user_id, fecha=reg.fecha)
 
 
 def _revertir_salida_congelado(db, reg, mov, rev_ref, user_id, fecha) -> None:

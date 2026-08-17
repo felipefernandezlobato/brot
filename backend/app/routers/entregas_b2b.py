@@ -8,8 +8,16 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import ClienteB2B, EntregaB2B, LineaEntregaB2B, PedidoCliente, ProductoCatalogo, User
-from app.services.stock import deducir_congelado_por_catalogo
+from app.models import (
+    ClienteB2B,
+    EntregaB2B,
+    LineaEntregaB2B,
+    MovimientoStock,
+    PedidoCliente,
+    ProductoCatalogo,
+    User,
+)
+from app.services.stock import deducir_congelado_por_catalogo, revertir_consumos
 from app.permissions import require_permission
 from app.schemas import (
     ClienteB2BCreate,
@@ -345,6 +353,13 @@ def update_entrega_b2b(
     updates = data.model_dump(exclude_unset=True)
     lineas_data = updates.pop("lineas", None)
 
+    # Editing the lines or the date of a delivered order invalidates what it took
+    # out of stock, so undo it and re-apply from the new values.
+    era_entregado = entrega.estado == "entregado"
+    recalcular = era_entregado and (lineas_data is not None or "fecha_entrega" in updates)
+    if recalcular:
+        _revertir_entrega(db, entrega, user.id)
+
     for key, val in updates.items():
         setattr(entrega, key, val)
 
@@ -360,10 +375,50 @@ def update_entrega_b2b(
                 precio_unitario=l.get("precio_unitario", 0),
             )
             db.add(linea)
+        db.flush()
+        db.refresh(entrega, ["lineas"])
+
+    if recalcular:
+        _aplicar_entrega(db, entrega, user.id)
 
     db.commit()
     db.refresh(entrega, ["lineas"])
     return _entrega_out(entrega)
+
+
+def _ref_entrega(db: Session, entrega: EntregaB2B) -> str:
+    cliente = db.query(ClienteB2B).filter(ClienteB2B.id == entrega.cliente_b2b_id).first()
+    return f"entrega_b2b:{entrega.id}:{cliente.nombre if cliente else ''}"
+
+
+def _revertir_entrega(db: Session, entrega: EntregaB2B, user_id: int) -> int:
+    """Give back the stock this delivery took out.
+
+    Looks the reference up by prefix rather than rebuilding it: the tag embeds the
+    client name at delivery time, so a client renamed since then would make a
+    recomputed tag miss its own movements.
+    """
+    stored = (
+        db.query(MovimientoStock.referencia_origen)
+        .filter(MovimientoStock.referencia_origen.like(f"entrega_b2b:{entrega.id}:%"))
+        .distinct()
+        .all()
+    )
+    total = 0
+    for (ref,) in stored:
+        if ref.endswith(":rev"):
+            continue
+        total += revertir_consumos(db, ref, user_id, fecha=entrega.fecha_entrega)
+    return total
+
+
+def _aplicar_entrega(db: Session, entrega: EntregaB2B, user_id: int) -> None:
+    ref = _ref_entrega(db, entrega)
+    for l in entrega.lineas:
+        deducir_congelado_por_catalogo(
+            db, l.producto_id, l.cantidad, ref, "entrega_b2b", user_id,
+            fecha=entrega.fecha_entrega,
+        )
 
 
 @router.put("/{entrega_id}/estado")
@@ -384,15 +439,10 @@ def update_estado_entrega_b2b(
     was_entregado = entrega.estado == "entregado"
     entrega.estado = body.estado
     if body.estado == "entregado" and not was_entregado:
-        cliente = db.query(ClienteB2B).filter(ClienteB2B.id == entrega.cliente_b2b_id).first()
-        cliente_nombre = cliente.nombre if cliente else ""
-        ref = f"entrega_b2b:{entrega.id}:{cliente_nombre}"
-        for l in entrega.lineas:
-            deducir_congelado_por_catalogo(
-                db, l.producto_id, l.cantidad,
-                ref, "entrega_b2b", user.id,
-                fecha=entrega.fecha_entrega,
-            )
+        _aplicar_entrega(db, entrega, user.id)
+    elif was_entregado and body.estado != "entregado":
+        # Moved back out of "entregado" — the goods did not leave after all.
+        _revertir_entrega(db, entrega, user.id)
     db.commit()
     db.refresh(entrega)
     return {"id": entrega.id, "estado": entrega.estado}
@@ -407,6 +457,9 @@ def delete_entrega_b2b(
     entrega = db.query(EntregaB2B).filter(EntregaB2B.id == entrega_id).first()
     if not entrega:
         raise HTTPException(status_code=404, detail="Entrega B2B no encontrada")
+
+    revertidos = _revertir_entrega(db, entrega, user.id)
+
     db.delete(entrega)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "movimientos_revertidos": revertidos}
