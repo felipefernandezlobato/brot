@@ -196,6 +196,29 @@ def _tiene_stock_propio(db: Session, receta_id: int) -> bool:
     )
 
 
+def _es_ancestro_congelado(db: Session, producto_id: int, candidato_id: int) -> bool:
+    """True if candidato_id is somewhere in producto_id's producto_padre_id chain.
+
+    The cost graph (lineas_receta.subreceta_id) and the physical stock chain
+    (producto_padre_id) don't always match level-for-level: a terminado's recipe
+    often references a baston directly for cost rollup, while its actual padre
+    is an intermediate crudo whose own padre is that same baston. Without this
+    check, producing the terminado would deduct the baston's stock a second time
+    on top of what producing the crudo already took.
+    """
+    visto = set()
+    actual = producto_id
+    while actual and actual not in visto:
+        visto.add(actual)
+        prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == actual).first()
+        if not prod or not prod.producto_padre_id:
+            return False
+        if prod.producto_padre_id == candidato_id:
+            return True
+        actual = prod.producto_padre_id
+    return False
+
+
 def _consumir_ingredientes_subreceta(
     db: Session,
     receta_id: int,
@@ -290,6 +313,19 @@ def producir_producto(
                         db, linea.subreceta_id, consumo, linea.unidad, referencia, user_id, fecha,
                         movimientos, visited={receta.id},
                     )
+                elif linea.subreceta_id and _tiene_stock_propio(db, linea.subreceta_id):
+                    sub_prod = (
+                        db.query(ProductoCongelado)
+                        .filter(ProductoCongelado.receta_id == linea.subreceta_id)
+                        .first()
+                    )
+                    if sub_prod and not _es_ancestro_congelado(db, prod.id, sub_prod.id):
+                        consumo = linea.cantidad * lotes
+                        mov = deducir_congelado_fifo(
+                            db, sub_prod.id, consumo, referencia, user_id, fecha=fecha
+                        )
+                        if mov:
+                            movimientos.append(mov)
 
     # 2. Consume from parent product's StockCongelado
     if prod.producto_padre_id and prod.cantidad_por_padre:

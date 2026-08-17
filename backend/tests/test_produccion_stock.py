@@ -537,6 +537,135 @@ def test_subreceta_con_stock_propio_no_descuenta_de_nuevo(client, db):
     assert _saldo(db, ing.id) == 100.0
 
 
+# ==============================================================
+# Subrecetas CON stock propio que NO son el padre fisico (e.g. Manteca
+# Laminado dentro de un baston): deben descontarse. Pero un terminado cuya
+# receta referencia un baston para costeo, mientras su padre fisico real es
+# un "crudo" intermedio que a su vez desciende de ese baston, NO debe
+# volver a descontarlo -- ya se descuenta cuando se produce el crudo/baston.
+# ==============================================================
+
+
+def _baston_con_dos_insumos(db, ing_harina):
+    """Baston Croissant: 1u Masa de Croissant (padre fisico) + 1kg Manteca
+    Laminado (subreceta con stock propio, SIN relacion de padre/hijo)."""
+    cat = Categoria(nombre="Masas", tipo="receta")
+    db.add(cat)
+    db.flush()
+
+    r_masa = Receta(nombre="Masa de Croissant", categoria_id=cat.id, porciones_por_lote=9.0)
+    db.add(r_masa)
+    db.flush()
+    db.add(LineaReceta(receta_id=r_masa.id, ingrediente_id=ing_harina.id, cantidad=19500.0, unidad="g"))
+    masa_prod = ProductoCongelado(nombre="Masa de Croissant", categoria="masas", unidad="u",
+                                  receta_id=r_masa.id, nivel="masa")
+    db.add(masa_prod)
+    db.flush()
+
+    r_manteca = Receta(nombre="Manteca Laminado", categoria_id=cat.id, porciones_por_lote=20.0,
+                       es_subreceta=True, unidad_rendimiento="kg")
+    db.add(r_manteca)
+    db.flush()
+    db.add(LineaReceta(receta_id=r_manteca.id, ingrediente_id=ing_harina.id, cantidad=20000.0, unidad="g"))
+    manteca_prod = ProductoCongelado(nombre="Manteca Laminado", categoria="semis", unidad="kg",
+                                     receta_id=r_manteca.id, nivel="semi")
+    db.add(manteca_prod)
+    db.flush()
+    # 23kg ya producidos, como en el caso real.
+    db.add(StockCongelado(producto_congelado_id=manteca_prod.id, cantidad=23.0,
+                          fecha_entrada=date.today(), is_active=True))
+
+    r_bast = Receta(nombre="Baston Croissant", categoria_id=cat.id, porciones_por_lote=1.0, es_subreceta=True)
+    db.add(r_bast)
+    db.flush()
+    db.add(LineaReceta(receta_id=r_bast.id, subreceta_id=r_masa.id, cantidad=1.0, unidad="u"))
+    db.add(LineaReceta(receta_id=r_bast.id, subreceta_id=r_manteca.id, cantidad=1.0, unidad="kg"))
+
+    # cantidad_por_padre=1.0: masa_prod's stock is tracked in baston-equivalent
+    # units here (mirrors _cadena() above), not whole recipe batches.
+    baston_prod = ProductoCongelado(nombre="Baston Croissant", categoria="semis", unidad="u",
+                                    receta_id=r_bast.id, nivel="semi",
+                                    producto_padre_id=masa_prod.id, cantidad_por_padre=1.0)
+    db.add(baston_prod)
+    db.flush()
+    db.add(StockCongelado(producto_congelado_id=masa_prod.id, cantidad=9.0,
+                          fecha_entrada=date.today(), is_active=True))
+
+    tarea = TareaProduccion(
+        dia_semana=1, hora="09:00", titulo="Laminar Croissant",
+        cantidad_planificada=9.0, unidad_cantidad="bastones",
+        receta_id=r_bast.id, producto_congelado_id=baston_prod.id, tipo="produccion",
+    )
+    db.add(tarea)
+    db.commit()
+    return masa_prod, manteca_prod, baston_prod, tarea
+
+
+def test_subreceta_con_stock_propio_ajena_al_padre_se_descuenta(client, db):
+    """Manteca Laminado no es el padre fisico del baston (la Masa lo es) --
+    debe descontarse igual, porque es un insumo real distinto."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    masa_prod, manteca_prod, baston_prod, tarea = _baston_con_dos_insumos(db, ing)
+
+    _guardar(client, headers, tarea.id, 9)  # 9 bastones
+
+    assert _stock_congelado(db, manteca_prod.id) == 23.0 - 9.0
+    assert _stock_congelado(db, masa_prod.id) == 0.0  # via producto_padre_id, como antes
+
+
+def test_terminado_no_duplica_consumo_del_baston_via_crudo_intermedio(client, db):
+    """Croissant (terminado) referencia Baston Croissant en su receta (para el
+    costeo), pero su padre fisico real es Croissant Crudo, que a su vez
+    desciende de Baston Croissant. Producir el terminado no debe volver a
+    descontar el baston -- ya se descuenta al producir el crudo."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    _, _, baston_prod, tarea_bast = _baston_con_dos_insumos(db, ing)
+    cat = baston_prod.receta.categoria_id
+
+    r_crudo = Receta(nombre="Croissant Crudo", categoria_id=cat, porciones_por_lote=38.0)
+    db.add(r_crudo)
+    db.flush()
+    crudo_prod = ProductoCongelado(nombre="Croissant Crudo", categoria="crudos", unidad="u",
+                                   receta_id=r_crudo.id, nivel="crudo",
+                                   producto_padre_id=baston_prod.id, cantidad_por_padre=5.0)
+    db.add(crudo_prod)
+    db.flush()
+    db.add(StockCongelado(producto_congelado_id=crudo_prod.id, cantidad=190.0,
+                          fecha_entrada=date.today(), is_active=True))
+
+    r_term = Receta(nombre="Croissant", categoria_id=cat, porciones_por_lote=1.0)
+    db.add(r_term)
+    db.flush()
+    db.add(LineaReceta(receta_id=r_term.id, subreceta_id=baston_prod.receta_id, cantidad=1.0, unidad="u"))
+
+    term_prod = ProductoCongelado(nombre="Croissant", categoria="terminados", unidad="u",
+                                  receta_id=r_term.id, nivel="terminado",
+                                  producto_padre_id=crudo_prod.id, cantidad_por_padre=1.0)
+    db.add(term_prod)
+    db.flush()
+
+    tarea_term = TareaProduccion(
+        dia_semana=1, hora="10:00", titulo="Cocinar Croissant",
+        cantidad_planificada=190.0, unidad_cantidad="u",
+        receta_id=r_term.id, producto_congelado_id=term_prod.id, tipo="produccion",
+    )
+    db.add(tarea_term)
+    db.commit()
+
+    _guardar(client, headers, tarea_bast.id, 9)  # produce bastones -> ya descuenta Masa y Manteca
+    stock_baston_tras_laminar = _stock_congelado(db, baston_prod.id)
+    assert stock_baston_tras_laminar == 9.0
+
+    _guardar(client, headers, tarea_term.id, 190)  # cocinar los 190 croissants
+
+    # El baston solo se toco via el crudo (5 bastones para 190 crudos ya
+    # estaban reservados en crudo_prod), NO otra vez por la linea de costeo
+    # del terminado.
+    assert _stock_congelado(db, baston_prod.id) == stock_baston_tras_laminar
+
+
 def test_tarea_sin_producto_se_completa_sin_cantidad(client, db):
     headers = _auth(client, db)
     tarea = TareaProduccion(
