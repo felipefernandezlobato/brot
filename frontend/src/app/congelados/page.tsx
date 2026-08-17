@@ -851,19 +851,48 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
     setExpandedCategory(null);
   };
 
+  // Only genuine manual counts feed the chart/pivot's "raw" side (see
+  // esConteoManual) -- production-driven rows are already what `calculado`
+  // is built from, so a date/product can still show up via `calculado`
+  // alone even with zero manual counts.
+  const conteosManuales = useMemo(() => entries.filter((e) => esConteoManual(e.notas)), [entries]);
+
   const chartData = useMemo(() => {
     if (selectedIds.size === 0) return [];
-    const byDate = new Map<string, Record<string, number>>();
-    for (const e of entries) {
-      if (!selectedIds.has(e.producto_congelado_id)) continue;
-      if (!byDate.has(e.fecha_entrada)) byDate.set(e.fecha_entrada, {});
-      const row = byDate.get(e.fecha_entrada)!;
-      const name = e.producto_nombre;
-      row[name] = (row[name] ?? 0) + e.cantidad;
+
+    // A raw manual count only exists on the exact day someone counted --
+    // most products have just one, which Recharts can only draw as a lone
+    // dot (a line needs 2+ points). The calculated ledger balance is a real
+    // day-by-day trend wherever it exists (production, deliveries, mermas),
+    // so prefer it per date and only fall back to the raw count where there's
+    // no ledger activity at all for that product.
+    const dates = new Set<string>();
+    for (const id of selectedIds) {
+      for (const p of calculado.get(id) ?? []) dates.add(p.fecha);
     }
-    const sorted = Array.from(byDate.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([fecha, values]) => ({ fecha, ...values }));
+    for (const e of conteosManuales) {
+      if (selectedIds.has(e.producto_congelado_id)) dates.add(e.fecha_entrada);
+    }
+
+    const rawByDate = new Map<string, Map<number, number>>();
+    for (const e of conteosManuales) {
+      if (!rawByDate.has(e.fecha_entrada)) rawByDate.set(e.fecha_entrada, new Map());
+      rawByDate.get(e.fecha_entrada)!.set(e.producto_congelado_id, e.cantidad);
+    }
+
+    const sorted = Array.from(dates)
+      .sort()
+      .map((fecha) => {
+        const row: Record<string, number> = {};
+        for (const id of selectedIds) {
+          const name = productos.find((p) => p.id === id)?.nombre ?? `#${id}`;
+          const calc = valorCalculadoEnFecha(calculado.get(id), fecha);
+          const raw = rawByDate.get(fecha)?.get(id);
+          const val = calc !== null ? calc : raw;
+          if (val !== undefined) row[name] = val;
+        }
+        return { fecha, ...row };
+      });
 
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1];
@@ -882,7 +911,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
     }
 
     return sorted;
-  }, [entries, selectedIds]);
+  }, [calculado, conteosManuales, selectedIds, productos]);
 
   const chartNames = useMemo(
     () =>
@@ -891,12 +920,6 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
         .sort(),
     [selectedIds, productos]
   );
-
-  // Pivot table data. Only genuine manual counts feed the "raw" side (see
-  // esConteoManual) -- production-driven rows are already what `calculado`
-  // is built from, so a date/product can still show up here via `calculado`
-  // alone even with zero manual counts.
-  const conteosManuales = useMemo(() => entries.filter((e) => esConteoManual(e.notas)), [entries]);
 
   const allDates = useMemo(() => {
     const dates = new Set(conteosManuales.map((e) => e.fecha_entrada));
