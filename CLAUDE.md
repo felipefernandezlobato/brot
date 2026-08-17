@@ -328,6 +328,7 @@ Most subrecetas (bastones, Masa Croissant/Medialuna/Hojaldre) have their own `Pr
 - `producir_producto()` only auto-deducts direct `ingrediente_id` lines by default. For a `subreceta_id` line, it checks `_tiene_stock_propio()` (does a `ProductoCongelado` reference that sub-recipe?) — if not, it recurses into that sub-recipe's own lines via `_consumir_ingredientes_subreceta()` and deducts the real ingredients right then. If the subreceta DOES have its own stock, the line is left alone (already handled by the parent-stock path) to avoid double-consuming.
 - Gotcha: `SessionLocal` is `autoflush=False`. Deducting the same ingredient twice within one production (direct line + via a stockless subreceta) needs an explicit `db.flush()` after each `InventarioRegistro` write in `deducir_materia_prima()`, or the second deduction reads a stale balance.
 - Masa Madre: Receta id=38, `es_subreceta=True`, `porciones_por_lote=1`, `unidad_rendimiento="kg"` = 0.5kg Harina 00 Pizza + 0.5L Agua. Used by Masa Pan Blanco/Negro, Amasar Focaccia, Barra Blanca/Integral 350g.
+- Movement labeling: ingredients consumed via a stockless subreceta get their own movement labeled with the SUBRECETA's name, not the parent recipe's — see Movement Descriptions below.
 
 ### Recipe Cost Chain (3 levels)
 Cost flows through: Masa (ingredients) → Baston (sub-recipe = masa) → Terminado (sub-recipe = baston).
@@ -338,11 +339,13 @@ Cost flows through: Masa (ingredients) → Baston (sub-recipe = masa) → Termin
 - Barras (Blanca/Integral) have direct ingredient lines plus one subreceta line (Masa Madre).
 
 ### Movement Descriptions
-All movement tables show context via `referencia_origen`:
+All movement tables show context via `referencia_origen`, resolved by `describir_referencia()` (`services/produccion_registro.py`):
 - `produccion_consumo` → "Consumido para Masa Croissant"
 - `produccion_salida` → "Producido" (no "para X")
 - `entrega_b2b` → "Entrega B2B Creme" (client name from ref format `entrega_b2b:{id}:{name}`)
 Ingredient detail pages have movements via `GET /api/ingredientes/{id}/movimientos`.
+
+Ingredients consumed via a stockless subreceta (Masa Madre) need a DIFFERENT label than the parent recipe, but must keep the SAME `referencia_origen` as the rest of that production event — `revertir_consumos()` matches on it exactly, so splitting it would break edit/delete reversal. The subreceta's name rides in `MovimientoStock.notas` instead (`"subreceta:{nombre}"`, set via `deducir_materia_prima(..., origen_subreceta=...)`), and `nombre_origen_movimiento()` (not `describir_referencia()`) reads that tag first before falling back to the recipe name. `GET /api/ingredientes/{id}/movimientos` uses `nombre_origen_movimiento()`; the congelado-facing endpoints (recetas.py, congelados.py) still use `describir_referencia()` directly since `tipo_stock="congelado"` movements never carry this tag.
 
 ### Unified Product Pages
 - `/escandallos/[id]` — single page with recipe + costs + stock + chart + chain + movements
