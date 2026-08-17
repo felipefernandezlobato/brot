@@ -121,14 +121,19 @@ def main(apply: bool) -> None:
         else:
             print("6) CREAR tareas: Viernes 'Amasar Focaccia' (u receta), Sabado 'Cocinar Focaccia' (bandejas)")
             if apply:
+                # cantidad_planificada is required, not just a hint: the day
+                # view only renders the quantity input when it's set
+                # (frontend/src/app/produccion/page.tsx checks
+                # `tarea.cantidad_planificada !== null`) -- a task with no
+                # planned quantity has nowhere to type an actual one.
                 db.add(TareaProduccion(
                     dia_semana=VIERNES, hora="08:00", titulo="Amasar Focaccia",
-                    unidad_cantidad="u receta", receta_id=amasar.id,
+                    cantidad_planificada=1.0, unidad_cantidad="u receta", receta_id=amasar.id,
                     producto_congelado_id=masa_prod.id, tipo="produccion",
                 ))
                 db.add(TareaProduccion(
                     dia_semana=SABADO, hora="08:00", titulo="Cocinar Focaccia",
-                    unidad_cantidad="bandejas", receta_id=cocinar.id,
+                    cantidad_planificada=3.0, unidad_cantidad="bandejas", receta_id=cocinar.id,
                     producto_congelado_id=term_prod.id, tipo="produccion",
                 ))
 
