@@ -323,13 +323,19 @@ Stock service: `services/stock.py` → `producir_producto()`.
 Calendar tasks have `producto_congelado_id` and `necesita_bastones` for correct stock handling.
 Stock effects ONLY via `/produccion/producir` (removed old `_aplicar_efectos_stock`).
 
+### Subrecetas without their own stock (e.g. Masa Madre)
+Most subrecetas (bastones, Masa Croissant/Medialuna/Hojaldre) have their own `ProductoCongelado` and are produced/stocked separately — their ingredients are deducted once, when THEY are produced, and the parent-chain consumption above just draws down that existing stock. Masa Madre is different: it's never produced/stocked on its own (no `ProductoCongelado` points at its `Receta`), it's fed daily and used inline wherever a recipe calls for it.
+- `producir_producto()` only auto-deducts direct `ingrediente_id` lines by default. For a `subreceta_id` line, it checks `_tiene_stock_propio()` (does a `ProductoCongelado` reference that sub-recipe?) — if not, it recurses into that sub-recipe's own lines via `_consumir_ingredientes_subreceta()` and deducts the real ingredients right then. If the subreceta DOES have its own stock, the line is left alone (already handled by the parent-stock path) to avoid double-consuming.
+- Gotcha: `SessionLocal` is `autoflush=False`. Deducting the same ingredient twice within one production (direct line + via a stockless subreceta) needs an explicit `db.flush()` after each `InventarioRegistro` write in `deducir_materia_prima()`, or the second deduction reads a stale balance.
+- Masa Madre: Receta id=38, `es_subreceta=True`, `porciones_por_lote=1`, `unidad_rendimiento="kg"` = 0.5kg Harina 00 Pizza + 0.5L Agua. Used by Masa Pan Blanco/Negro, Amasar Focaccia, Barra Blanca/Integral 350g.
+
 ### Recipe Cost Chain (3 levels)
 Cost flows through: Masa (ingredients) → Baston (sub-recipe = masa) → Terminado (sub-recipe = baston).
 - Bastones have their own recipes (id=29,30,31) with `porciones_por_lote=1` and `cantidad=1u` of masa.
 - Motor calculates: `BastonCost = MasaTotalCost / MasaPorciones * 1`.
 - Terminado recipes reference bastones (NOT masas directly).
 - Pan products share masa proportionally by weight (0.6154 for 1kg, 0.3846 for 0.5kg).
-- Barras (Blanca/Integral) have direct ingredient lines, no sub-recipes.
+- Barras (Blanca/Integral) have direct ingredient lines plus one subreceta line (Masa Madre).
 
 ### Movement Descriptions
 All movement tables show context via `referencia_origen`:
