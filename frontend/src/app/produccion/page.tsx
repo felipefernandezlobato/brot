@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
@@ -24,6 +24,23 @@ interface TareaDia {
   cantidad_real: number | null;
   duracion_real: number | null;
   notas: string | null;
+  bastones_consumidos: number | null;
+  porciones_por_lote: number | null;
+  ingrediente_principal: IngredientePrincipal | null;
+}
+
+interface IngredientePrincipal {
+  nombre: string;
+  cantidad_por_receta: number;
+  unidad: string;
+}
+
+/** What the operator is typing, before it's saved. */
+interface Draft {
+  cantidad: string;
+  duracion: string;
+  bastones: string;
+  notas: string;
 }
 
 interface ExtraDia {
@@ -91,9 +108,9 @@ export default function ProduccionHoy() {
   const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
   const [recetas, setRecetas] = useState<RecetaDropdown[]>([]);
   const [productosCongelados, setProductosCongelados] = useState<{id:number;nombre:string;nivel:string;necesita_bastones?:boolean}[]>([]);
-  const [bastonesMap, setBastonesMap] = useState<Record<number, string>>({});
+  const [drafts, setDrafts] = useState<Record<number, Draft>>({});
+  const [editando, setEditando] = useState<Set<number>>(new Set());
   const { toast } = useToast();
-  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const draftKey = `brot_produccion_dia_${fecha}`;
 
@@ -107,6 +124,15 @@ export default function ProduccionHoy() {
       ]);
       setData(d);
       setRecetas(recs);
+      // Restore any unsaved typing for this day — nothing is lost just because the
+      // tab closed before someone hit Guardar.
+      const saved = sessionStorage.getItem(`brot_produccion_dia_${fecha}`);
+      let restored: Record<number, Draft> = {};
+      if (saved) {
+        try { restored = JSON.parse(saved); } catch { /* corrupt draft, ignore */ }
+      }
+      setDrafts(restored);
+      setEditando(new Set());
       const prodMap = new Map(prods.map(p => [p.id, p]));
       setProductosCongelados(prods.filter((p: any) => p.is_active).map((p: any) => {
         const padre = p.producto_padre_id ? prodMap.get(p.producto_padre_id) : null;
@@ -126,6 +152,14 @@ export default function ProduccionHoy() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (Object.keys(drafts).length > 0) {
+      sessionStorage.setItem(draftKey, JSON.stringify(drafts));
+    } else {
+      sessionStorage.removeItem(draftKey);
+    }
+  }, [drafts, draftKey]);
+
   function changeDay(offset: number) {
     const d = new Date(fecha + "T12:00:00");
     d.setDate(d.getDate() + offset);
@@ -144,67 +178,146 @@ export default function ProduccionHoy() {
     window.history.replaceState(null, "", `/produccion?fecha=${today}`);
   }
 
-  async function saveRegistro(tarea: TareaDia, updates: Partial<TareaDia>) {
-    const merged = { ...tarea, ...updates };
-    const key = `save-${tarea.tarea_id}`;
-    if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
-
-    debounceTimers.current[key] = setTimeout(async () => {
-      setSaving(tarea.tarea_id);
-      try {
-        await apiFetch("/api/produccion/registro", {
-          method: "POST",
-          body: JSON.stringify({
-            tarea_id: tarea.tarea_id,
-            fecha,
-            completada: merged.completada,
-            cantidad_real: merged.cantidad_real,
-            duracion_real: merged.duracion_real,
-            notas: merged.notas,
-          }),
-        });
-      } catch {
-        toast("Error al guardar", "error");
-      } finally {
-        setSaving(null);
-      }
-    }, 500);
-
-    setData((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        tareas: prev.tareas.map((t) =>
-          t.tarea_id === tarea.tarea_id ? { ...t, ...updates } : t
-        ),
-      };
-    });
+  function num(s: string): number | null {
+    if (!s.trim()) return null;
+    const n = parseFloat(s.replace(",", "."));
+    return Number.isFinite(n) ? n : null;
   }
 
-  async function toggleComplete(tarea: TareaDia) {
-    const newVal = !tarea.completada;
-    await saveRegistro(tarea, { completada: newVal });
-
-    if (newVal && tarea.producto_congelado_id && tarea.cantidad_real) {
-      try {
-        const body: Record<string, unknown> = {
-          producto_id: tarea.producto_congelado_id,
-          cantidad_producida: tarea.cantidad_real,
-          fecha,
-        };
-        const bast = bastonesMap[tarea.tarea_id];
-        if (bast && parseFloat(bast) > 0) {
-          body.bastones_consumidos = parseFloat(bast);
-        }
-        await apiFetch("/api/produccion/producir", {
-          method: "POST",
-          body: JSON.stringify(body),
-        });
-        toast("Stock actualizado");
-      } catch {
-        toast("Error al actualizar stock", "error");
+  /** The draft being edited, falling back to whatever is already saved. */
+  function draftOf(tarea: TareaDia): Draft {
+    return (
+      drafts[tarea.tarea_id] ?? {
+        cantidad: tarea.cantidad_real != null ? String(tarea.cantidad_real) : "",
+        duracion: tarea.duracion_real != null ? String(tarea.duracion_real) : "",
+        bastones: tarea.bastones_consumidos != null ? String(tarea.bastones_consumidos) : "",
+        notas: tarea.notas ?? "",
       }
+    );
+  }
+
+  function setDraft(tarea: TareaDia, patch: Partial<Draft>) {
+    setDrafts((prev) => ({
+      ...prev,
+      [tarea.tarea_id]: { ...draftOf(tarea), ...patch },
+    }));
+  }
+
+  /** Saving is the only thing that moves stock — no quantity, no save. */
+  function puedeGuardar(tarea: TareaDia): boolean {
+    if (!tarea.producto_congelado_id) return true;
+    const c = num(draftOf(tarea).cantidad);
+    return c !== null && c > 0;
+  }
+
+  async function guardar(tarea: TareaDia, completada = true) {
+    if (completada && !puedeGuardar(tarea)) return;
+    const d = draftOf(tarea);
+    setSaving(tarea.tarea_id);
+    try {
+      const res = await apiFetch<{ movimientos: number }>("/api/produccion/registro", {
+        method: "POST",
+        body: JSON.stringify({
+          tarea_id: tarea.tarea_id,
+          fecha,
+          completada,
+          cantidad_real: num(d.cantidad),
+          duracion_real: d.duracion ? parseInt(d.duracion) : null,
+          notas: d.notas || null,
+          bastones_consumidos: num(d.bastones),
+        }),
+      });
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[tarea.tarea_id];
+        return next;
+      });
+      setEditando((prev) => {
+        const next = new Set(prev);
+        next.delete(tarea.tarea_id);
+        return next;
+      });
+      if (!completada) toast("Stock devuelto");
+      else if (res.movimientos > 0) toast(`Guardado · ${res.movimientos} movimientos de stock`);
+      else toast("Guardado");
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      toast(msg.includes("cantidad") ? "Ingresa la cantidad producida" : "Error al guardar", "error");
+    } finally {
+      setSaving(null);
     }
+  }
+
+  function fmt(n: number): string {
+    return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, "").replace(".", ",");
+  }
+
+  /** Recipe lines are in g/ml; show kg/L once the number gets unwieldy. */
+  function fmtCantidad(valor: number, unidad: string): string {
+    if (unidad === "g" && valor >= 1000) return `${fmt(valor / 1000)} kg`;
+    if (unidad === "ml" && valor >= 1000) return `${fmt(valor / 1000)} L`;
+    return `${fmt(valor)} ${unidad}`;
+  }
+
+  /** "2 recetas · 24 kg Harina 000" — what was saved and what it moved. */
+  function resumenGuardado(tarea: TareaDia): string {
+    const partes: string[] = [];
+    if (tarea.cantidad_real != null) {
+      partes.push(`${fmt(tarea.cantidad_real)} ${tarea.unidad_cantidad ?? ""}`.trim());
+    }
+    const ing = tarea.ingrediente_principal;
+    if (ing && tarea.cantidad_real != null) {
+      partes.push(
+        `${fmtCantidad(consumoPrincipal(tarea, tarea.cantidad_real), ing.unidad)} ${ing.nombre}`
+      );
+    }
+    if (tarea.bastones_consumidos != null) {
+      partes.push(`${fmt(tarea.bastones_consumidos)} bastones`);
+    }
+    if (tarea.duracion_real != null) partes.push(`${tarea.duracion_real} min`);
+    return partes.length ? partes.join(" · ") : "completada";
+  }
+
+  function consumoPrincipal(tarea: TareaDia, cantidad: number): number {
+    const ing = tarea.ingrediente_principal;
+    if (!ing) return 0;
+    // A task measured in "u receta" consumes whole recipes; anything else is
+    // already in portions, so scale by the batch yield.
+    const recetas =
+      tarea.unidad_cantidad === "u receta"
+        ? cantidad
+        : cantidad / (tarea.porciones_por_lote || 1);
+    return ing.cantidad_por_receta * recetas;
+  }
+
+  /** Shown while typing, so a wrong number is caught before it moves stock. */
+  function previewConsumo(tarea: TareaDia, cantidadStr: string): string | null {
+    const c = num(cantidadStr);
+    if (c === null || c <= 0 || !tarea.ingrediente_principal) return null;
+    const ing = tarea.ingrediente_principal;
+    const partes = [`${fmtCantidad(consumoPrincipal(tarea, c), ing.unidad)} ${ing.nombre}`];
+    if (tarea.unidad_cantidad === "u receta" && (tarea.porciones_por_lote || 1) > 1) {
+      partes.unshift(`${fmt(c * (tarea.porciones_por_lote || 1))} porciones`);
+    }
+    return `Va a descontar: ${partes.join(" · ")}`;
+  }
+
+  function editar(tarea: TareaDia) {
+    setEditando((prev) => new Set(prev).add(tarea.tarea_id));
+  }
+
+  function cancelarEdicion(tarea: TareaDia) {
+    setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[tarea.tarea_id];
+      return next;
+    });
+    setEditando((prev) => {
+      const next = new Set(prev);
+      next.delete(tarea.tarea_id);
+      return next;
+    });
   }
 
   async function submitExtra() {
@@ -212,11 +325,14 @@ export default function ProduccionHoy() {
     try {
       const body: Record<string, unknown> = {
         producto_id: parseInt(extraProductoId),
-        cantidad_producida: parseFloat(extraCantidad.replace(",", ".")),
+        cantidad_producida: num(extraCantidad),
         fecha,
+        duracion_real: extraDuracion ? parseInt(extraDuracion) : null,
+        notas: extraNotas || null,
       };
-      if (extraBastones && parseFloat(extraBastones) > 0) {
-        body.bastones_consumidos = parseFloat(extraBastones);
+      const bast = num(extraBastones);
+      if (bast !== null && bast > 0) {
+        body.bastones_consumidos = bast;
       }
       await apiFetch("/api/produccion/producir", {
         method: "POST",
@@ -357,32 +473,33 @@ export default function ProduccionHoy() {
               const dot = TIPO_DOT[tarea.tipo] || TIPO_DOT.produccion;
               const notesOpen = expandedNotes.has(tarea.tarea_id);
               const isSaving = saving === tarea.tarea_id;
+              const d = draftOf(tarea);
+              const enEdicion = editando.has(tarea.tarea_id);
+              const guardado = tarea.completada && !enEdicion;
+              const habilitado = puedeGuardar(tarea);
+
               return (
                 <div
                   key={tarea.tarea_id}
                   className={`bg-white rounded-xl border p-3 transition-all ${
-                    tarea.completada
-                      ? "border-green-200 bg-green-50/50"
-                      : "border-gray-200"
+                    guardado ? "border-green-200 bg-green-50/50" : "border-gray-200"
                   }`}
                 >
-                  {/* Row 1: checkbox + title + time */}
+                  {/* Row 1: status + title + time */}
                   <div className="flex items-start gap-3">
-                    <button
-                      onClick={() => toggleComplete(tarea)}
-                      className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
-                        tarea.completada
+                    <div
+                      className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 mt-0.5 ${
+                        guardado
                           ? "bg-[#004225] border-[#004225] text-white"
-                          : "border-gray-300 hover:border-[#004225]"
+                          : "border-gray-300"
                       }`}
-                      style={{ touchAction: "manipulation" }}
                     >
-                      {tarea.completada && (
+                      {guardado && (
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                           <path d="M3 7L6 10L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       )}
-                    </button>
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
@@ -391,18 +508,18 @@ export default function ProduccionHoy() {
                         </span>
                         {tarea.producto_congelado_id ? (
                           <Link href={`/congelados/${tarea.producto_congelado_id}`}
-                            className={`text-sm font-medium hover:text-brot hover:underline ${tarea.completada ? "text-gray-500 line-through" : "text-gray-900"}`}
+                            className={`text-sm font-medium hover:text-brot hover:underline ${guardado ? "text-gray-500" : "text-gray-900"}`}
                             onClick={(e) => e.stopPropagation()}>
                             {tarea.titulo}
                           </Link>
                         ) : (
-                          <span className={`text-sm font-medium ${tarea.completada ? "text-gray-500 line-through" : "text-gray-900"}`}>
+                          <span className={`text-sm font-medium ${guardado ? "text-gray-500" : "text-gray-900"}`}>
                             {tarea.titulo}
                           </span>
                         )}
                         {isSaving && <span className="text-[10px] text-gray-400">...</span>}
                       </div>
-                      {tarea.descripcion && (
+                      {tarea.descripcion && !guardado && (
                         <p className="text-xs text-gray-400 mt-0.5 whitespace-pre-line line-clamp-2 ml-4">
                           {tarea.descripcion}
                         </p>
@@ -410,81 +527,133 @@ export default function ProduccionHoy() {
                     </div>
                   </div>
 
-                  {/* Row 2: inputs */}
-                  <div className="flex items-center gap-2 mt-2 ml-10 flex-wrap">
-                    {/* Bastones input for tasks that consume bastones */}
-                    {tarea.necesita_bastones && (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          placeholder="1"
-                          value={bastonesMap[tarea.tarea_id] ?? ""}
-                          onChange={(e) => setBastonesMap((prev) => ({ ...prev, [tarea.tarea_id]: e.target.value }))}
-                          className="w-14 border border-blue-200 bg-blue-50/50 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 outline-none"
-                          style={{ minHeight: 36 }}
-                        />
-                        <span className="text-xs text-blue-500">bast.</span>
+                  {guardado ? (
+                    /* ---------- SAVED ---------- */
+                    <div className="flex items-center gap-2 mt-2 ml-10 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-green-800 font-medium">
+                          Guardado: {resumenGuardado(tarea)}
+                        </p>
+                        {tarea.notas && (
+                          <p className="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{tarea.notas}</p>
+                        )}
                       </div>
-                    )}
-                    {tarea.cantidad_planificada !== null && (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          placeholder={String(tarea.cantidad_planificada)}
-                          value={tarea.cantidad_real ?? ""}
-                          onChange={(e) => {
-                            const val = e.target.value ? parseFloat(e.target.value.replace(",", ".")) : null;
-                            saveRegistro(tarea, { cantidad_real: val });
-                          }}
-                          className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
-                          style={{ minHeight: 36 }}
-                        />
-                        <span className="text-xs text-gray-400">
-                          /{tarea.cantidad_planificada} {tarea.unidad_cantidad}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        placeholder={tarea.duracion_planificada ? String(tarea.duracion_planificada) : "-"}
-                        value={tarea.duracion_real ?? ""}
-                        onChange={(e) => {
-                          const val = e.target.value ? parseInt(e.target.value) : null;
-                          saveRegistro(tarea, { duracion_real: val });
-                        }}
-                        className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
-                        style={{ minHeight: 36 }}
-                      />
-                      <span className="text-xs text-gray-400">min</span>
+                      <button
+                        onClick={() => editar(tarea)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#004225] border border-[#004225]/30 hover:bg-[#004225]/5 transition-colors"
+                        style={{ touchAction: "manipulation", minHeight: 36 }}
+                      >
+                        Editar
+                      </button>
                     </div>
-                    <button
-                      onClick={() => toggleNotes(tarea.tarea_id)}
-                      className={`ml-auto px-2 py-1 rounded text-xs transition-colors ${
-                        tarea.notas
-                          ? "text-[#004225] bg-[#004225]/10"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                      style={{ touchAction: "manipulation", minHeight: 36 }}
-                    >
-                      {tarea.notas ? "Notas" : "+ Nota"}
-                    </button>
-                  </div>
+                  ) : (
+                    /* ---------- EDITING ---------- */
+                    <>
+                      <div className="flex items-center gap-2 mt-2 ml-10 flex-wrap">
+                        {tarea.necesita_bastones && (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              placeholder="1"
+                              value={d.bastones}
+                              onChange={(e) => setDraft(tarea, { bastones: e.target.value })}
+                              className="w-14 border border-blue-200 bg-blue-50/50 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 outline-none"
+                              style={{ minHeight: 36 }}
+                            />
+                            <span className="text-xs text-blue-500">bast.</span>
+                          </div>
+                        )}
+                        {tarea.cantidad_planificada !== null && (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              placeholder={String(tarea.cantidad_planificada)}
+                              value={d.cantidad}
+                              onChange={(e) => setDraft(tarea, { cantidad: e.target.value })}
+                              className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                              style={{ minHeight: 36 }}
+                            />
+                            <span className="text-xs text-gray-400">
+                              /{tarea.cantidad_planificada} {tarea.unidad_cantidad}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            placeholder={tarea.duracion_planificada ? String(tarea.duracion_planificada) : "-"}
+                            value={d.duracion}
+                            onChange={(e) => setDraft(tarea, { duracion: e.target.value })}
+                            className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                            style={{ minHeight: 36 }}
+                          />
+                          <span className="text-xs text-gray-400">min</span>
+                        </div>
+                        <button
+                          onClick={() => toggleNotes(tarea.tarea_id)}
+                          className={`ml-auto px-2 py-1 rounded text-xs transition-colors ${
+                            d.notas ? "text-[#004225] bg-[#004225]/10" : "text-gray-400 hover:text-gray-600"
+                          }`}
+                          style={{ touchAction: "manipulation", minHeight: 36 }}
+                        >
+                          {d.notas ? "Notas" : "+ Nota"}
+                        </button>
+                      </div>
 
-                  {/* Row 3: notes (expandable) */}
-                  {notesOpen && (
-                    <div className="mt-2 ml-10">
-                      <textarea
-                        value={tarea.notas || ""}
-                        onChange={(e) => saveRegistro(tarea, { notas: e.target.value || null })}
-                        placeholder="Agregar nota..."
-                        rows={2}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none resize-none"
-                      />
-                    </div>
+                      {notesOpen && (
+                        <div className="mt-2 ml-10">
+                          <textarea
+                            value={d.notas}
+                            onChange={(e) => setDraft(tarea, { notas: e.target.value })}
+                            placeholder="Agregar nota..."
+                            rows={2}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none resize-none"
+                          />
+                        </div>
+                      )}
+
+                      {/* What this will consume — visible before committing to it */}
+                      {previewConsumo(tarea, d.cantidad) && (
+                        <p className="text-xs text-gray-500 mt-1.5 ml-10">
+                          {previewConsumo(tarea, d.cantidad)}
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-2 mt-2 ml-10">
+                        <button
+                          onClick={() => guardar(tarea)}
+                          disabled={!habilitado || isSaving}
+                          className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[#004225] text-white hover:bg-[#00331C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ touchAction: "manipulation", minHeight: 36 }}
+                        >
+                          {isSaving ? "Guardando..." : "Guardar"}
+                        </button>
+                        {enEdicion && (
+                          <>
+                            <button
+                              onClick={() => cancelarEdicion(tarea)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                              style={{ touchAction: "manipulation", minHeight: 36 }}
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() => guardar(tarea, false)}
+                              className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                              style={{ touchAction: "manipulation", minHeight: 36 }}
+                            >
+                              Deshacer
+                            </button>
+                          </>
+                        )}
+                        {!habilitado && !enEdicion && (
+                          <span className="text-xs text-gray-400">Ingresa la cantidad</span>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               );

@@ -336,6 +336,8 @@ class RegistroProduccion(Base):
     titulo_extra: Mapped[Optional[str]] = mapped_column(sa.String(200), nullable=True)
     unidad_extra: Mapped[Optional[str]] = mapped_column(sa.String(20), nullable=True)
     receta_id: Mapped[Optional[int]] = mapped_column(ForeignKey("recetas.id"), nullable=True)
+    producto_congelado_id: Mapped[Optional[int]] = mapped_column(sa.Integer, nullable=True)
+    bastones_consumidos: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
     registrado_por: Mapped[int] = mapped_column(ForeignKey("users.id"))
     registrado_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
@@ -379,8 +381,32 @@ class StockCongelado(Base):
     ubicacion: Mapped[Optional[str]] = mapped_column(sa.String(50), nullable=True)
     notas: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
+    # Plain int, not an FK: deleting a registro must never be blocked by leftover
+    # lot rows, and revertir_efectos clears these pointers explicitly.
+    registro_produccion_id: Mapped[Optional[int]] = mapped_column(
+        sa.Integer, nullable=True, index=True
+    )
 
     producto: Mapped["ProductoCongelado"] = relationship()
+
+
+class ConsumoFifoDetalle(Base):
+    """Per-lot breakdown of a FIFO consumption.
+
+    deducir_congelado_fifo() mutates StockCongelado rows in place and only records
+    one aggregate MovimientoStock. This table remembers which lots were drawn and by
+    how much, so a reversal can restore each lot exactly instead of inventing a new
+    one (which would reset fecha_entrada and corrupt FIFO/expiry order).
+    """
+
+    __tablename__ = "consumo_fifo_detalle"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    movimiento_stock_id: Mapped[int] = mapped_column(
+        ForeignKey("movimientos_stock.id", ondelete="CASCADE"), index=True
+    )
+    stock_congelado_id: Mapped[int] = mapped_column(ForeignKey("stock_congelado.id"))
+    cantidad: Mapped[float] = mapped_column(sa.Float)
 
 
 # ============================================================

@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import (
+    ConsumoFifoDetalle,
     Ingrediente,
     InventarioRegistro,
     LineaReceta,
@@ -86,6 +87,12 @@ def deducir_materia_prima(
     saldo_actual = get_saldo_materia_prima(db, ingrediente_id)
     nuevo_saldo = max(0.0, saldo_actual - consumo)
 
+    # Record the movement the balance ACTUALLY moved, not the theoretical demand.
+    # When stock is insufficient the balance clamps at zero; storing the unclamped
+    # figure here would make a later reversal add back stock that never left.
+    consumo_real = saldo_actual - nuevo_saldo
+    faltante = consumo - consumo_real
+
     db.add(InventarioRegistro(
         ingrediente_id=ingrediente_id,
         cantidad=nuevo_saldo,
@@ -94,9 +101,16 @@ def deducir_materia_prima(
         notas=f"Consumo automatico: {referencia}",
     ))
 
+    notas = None
+    if faltante > 1e-9:
+        notas = (
+            f"Stock insuficiente: la receta pedia {consumo:.3f} {ing.unidad_uso}, "
+            f"habia {saldo_actual:.3f}. Faltante: {faltante:.3f}."
+        )
+
     return registrar_movimiento(
-        db, "materia_prima", ingrediente_id, -consumo, ing.unidad_uso,
-        "produccion_consumo", referencia, nuevo_saldo, user_id, fecha=fecha,
+        db, "materia_prima", ingrediente_id, -consumo_real, ing.unidad_uso,
+        "produccion_consumo", referencia, nuevo_saldo, user_id, notas=notas, fecha=fecha,
     )
 
 
@@ -120,97 +134,40 @@ def deducir_congelado_fifo(
         .all()
     )
 
+    # Remember which lots we drew from, so a reversal can put the quantity back
+    # on the same lots instead of creating a new one with today's date.
+    tomado: list[tuple[StockCongelado, float]] = []
+
     for entry in entries:
         if restante <= 0:
             break
         if entry.cantidad <= restante:
+            tomado.append((entry, entry.cantidad))
             restante -= entry.cantidad
             entry.cantidad = 0
             entry.is_active = False
         else:
+            tomado.append((entry, restante))
             entry.cantidad -= restante
             restante = 0
 
     saldo = get_saldo_congelado(db, producto_congelado_id)
-    return registrar_movimiento(
+    mov = registrar_movimiento(
         db, "congelado", producto_congelado_id, -cantidad, "u",
         "produccion_consumo" if "produccion" in referencia else "entrega_b2b",
         referencia, saldo, user_id, fecha=fecha,
     )
 
+    if tomado:
+        db.flush()  # need mov.id and any freshly-created lot ids
+        for entry, tomado_de_lote in tomado:
+            db.add(ConsumoFifoDetalle(
+                movimiento_stock_id=mov.id,
+                stock_congelado_id=entry.id,
+                cantidad=tomado_de_lote,
+            ))
 
-def deducir_por_receta(
-    db: Session,
-    receta_id: int,
-    cantidad_lotes: float,
-    referencia: str,
-    user_id: Optional[int] = None,
-    fecha: Optional[date] = None,
-) -> list[MovimientoStock]:
-    receta = db.query(Receta).filter(Receta.id == receta_id).first()
-    if not receta:
-        return []
-
-    lineas = db.query(LineaReceta).filter(LineaReceta.receta_id == receta_id).all()
-    movimientos = []
-
-    for linea in lineas:
-        consumo = linea.cantidad * cantidad_lotes
-
-        if linea.ingrediente_id:
-            mov = deducir_materia_prima(
-                db, linea.ingrediente_id, consumo, linea.unidad, referencia, user_id, fecha=fecha
-            )
-            if mov:
-                movimientos.append(mov)
-
-        elif linea.subreceta_id:
-            prod_cong = (
-                db.query(ProductoCongelado)
-                .filter(ProductoCongelado.receta_id == linea.subreceta_id)
-                .first()
-            )
-            if prod_cong:
-                mov = deducir_congelado_fifo(
-                    db, prod_cong.id, consumo, referencia, user_id, fecha=fecha
-                )
-                if mov:
-                    movimientos.append(mov)
-
-    return movimientos
-
-
-def registrar_produccion_stock(
-    db: Session,
-    receta_id: int,
-    cantidad_producida: float,
-    referencia: str,
-    user_id: Optional[int] = None,
-    fecha: Optional[date] = None,
-) -> Optional[MovimientoStock]:
-    prod_cong = (
-        db.query(ProductoCongelado)
-        .filter(ProductoCongelado.receta_id == receta_id)
-        .first()
-    )
-    if not prod_cong:
-        return None
-
-    f = fecha or date.today()
-    entry = StockCongelado(
-        producto_congelado_id=prod_cong.id,
-        cantidad=cantidad_producida,
-        fecha_entrada=f,
-        is_active=True,
-        notas=f"Produccion: {referencia}",
-    )
-    db.add(entry)
-
-    saldo = get_saldo_congelado(db, prod_cong.id) + cantidad_producida
-    return registrar_movimiento(
-        db, "congelado", prod_cong.id, +cantidad_producida, "u",
-        "produccion_salida", referencia, saldo, user_id, fecha=fecha,
-    )
+    return mov
 
 
 def producir_producto(
@@ -221,6 +178,7 @@ def producir_producto(
     referencia: str,
     user_id: Optional[int] = None,
     fecha_produccion: Optional[date] = None,
+    registro_produccion_id: Optional[int] = None,
 ) -> list[MovimientoStock]:
     """
     Register production of a product. Handles the full chain:
@@ -278,6 +236,7 @@ def producir_producto(
         fecha_entrada=fecha,
         is_active=True,
         notas=f"Produccion: {referencia}",
+        registro_produccion_id=registro_produccion_id,
     )
     db.add(entry)
 

@@ -8,8 +8,16 @@ from app.auth import get_current_user
 from app.database import get_db
 from pydantic import BaseModel
 
-from app.models import MovimientoStock, ProductoCongelado, Receta, RegistroProduccion, TareaProduccion, User
-from app.services.stock import deducir_por_receta, producir_producto, registrar_produccion_stock
+from app.models import (
+    Ingrediente,
+    LineaReceta,
+    ProductoCongelado,
+    Receta,
+    RegistroProduccion,
+    TareaProduccion,
+    User,
+)
+from app.services.produccion_registro import aplicar_efectos, revertir_efectos
 from app.permissions import require_permission
 from app.schemas import (
     RegistroExtraCreate,
@@ -53,7 +61,7 @@ def _tarea_to_out(t: TareaProduccion) -> dict:
     }
 
 
-def _registro_to_out(r: RegistroProduccion) -> dict:
+def _registro_to_out(r: RegistroProduccion, movimientos: int = 0, stock_aplicado: bool = False) -> dict:
     return {
         "id": r.id,
         "tarea_id": r.tarea_id,
@@ -66,6 +74,10 @@ def _registro_to_out(r: RegistroProduccion) -> dict:
         "unidad_extra": r.unidad_extra,
         "receta_id": r.receta_id,
         "receta_nombre": r.receta.nombre if r.receta else None,
+        "producto_congelado_id": r.producto_congelado_id,
+        "bastones_consumidos": r.bastones_consumidos,
+        "stock_aplicado": stock_aplicado,
+        "movimientos": movimientos,
         "registrado_por": r.registrado_por,
         "registrado_at": r.registrado_at,
     }
@@ -120,6 +132,38 @@ def get_calendario(
 # ==============================================================
 
 
+def _preview_consumo(db: Session, t: TareaProduccion) -> dict:
+    """Portions per unit typed, plus the heaviest ingredient line, for the UI preview."""
+    empty = {"porciones_por_lote": None, "ingrediente_principal": None}
+    if not t.receta_id:
+        return empty
+
+    receta = db.query(Receta).filter(Receta.id == t.receta_id).first()
+    if not receta:
+        return empty
+
+    lineas = (
+        db.query(LineaReceta)
+        .filter(LineaReceta.receta_id == receta.id, LineaReceta.ingrediente_id.isnot(None))
+        .all()
+    )
+    principal = None
+    if lineas:
+        mayor = max(lineas, key=lambda x: x.cantidad)
+        ing = db.query(Ingrediente).filter(Ingrediente.id == mayor.ingrediente_id).first()
+        if ing:
+            principal = {
+                "nombre": ing.nombre,
+                "cantidad_por_receta": mayor.cantidad,
+                "unidad": mayor.unidad,
+            }
+
+    return {
+        "porciones_por_lote": receta.porciones_por_lote,
+        "ingrediente_principal": principal,
+    }
+
+
 @router.get("/dia")
 def get_dia(
     fecha: str = Query(..., description="ISO date YYYY-MM-DD"),
@@ -171,6 +215,10 @@ def get_dia(
             "cantidad_real": reg.cantidad_real if reg else None,
             "duracion_real": reg.duracion_real if reg else None,
             "notas": reg.notas if reg else None,
+            "bastones_consumidos": reg.bastones_consumidos if reg else None,
+            # Lets the screen show what one unit will consume, so the operator can
+            # sanity-check the deduction before committing to it.
+            **_preview_consumo(db, t),
         })
 
     extras_out = []
@@ -200,37 +248,32 @@ def get_dia(
 # ==============================================================
 
 
-def _aplicar_efectos_stock(db: Session, reg: RegistroProduccion, user_id: int):
-    if not reg.completada or not reg.cantidad_real or reg.cantidad_real <= 0:
-        return
-    receta_id = reg.receta_id or (reg.tarea.receta_id if reg.tarea else None)
-    if not receta_id:
-        return
-    ref = f"registro_produccion:{reg.id}"
-    ya_existe = db.query(MovimientoStock).filter(
-        MovimientoStock.referencia_origen == ref
-    ).first()
-    if ya_existe:
-        return
-    receta = db.query(Receta).filter(Receta.id == receta_id).first()
-    if not receta or not receta.porciones_por_lote:
-        return
-    lotes = reg.cantidad_real / receta.porciones_por_lote
-    deducir_por_receta(db, receta_id, lotes, ref, user_id)
-    registrar_produccion_stock(db, receta_id, reg.cantidad_real, ref, user_id)
-
-
 @router.post("/registro", response_model=RegistroProduccionOut, status_code=201)
 def upsert_registro(
     data: RegistroProduccionCreate,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Save a production record and bring stock in line with it, atomically.
+
+    Saving is the only thing that moves stock. Re-saving an existing record reverses
+    whatever it moved before and re-applies from the new values, so correcting 1 to 2
+    leaves stock at 2 rather than 3.
+    """
     tarea = db.query(TareaProduccion).filter(TareaProduccion.id == data.tarea_id).first()
     if not tarea:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
 
-    existing = (
+    # A task tied to a product cannot be completed without a quantity — that is the
+    # bug this endpoint exists to kill. Silently skipping the deduction is not an option.
+    if data.completada and tarea.producto_congelado_id:
+        if data.cantidad_real is None or data.cantidad_real <= 0:
+            raise HTTPException(
+                status_code=422,
+                detail="Ingresa la cantidad producida antes de guardar esta tarea.",
+            )
+
+    reg = (
         db.query(RegistroProduccion)
         .filter(
             RegistroProduccion.tarea_id == data.tarea_id,
@@ -238,31 +281,34 @@ def upsert_registro(
         )
         .first()
     )
-    if existing:
-        existing.completada = data.completada
-        existing.cantidad_real = data.cantidad_real
-        existing.duracion_real = data.duracion_real
-        existing.notas = data.notas
 
-        db.commit()
-        db.refresh(existing)
-        return _registro_to_out(existing)
+    if reg:
+        # Undo the previous effects before overwriting the values they were based on.
+        revertir_efectos(db, reg, user.id)
+        reg.completada = data.completada
+        reg.cantidad_real = data.cantidad_real
+        reg.duracion_real = data.duracion_real
+        reg.notas = data.notas
+        reg.bastones_consumidos = data.bastones_consumidos
+    else:
+        reg = RegistroProduccion(
+            tarea_id=data.tarea_id,
+            fecha=data.fecha,
+            completada=data.completada,
+            cantidad_real=data.cantidad_real,
+            duracion_real=data.duracion_real,
+            notas=data.notas,
+            bastones_consumidos=data.bastones_consumidos,
+            registrado_por=user.id,
+        )
+        db.add(reg)
+        db.flush()  # need reg.id for the movement tag
 
-    reg = RegistroProduccion(
-        tarea_id=data.tarea_id,
-        fecha=data.fecha,
-        completada=data.completada,
-        cantidad_real=data.cantidad_real,
-        duracion_real=data.duracion_real,
-        notas=data.notas,
-        registrado_por=user.id,
-    )
-    db.add(reg)
-    db.flush()
+    movimientos = aplicar_efectos(db, reg, user.id)
 
     db.commit()
     db.refresh(reg)
-    return _registro_to_out(reg)
+    return _registro_to_out(reg, movimientos, movimientos > 0)
 
 
 @router.post("/registro/extra", response_model=RegistroProduccionOut, status_code=201)
@@ -274,6 +320,9 @@ def create_extra(
     receta = db.query(Receta).filter(Receta.id == data.receta_id).first()
     if not receta:
         raise HTTPException(status_code=404, detail="Receta no encontrada")
+    if data.cantidad_real is None or data.cantidad_real <= 0:
+        raise HTTPException(status_code=422, detail="Ingresa la cantidad producida.")
+
     reg = RegistroProduccion(
         tarea_id=None,
         fecha=data.fecha,
@@ -283,14 +332,17 @@ def create_extra(
         notas=data.notas,
         receta_id=data.receta_id,
         titulo_extra=receta.nombre,
+        bastones_consumidos=data.bastones_consumidos,
         registrado_por=user.id,
     )
     db.add(reg)
     db.flush()
 
+    movimientos = aplicar_efectos(db, reg, user.id)
+
     db.commit()
     db.refresh(reg)
-    return _registro_to_out(reg)
+    return _registro_to_out(reg, movimientos, movimientos > 0)
 
 
 @router.delete("/registro/{registro_id}")
@@ -302,9 +354,13 @@ def delete_registro(
     reg = db.query(RegistroProduccion).filter(RegistroProduccion.id == registro_id).first()
     if not reg:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    # Give the ingredients back before the record that explains them disappears.
+    revertidos = revertir_efectos(db, reg, user.id)
+
     db.delete(reg)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "movimientos_revertidos": revertidos}
 
 
 # ==============================================================
@@ -508,6 +564,7 @@ class ProduccionRequest(BaseModel):
     cantidad_producida: float
     bastones_consumidos: Optional[float] = None
     fecha: Optional[str] = None
+    duracion_real: Optional[int] = None
     notas: Optional[str] = None
 
 
@@ -520,19 +577,37 @@ def producir(
     prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == data.producto_id).first()
     if not prod:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
+    if data.cantidad_producida is None or data.cantidad_producida <= 0:
+        raise HTTPException(status_code=422, detail="Ingresa la cantidad producida.")
 
     from datetime import date as date_type
     fecha = date_type.fromisoformat(data.fecha) if data.fecha else date.today()
-    ref = f"produccion:{prod.nombre}:{fecha}"
-    movimientos = producir_producto(
-        db, prod.id, data.cantidad_producida,
-        data.bastones_consumidos, ref, user.id, fecha,
+
+    # Every stock movement gets an editable record behind it, so this production can
+    # be corrected or undone later like any other.
+    reg = RegistroProduccion(
+        tarea_id=None,
+        fecha=fecha,
+        completada=True,
+        cantidad_real=data.cantidad_producida,
+        duracion_real=data.duracion_real,
+        notas=data.notas,
+        receta_id=prod.receta_id,
+        titulo_extra=prod.nombre,
+        producto_congelado_id=prod.id,
+        bastones_consumidos=data.bastones_consumidos,
+        registrado_por=user.id,
     )
+    db.add(reg)
+    db.flush()
+
+    movimientos = aplicar_efectos(db, reg, user.id)
     db.commit()
 
     return {
         "ok": True,
         "producto": prod.nombre,
         "cantidad": data.cantidad_producida,
-        "movimientos": len(movimientos),
+        "registro_id": reg.id,
+        "movimientos": movimientos,
     }

@@ -487,6 +487,7 @@ class RegistroProduccionCreate(BaseModel):
     cantidad_real: Optional[float] = None
     duracion_real: Optional[int] = None
     notas: Optional[str] = None
+    bastones_consumidos: Optional[float] = None
 
 
 class RegistroExtraCreate(BaseModel):
@@ -495,6 +496,7 @@ class RegistroExtraCreate(BaseModel):
     cantidad_real: Optional[float] = None
     duracion_real: Optional[int] = None
     notas: Optional[str] = None
+    bastones_consumidos: Optional[float] = None
 
 
 class RegistroProduccionOut(BaseModel):
@@ -509,6 +511,10 @@ class RegistroProduccionOut(BaseModel):
     unidad_extra: Optional[str] = None
     receta_id: Optional[int] = None
     receta_nombre: Optional[str] = None
+    producto_congelado_id: Optional[int] = None
+    bastones_consumidos: Optional[float] = None
+    stock_aplicado: bool = False
+    movimientos: int = 0
     registrado_por: int
     registrado_at: datetime
 
