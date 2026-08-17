@@ -72,6 +72,45 @@ def cantidad_en_porciones(db: Session, reg: RegistroProduccion) -> float:
     return cantidad
 
 
+def describir_referencia(db: Session, referencia_origen: Optional[str]) -> Optional[str]:
+    """Human-readable name for a `registro_produccion:{id}` (or its `:rev`) tag.
+
+    Movement tables show this next to "Consumido"/"Producido" so a stock change
+    reads as "Consumido para Masa Croissant" instead of a bare quantity.
+    """
+    if not referencia_origen or not referencia_origen.startswith("registro_produccion:"):
+        return None
+    reg_id_str = referencia_origen.split(":")[1]
+    if not reg_id_str.isdigit():
+        return None
+
+    reg = db.query(RegistroProduccion).filter(RegistroProduccion.id == int(reg_id_str)).first()
+    if not reg:
+        return None
+
+    receta_id = None
+    if reg.tarea_id and reg.tarea and reg.tarea.receta_id:
+        receta_id = reg.tarea.receta_id
+    elif reg.receta_id:
+        receta_id = reg.receta_id
+    if receta_id:
+        receta = db.query(Receta).filter(Receta.id == receta_id).first()
+        if receta:
+            return receta.nombre
+
+    producto_id = resolver_producto_congelado(db, reg)
+    if producto_id:
+        producto = db.query(ProductoCongelado).filter(ProductoCongelado.id == producto_id).first()
+        if producto:
+            return producto.nombre
+
+    if reg.titulo_extra:
+        return reg.titulo_extra
+    if reg.tarea and reg.tarea.titulo:
+        return reg.tarea.titulo
+    return None
+
+
 def resolver_producto_congelado(db: Session, reg: RegistroProduccion) -> Optional[int]:
     """Which frozen product this record produces, if any."""
     if reg.producto_congelado_id:

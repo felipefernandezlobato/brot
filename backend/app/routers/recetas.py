@@ -9,6 +9,7 @@ from app.models import Ingrediente, LineaReceta, MovimientoStock, ProductoCongel
 from app.permissions import require_permission
 from app.schemas import RecetaCreate, RecetaOut, RecetaUpdate, LineaRecetaOut
 from app.services.costes import costo_linea, costo_receta
+from app.services.produccion_registro import describir_referencia
 
 router = APIRouter(prefix="/api/recetas", tags=["recetas"])
 
@@ -160,7 +161,9 @@ def get_receta_completo(
             {
                 "id": m.id, "tipo_movimiento": m.tipo_movimiento,
                 "cantidad": m.cantidad, "fecha": str(m.fecha),
-                "referencia_origen": m.referencia_origen, "saldo_despues": m.saldo_despues,
+                "referencia_origen": m.referencia_origen,
+                "nombre_origen": describir_referencia(db, m.referencia_origen),
+                "saldo_despues": m.saldo_despues,
             }
             for m in db.query(MovimientoStock)
             .filter(MovimientoStock.tipo_stock == "congelado", MovimientoStock.referencia_producto_id == prod.id)

@@ -31,7 +31,7 @@ interface ProductoDetalle {
   hijos: { id: number; nombre: string; nivel: string; cantidad_por_padre: number | null; receta_id?: number | null; hijos?: any[] }[];
   receta: { id: number; nombre: string; porciones_por_lote: number; costo_total: number; costo_porcion: number; precio_venta: number | null; num_ingredientes: number } | null;
   stock_history: { fecha: string; cantidad: number }[];
-  movimientos: { id: number; tipo_movimiento: string; cantidad: number; fecha: string; referencia_origen: string | null; saldo_despues: number | null }[];
+  movimientos: { id: number; tipo_movimiento: string; cantidad: number; fecha: string; referencia_origen: string | null; nombre_origen: string | null; saldo_despues: number | null }[];
 }
 
 const NIVEL_COLORS: Record<string, string> = {
@@ -197,11 +197,11 @@ export default function CongeladoPage() {
           <div className="divide-y divide-cream-dark max-h-[250px] overflow-y-auto">
             {data.movimientos.map((m) => {
               let para = "";
-              if (m.referencia_origen) {
+              if (m.tipo_movimiento === "produccion_consumo" && m.nombre_origen) {
+                para = ` para ${m.nombre_origen}`;
+              } else if (m.referencia_origen) {
                 const parts = m.referencia_origen.split(":");
-                if (parts.length >= 2 && parts[0] === "produccion" && m.tipo_movimiento === "produccion_consumo") {
-                  para = ` para ${parts[1]}`;
-                } else if (parts[0] === "entrega_b2b" && parts.length >= 3) {
+                if (parts[0] === "entrega_b2b" && parts.length >= 3) {
                   para = ` ${parts.slice(2).join(":")}`;
                 } else if (parts[0] === "entrega_b2b") {
                   para = ` #${parts[1]}`;

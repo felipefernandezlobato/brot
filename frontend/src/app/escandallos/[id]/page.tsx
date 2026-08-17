@@ -68,6 +68,7 @@ interface CompletoData {
     cantidad: number;
     fecha: string;
     referencia_origen: string | null;
+    nombre_origen: string | null;
     saldo_despues: number | null;
   }[];
   ancestors: { id: number; nombre: string; nivel: string; receta_id: number | null; cantidad_por_padre: number | null }[];
@@ -344,11 +345,11 @@ export default function RecetaCompletoPage() {
           <div className="divide-y divide-cream-dark max-h-[250px] overflow-y-auto">
             {movimientos.map((m) => {
               let para = "";
-              if (m.referencia_origen) {
+              if (m.tipo_movimiento === "produccion_consumo" && m.nombre_origen) {
+                para = ` para ${m.nombre_origen}`;
+              } else if (m.referencia_origen) {
                 const parts = m.referencia_origen.split(":");
-                if (parts.length >= 2 && parts[0] === "produccion" && m.tipo_movimiento === "produccion_consumo") {
-                  para = ` para ${parts[1]}`;
-                } else if (parts[0] === "entrega_b2b" && parts.length >= 3) {
+                if (parts[0] === "entrega_b2b" && parts.length >= 3) {
                   para = ` ${parts.slice(2).join(":")}`;
                 } else if (parts[0] === "entrega_b2b") {
                   para = ` #${parts[1]}`;
