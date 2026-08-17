@@ -196,15 +196,18 @@ export default function CongeladoPage() {
           </div>
           <div className="divide-y divide-cream-dark max-h-[250px] overflow-y-auto">
             {data.movimientos.map((m) => {
-              let para = "";
+              let label = MOV_LABELS[m.tipo_movimiento] || m.tipo_movimiento;
               if (m.tipo_movimiento === "produccion_consumo" && m.nombre_origen) {
-                para = ` para ${m.nombre_origen}`;
+                label = `Consumido para ${m.nombre_origen}`;
+              } else if (m.tipo_movimiento === "produccion_salida" && data.nombre.toLowerCase().includes("baston")) {
+                // "u" isn't a word — name what was actually produced when we know it.
+                label = "bastones producidos";
               } else if (m.referencia_origen) {
                 const parts = m.referencia_origen.split(":");
                 if (parts[0] === "entrega_b2b" && parts.length >= 3) {
-                  para = ` ${parts.slice(2).join(":")}`;
+                  label = `Entrega B2B ${parts.slice(2).join(":")}`;
                 } else if (parts[0] === "entrega_b2b") {
-                  para = ` #${parts[1]}`;
+                  label = `Entrega B2B #${parts[1]}`;
                 }
               }
               return (
@@ -213,7 +216,7 @@ export default function CongeladoPage() {
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${
                       m.cantidad > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                     }`}>{m.cantidad > 0 ? "+" : ""}{m.cantidad}</span>
-                    <span className="text-warm-gray">{MOV_LABELS[m.tipo_movimiento] || m.tipo_movimiento}{para}</span>
+                    <span className="text-warm-gray">{label}</span>
                   </div>
                   <span className="text-xs text-warm-gray">{formatDate(m.fecha)}</span>
                 </div>
