@@ -1,10 +1,12 @@
+from datetime import date
+
 from app.main import app
 from app.routers.inventario import router
 
 app.include_router(router)
 
 from app.auth import hash_pin
-from app.models import Categoria, Ingrediente, User
+from app.models import Categoria, Ingrediente, MovimientoStock, User
 
 
 def _setup(client, db):
@@ -135,3 +137,41 @@ def test_batch_create_inventario(client, db):
     ing_ids = {r["ingrediente_id"] for r in body}
     assert ing_id in ing_ids
     assert ing2.id in ing_ids
+
+
+def test_calculado_devuelve_saldo_acumulado_por_ingrediente(client, db):
+    token, ing_id = _setup(client, db)
+
+    db.add(MovimientoStock(
+        tipo_stock="materia_prima", referencia_producto_id=ing_id, cantidad=-2.5,
+        unidad="kg", tipo_movimiento="produccion_consumo", fecha=date(2026, 8, 14),
+    ))
+    db.add(MovimientoStock(
+        tipo_stock="materia_prima", referencia_producto_id=ing_id, cantidad=10.0,
+        unidad="kg", tipo_movimiento="recepcion", fecha=date(2026, 8, 15),
+    ))
+    db.commit()
+
+    res = client.get("/api/inventario/calculado", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    ingredientes = {i["ingrediente_id"]: i["historial"] for i in res.json()["ingredientes"]}
+    assert ingredientes[ing_id] == [
+        {"fecha": "2026-08-14", "cantidad": -2.5},
+        {"fecha": "2026-08-15", "cantidad": 7.5},
+    ]
+
+
+def test_calculado_sin_movimientos_no_aparece(client, db):
+    """An ingredient counted only manually has no ledger entries -- absent
+    from the response, not a zero/error."""
+    token, ing_id = _setup(client, db)
+    client.post(
+        "/api/inventario",
+        json=[{"ingrediente_id": ing_id, "cantidad": 5.0, "unidad": "kg"}],
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    res = client.get("/api/inventario/calculado", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    ids = [i["ingrediente_id"] for i in res.json()["ingredientes"]]
+    assert ing_id not in ids

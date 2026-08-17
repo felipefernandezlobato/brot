@@ -10,7 +10,7 @@ from app.permissions import require_permission
 from app.schemas import RecetaCreate, RecetaOut, RecetaUpdate, LineaRecetaOut
 from app.services.costes import costo_linea, costo_receta
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
-from app.services.stock import historial_congelado_acumulado
+from app.services.stock import historial_movimientos_acumulado
 
 router = APIRouter(prefix="/api/recetas", tags=["recetas"])
 
@@ -128,7 +128,7 @@ def get_receta_completo(
 
     if prod:
         # Cumulative stock history from MovimientoStock (shows both production AND consumption)
-        stock_history = historial_congelado_acumulado(db, producto_ids=[prod.id]).get(prod.id, [])
+        stock_history = historial_movimientos_acumulado(db, "congelado", ids=[prod.id]).get(prod.id, [])
 
         # Stock actual: from movements if available (last point == sum of all
         # movement cantidades), fallback to StockCongelado sum

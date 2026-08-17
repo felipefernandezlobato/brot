@@ -70,50 +70,55 @@ def get_saldo_congelado(db: Session, producto_congelado_id: int) -> float:
     return total or 0.0
 
 
-def historial_congelado_acumulado(
+def historial_movimientos_acumulado(
     db: Session,
-    producto_ids: Optional[list[int]] = None,
+    tipo_stock: str,
+    ids: Optional[list[int]] = None,
     fecha_hasta: Optional[date] = None,
 ) -> dict[int, list[dict]]:
-    """Cumulative running balance per date, per producto_congelado_id, from
-    MovimientoStock (tipo_stock="congelado"). One point per date that has at
-    least one movement, ascending by fecha.
+    """Cumulative running balance per date, per referencia_producto_id, from
+    MovimientoStock. One point per date that has at least one movement,
+    ascending by fecha.
 
-    This reads the true append-only ledger, unlike StockCongelado (whose rows
-    get mutated in place by FIFO consumption/reversal), so it's the only
-    reliable way to answer "what was the stock on date X" -- see
+    This reads the true append-only ledger, unlike StockCongelado/
+    InventarioRegistro (whose "current value" can be a mutated-in-place lot or
+    a raw snapshot rather than a delta), so it's the only reliable way to
+    answer "what was the stock on date X" -- see
     scripts/limpiar_stock_congelado_masa.py for what happens when you try to
     reconstruct history from StockCongelado's raw rows instead.
 
-    producto_ids=None means "every product with a movement" (used to batch
-    the Stock Congelado pivot table's calculated column); a single-element
-    list reproduces the old per-product behavior of the two callers this was
-    extracted from -- including stock_actual, which is always exactly the
-    last point's cantidad (== sum of all that product's movement cantidades).
+    tipo_stock is "congelado" (finished/frozen products) or "materia_prima"
+    (raw ingredients) -- same ledger table, disjoint id spaces.
+
+    ids=None means "every id with a movement of this tipo_stock" (used to
+    batch a pivot table's calculated column); a single-element list
+    reproduces the old per-item behavior of this function's original callers
+    -- including stock_actual, which is always exactly the last point's
+    cantidad (== sum of all that item's movement cantidades).
     """
-    q = db.query(MovimientoStock).filter(MovimientoStock.tipo_stock == "congelado")
-    if producto_ids is not None:
-        q = q.filter(MovimientoStock.referencia_producto_id.in_(producto_ids))
+    q = db.query(MovimientoStock).filter(MovimientoStock.tipo_stock == tipo_stock)
+    if ids is not None:
+        q = q.filter(MovimientoStock.referencia_producto_id.in_(ids))
     if fecha_hasta:
         q = q.filter(MovimientoStock.fecha <= fecha_hasta)
     movs = q.order_by(
         MovimientoStock.referencia_producto_id, MovimientoStock.fecha, MovimientoStock.id
     ).all()
 
-    by_product_date: dict[int, dict[str, float]] = {}
+    by_id_date: dict[int, dict[str, float]] = {}
     for m in movs:
-        day_map = by_product_date.setdefault(m.referencia_producto_id, {})
+        day_map = by_id_date.setdefault(m.referencia_producto_id, {})
         key = str(m.fecha)
         day_map[key] = day_map.get(key, 0.0) + m.cantidad
 
     result: dict[int, list[dict]] = {}
-    for pid, day_map in by_product_date.items():
+    for rid, day_map in by_id_date.items():
         running = 0.0
         points = []
         for fecha_str in sorted(day_map.keys()):
             running += day_map[fecha_str]
             points.append({"fecha": fecha_str, "cantidad": round(running, 2)})
-        result[pid] = points
+        result[rid] = points
     return result
 
 

@@ -48,6 +48,46 @@ interface StockActualItem {
   fecha_registro: string;
 }
 
+interface CalculadoPunto {
+  fecha: string;
+  cantidad: number;
+}
+
+interface CalculadoIngrediente {
+  ingrediente_id: number;
+  historial: CalculadoPunto[];
+}
+
+const DISCREPANCIA_TOLERANCIA = 0.5;
+
+/** Latest calculated point with fecha <= the given date (points are sorted ascending). */
+function valorCalculadoEnFecha(puntos: CalculadoPunto[] | undefined, fecha: string): number | null {
+  if (!puntos || puntos.length === 0) return null;
+  let result: number | null = null;
+  for (const p of puntos) {
+    if (p.fecha > fecha) break;
+    result = p.cantidad;
+  }
+  return result;
+}
+
+function formatCantidad(n: number): string {
+  return Number.isInteger(n) ? String(n) : (Math.round(n * 100) / 100).toString();
+}
+
+const NOTAS_AUTOMATICAS = ["Consumo automatico:", "Reversion de", "Pedido #"];
+
+/** An InventarioRegistro row is a real physical count only if nothing wrote it
+ * automatically -- production/merma consumption, reversal give-backs, and
+ * pedido receipt/deletion corrections all carry a recognizable notas prefix.
+ * Comparing the calculated ledger value against one of THOSE (rather than an
+ * actual count) would flag a "discrepancy" between two numbers that came from
+ * the same event in the first place. */
+function esConteoManual(notas: string | null): boolean {
+  if (!notas) return true;
+  return !NOTAS_AUTOMATICAS.some((p) => notas.startsWith(p));
+}
+
 // ── Tab navigation ───────────────────────────────────────────────────────────
 
 type Tab = "registrar" | "historial";
@@ -597,6 +637,7 @@ function TabRegistrar({
 function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
   const { toast } = useToast();
   const [registros, setRegistros] = useState<RegistroStock[]>([]);
+  const [calculado, setCalculado] = useState<Map<number, CalculadoPunto[]>>(new Map());
   const [loading, setLoading] = useState(true);
 
   type Rango = "4sem" | "12sem" | "todo";
@@ -623,8 +664,14 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
     const params = new URLSearchParams();
     if (fechaDesde) params.set("fecha_desde", fechaDesde);
     if (fechaHasta) params.set("fecha_hasta", fechaHasta);
-    apiFetch<RegistroStock[]>(`/api/inventario?${params}`)
-      .then(setRegistros)
+    Promise.all([
+      apiFetch<RegistroStock[]>(`/api/inventario?${params}`),
+      apiFetch<{ ingredientes: CalculadoIngrediente[] }>(`/api/inventario/calculado?${params}`),
+    ])
+      .then(([r, c]) => {
+        setRegistros(r);
+        setCalculado(new Map(c.ingredientes.map((i) => [i.ingrediente_id, i.historial])));
+      })
       .catch(() => toast("Error al cargar historial", "error"))
       .finally(() => setLoading(false));
   }, [fechaDesde, fechaHasta, toast]);
@@ -738,24 +785,44 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
   );
 
   // Pivot table: all ingredients (rows) x dates (columns, most recent first)
+  // Only genuine manual counts feed the "raw" side (see esConteoManual) --
+  // automated rows are already what `calculado` is built from, so a
+  // date/ingredient can still show up here via `calculado` alone.
+  const conteosManuales = useMemo(() => registros.filter((r) => esConteoManual(r.notas)), [registros]);
+
   const allDates = useMemo(() => {
-    const dates = new Set(registros.map((r) => r.fecha_registro));
+    const dates = new Set(conteosManuales.map((r) => r.fecha_registro));
+    for (const puntos of calculado.values()) {
+      // The API carries in one out-of-range "opening balance" point per
+      // ingredient (see get_inventario_calculado's fecha_desde trimming) so
+      // cell lookups near the start of the range still resolve -- but it
+      // must not become a phantom column outside the selected range itself.
+      for (const p of puntos) {
+        if (p.fecha >= fechaDesde) dates.add(p.fecha);
+      }
+    }
     return Array.from(dates).sort((a, b) => b.localeCompare(a));
-  }, [registros]);
+  }, [conteosManuales, calculado, fechaDesde]);
 
   const allIngsWithData = useMemo(() => {
-    const ids = new Set(registros.map((r) => r.ingrediente_id));
+    const ids = new Set(conteosManuales.map((r) => r.ingrediente_id));
+    for (const iid of calculado.keys()) ids.add(iid);
     return ingredientes.filter((i) => ids.has(i.id));
-  }, [registros, ingredientes]);
+  }, [conteosManuales, calculado, ingredientes]);
 
   const pivotData = useMemo(() => {
+    // conteosManuales arrives sorted (fecha_registro DESC, id DESC) -- for a
+    // same-day recount the newest entry comes first, so keep only the FIRST
+    // value seen per (fecha, ingrediente) instead of letting the loop
+    // overwrite down to the oldest/superseded one.
     const map = new Map<string, Map<number, number>>();
-    for (const r of registros) {
+    for (const r of conteosManuales) {
       if (!map.has(r.fecha_registro)) map.set(r.fecha_registro, new Map());
-      map.get(r.fecha_registro)!.set(r.ingrediente_id, r.cantidad);
+      const dateMap = map.get(r.fecha_registro)!;
+      if (!dateMap.has(r.ingrediente_id)) dateMap.set(r.ingrediente_id, r.cantidad);
     }
     return map;
-  }, [registros]);
+  }, [conteosManuales]);
 
   const shortDate = (d: string) => {
     const dt = new Date(d + "T00:00:00");
@@ -938,18 +1005,29 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                       </td>
                       {allDates.map((d) => {
                         const val = pivotData.get(d)?.get(ing.id);
+                        const calc = valorCalculadoEnFecha(calculado.get(ing.id), d);
+                        const vacio = calc === null && val === undefined;
+                        const discrepa = calc !== null && val !== undefined && Math.abs(calc - val) > DISCREPANCIA_TOLERANCIA;
+                        const principal = calc !== null ? calc : val;
                         return (
                           <td
                             key={d}
+                            title={discrepa ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)}` : undefined}
                             className={`text-center px-2 py-1.5 tabular-nums ${
-                              val === undefined
+                              vacio
                                 ? "text-cream-dark"
-                                : val === 0
+                                : discrepa
+                                ? "text-red-600 font-semibold bg-red-50"
+                                : principal === 0
                                 ? "text-red-600 font-medium"
                                 : "text-text"
                             }`}
                           >
-                            {val !== undefined ? val : "--"}
+                            {vacio
+                              ? "--"
+                              : calc !== null
+                              ? <>{formatCantidad(calc)}{val !== undefined && <span className="text-warm-gray font-normal"> ({formatCantidad(val)})</span>}</>
+                              : formatCantidad(val!)}
                           </td>
                         );
                       })}

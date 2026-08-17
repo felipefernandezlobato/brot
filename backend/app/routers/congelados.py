@@ -25,7 +25,7 @@ from app.schemas import (
     StockCongeladoUpdate,
 )
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
-from app.services.stock import historial_congelado_acumulado
+from app.services.stock import historial_movimientos_acumulado
 
 router = APIRouter(prefix="/api/congelados", tags=["congelados"])
 
@@ -137,7 +137,7 @@ def get_producto_detalle(
     ) or 0
 
     # Cumulative stock history from MovimientoStock (shows both production AND consumption)
-    stock_history = historial_congelado_acumulado(db, producto_ids=[prod_id]).get(prod_id, [])
+    stock_history = historial_movimientos_acumulado(db, "congelado", ids=[prod_id]).get(prod_id, [])
 
     # Recent movements
     movimientos = [
@@ -271,7 +271,7 @@ def get_stock_calculado(
     point before fecha_desde as an opening balance so a "nearest date <= X"
     lookup on the frontend still works for dates right at the start of range.
     """
-    historial = historial_congelado_acumulado(db, fecha_hasta=fecha_hasta)
+    historial = historial_movimientos_acumulado(db, "congelado", fecha_hasta=fecha_hasta)
 
     productos_out = []
     for pid, puntos in historial.items():

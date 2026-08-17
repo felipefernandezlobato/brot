@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models import Ingrediente, InventarioRegistro, LineaPedido, Pedido, User
 from app.permissions import require_permission
 from app.schemas import InventarioRegistroCreate, InventarioRegistroOut
+from app.services.stock import historial_movimientos_acumulado
 
 router = APIRouter(prefix="/api/inventario", tags=["inventario"])
 
@@ -256,6 +257,38 @@ def recomendacion_pedido(
             for sup, items in sorted(by_supplier.items())
         ],
     }
+
+
+@router.get("/calculado")
+def get_inventario_calculado(
+    fecha_desde: Optional[date] = Query(None),
+    fecha_hasta: Optional[date] = Query(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Calculated (ledger) stock over time for every ingredient with movements
+    -- companion to GET /api/inventario (the manual/physical counts), for the
+    Stock Materia Prima pivot table's "physical vs calculated" comparison.
+
+    fecha_desde is NOT used to filter the underlying query: a running balance
+    is only correct when computed from full history up to fecha_hasta, so
+    trimming to fecha_desde would silently reset the baseline to zero at the
+    window edge. It's trimmed for the response instead, keeping the last
+    point before fecha_desde as an opening balance so a "nearest date <= X"
+    lookup on the frontend still works for dates right at the start of range.
+    """
+    historial = historial_movimientos_acumulado(db, "materia_prima", fecha_hasta=fecha_hasta)
+
+    ingredientes_out = []
+    for iid, puntos in historial.items():
+        if fecha_desde:
+            corte = str(fecha_desde)
+            antes = [p for p in puntos if p["fecha"] < corte]
+            despues = [p for p in puntos if p["fecha"] >= corte]
+            puntos = ([antes[-1]] if antes else []) + despues
+        ingredientes_out.append({"ingrediente_id": iid, "historial": puntos})
+
+    return {"ingredientes": ingredientes_out}
 
 
 @router.delete("/{registro_id}")

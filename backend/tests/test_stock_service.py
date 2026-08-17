@@ -1,11 +1,11 @@
-"""historial_congelado_acumulado(): the shared cumulative-balance-from-ledger
+"""historial_movimientos_acumulado(): the shared cumulative-balance-from-ledger
 helper behind the congelados detail page, the escandallos /completo endpoint,
-and the Stock Congelado pivot table's calculated column.
+and the Stock Congelado / Stock Materia Prima pivot tables' calculated column.
 """
 from datetime import date
 
 from app.models import MovimientoStock
-from app.services.stock import historial_congelado_acumulado
+from app.services.stock import historial_movimientos_acumulado
 
 
 def _mov(db, producto_id, cantidad, fecha, tipo_stock="congelado"):
@@ -20,7 +20,7 @@ def test_running_balance_single_producto(db):
     _mov(db, 1, -2.0, date(2026, 8, 15))
     db.commit()
 
-    result = historial_congelado_acumulado(db, producto_ids=[1])
+    result = historial_movimientos_acumulado(db, "congelado", ids=[1])
 
     assert result[1] == [
         {"fecha": "2026-08-14", "cantidad": 5.0},
@@ -33,7 +33,7 @@ def test_same_day_movements_are_netted_before_accumulating(db):
     _mov(db, 1, -1.5, date(2026, 8, 14))
     db.commit()
 
-    result = historial_congelado_acumulado(db, producto_ids=[1])
+    result = historial_movimientos_acumulado(db, "congelado", ids=[1])
 
     assert result[1] == [{"fecha": "2026-08-14", "cantidad": 12.0}]
 
@@ -44,7 +44,7 @@ def test_batched_across_products_no_cross_contamination(db):
     _mov(db, 1, -1.0, date(2026, 8, 15))
     db.commit()
 
-    result = historial_congelado_acumulado(db)
+    result = historial_movimientos_acumulado(db, "congelado")
 
     assert result[1] == [
         {"fecha": "2026-08-14", "cantidad": 5.0},
@@ -53,12 +53,12 @@ def test_batched_across_products_no_cross_contamination(db):
     assert result[2] == [{"fecha": "2026-08-14", "cantidad": 9.0}]
 
 
-def test_producto_ids_filters_out_others(db):
+def test_ids_filters_out_others(db):
     _mov(db, 1, 5.0, date(2026, 8, 14))
     _mov(db, 2, 9.0, date(2026, 8, 14))
     db.commit()
 
-    result = historial_congelado_acumulado(db, producto_ids=[1])
+    result = historial_movimientos_acumulado(db, "congelado", ids=[1])
 
     assert list(result.keys()) == [1]
 
@@ -68,21 +68,24 @@ def test_fecha_hasta_excludes_later_movements(db):
     _mov(db, 1, -2.0, date(2026, 8, 20))
     db.commit()
 
-    result = historial_congelado_acumulado(db, producto_ids=[1], fecha_hasta=date(2026, 8, 15))
+    result = historial_movimientos_acumulado(db, "congelado", ids=[1], fecha_hasta=date(2026, 8, 15))
 
     assert result[1] == [{"fecha": "2026-08-14", "cantidad": 5.0}]
 
 
-def test_materia_prima_movements_are_ignored(db):
+def test_tipo_stock_isolates_congelado_from_materia_prima(db):
     _mov(db, 1, 5.0, date(2026, 8, 14), tipo_stock="materia_prima")
+    _mov(db, 1, 2.0, date(2026, 8, 14), tipo_stock="congelado")
     db.commit()
 
-    result = historial_congelado_acumulado(db, producto_ids=[1])
+    congelado = historial_movimientos_acumulado(db, "congelado", ids=[1])
+    materia_prima = historial_movimientos_acumulado(db, "materia_prima", ids=[1])
 
-    assert result == {}
+    assert congelado[1] == [{"fecha": "2026-08-14", "cantidad": 2.0}]
+    assert materia_prima[1] == [{"fecha": "2026-08-14", "cantidad": 5.0}]
 
 
-def test_producto_sin_movimientos_no_aparece(db):
-    result = historial_congelado_acumulado(db, producto_ids=[999])
+def test_id_sin_movimientos_no_aparece(db):
+    result = historial_movimientos_acumulado(db, "congelado", ids=[999])
 
     assert result == {}
