@@ -102,9 +102,19 @@ export default function ComprasPage() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot mb-6">
-        Compras Ingredientes
-      </h1>
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+          Compras Ingredientes
+        </h1>
+        <PermissionGate module="pedidos_proveedores" action="create">
+          <Link
+            href="/pedidos/nuevo"
+            className="bg-brot text-white px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] flex items-center hover:bg-brot-dark transition-colors"
+          >
+            + Nuevo Pedido
+          </Link>
+        </PermissionGate>
+      </div>
 
       <div className="flex gap-1 bg-white rounded-xl border border-cream-dark p-1 mb-6">
         {TABS.map((t) => (
