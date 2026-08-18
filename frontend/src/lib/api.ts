@@ -18,6 +18,16 @@ export async function apiFetch<T>(
     window.location.href = "/login";
     throw new Error("No autorizado");
   }
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const text = await res.text();
+    let message = text;
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed?.detail === "string") message = parsed.detail;
+    } catch {
+      // not JSON — use raw text as-is
+    }
+    throw new Error(message);
+  }
   return res.json();
 }

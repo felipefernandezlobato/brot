@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { formatARS } from "@/lib/format";
 import { useToast } from "@/components/Toast";
+import { IngredientOrSubrecetaPicker, PickerItem, PickerOption } from "@/components/IngredientOrSubrecetaPicker";
 
 interface Proveedor {
   id: number;
@@ -45,7 +46,6 @@ export default function NuevoPedidoPage() {
   const [ingredientes, setIngredientes] = useState<IngredienteOpt[]>([]);
 
   const [selectorOpen, setSelectorOpen] = useState(false);
-  const [selectorBuscar, setSelectorBuscar] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -59,31 +59,30 @@ export default function NuevoPedidoPage() {
       .catch(() => toast("Error al cargar datos", "error"));
   }, [toast]);
 
-  const ingFiltered = ingredientes.filter((i) =>
-    i.nombre.toLowerCase().includes(selectorBuscar.toLowerCase())
-  );
+  const ingredientesOpts: PickerOption[] = ingredientes.map((i) => ({
+    id: i.id,
+    nombre: i.nombre,
+    unidad: i.unidad_compra,
+    costoPorUnidad: i.precio_compra,
+  }));
 
-  const addIngrediente = (ing: IngredienteOpt) => {
-    // Check if already added
-    if (lineas.some((l) => l.ingrediente_id === ing.id)) {
+  const addIngrediente = (item: PickerItem) => {
+    if (lineas.some((l) => l.ingrediente_id === item.id)) {
       toast("Este ingrediente ya está en el pedido", "error");
-      setSelectorOpen(false);
-      setSelectorBuscar("");
       return;
     }
+    const ing = ingredientes.find((i) => i.id === item.id);
     setLineas((prev) => [
       ...prev,
       {
         key: lineaKey++,
-        ingrediente_id: ing.id,
-        nombre: ing.nombre,
-        cantidad: String(ing.cantidad_compra || 1),
-        unidad: ing.unidad_compra,
-        precio_unitario: String(ing.precio_compra || ""),
+        ingrediente_id: item.id,
+        nombre: item.nombre,
+        cantidad: String(ing?.cantidad_compra || 1),
+        unidad: item.unidad,
+        precio_unitario: String(item.costoPorUnidad || ""),
       },
     ]);
-    setSelectorOpen(false);
-    setSelectorBuscar("");
   };
 
   const removeLinea = (key: number) => {
@@ -310,58 +309,12 @@ export default function NuevoPedidoPage() {
         </div>
       </form>
 
-      {/* Ingredient selector modal */}
-      {selectorOpen && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-xl">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-medium text-text">Seleccionar ingrediente</h3>
-              <button
-                onClick={() => {
-                  setSelectorOpen(false);
-                  setSelectorBuscar("");
-                }}
-                className="text-warm-gray hover:text-text min-h-[44px] min-w-[44px] flex items-center justify-center text-xl leading-none"
-                aria-label="Cerrar"
-              >
-                &times;
-              </button>
-            </div>
-            <div className="p-3 border-b border-gray-100">
-              <input
-                type="search"
-                placeholder="Buscar ingrediente..."
-                value={selectorBuscar}
-                onChange={(e) => setSelectorBuscar(e.target.value)}
-                autoFocus
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
-              />
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {ingFiltered.length === 0 ? (
-                <p className="p-4 text-center text-warm-gray text-sm">
-                  No se encontraron ingredientes.
-                </p>
-              ) : (
-                ingFiltered.map((i) => (
-                  <button
-                    key={i.id}
-                    onClick={() => addIngrediente(i)}
-                    className="w-full text-left px-4 py-3 hover:bg-cream transition-colors flex items-center justify-between border-b border-gray-50 min-h-[44px]"
-                  >
-                    <span className="text-sm font-medium text-text">
-                      {i.nombre}
-                    </span>
-                    <span className="text-xs text-warm-gray">
-                      {formatARS(i.precio_compra)}/{i.unidad_compra}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <IngredientOrSubrecetaPicker
+        open={selectorOpen}
+        onClose={() => setSelectorOpen(false)}
+        onSelect={addIngrediente}
+        ingredientes={ingredientesOpts}
+      />
     </div>
   );
 }

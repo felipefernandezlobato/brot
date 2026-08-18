@@ -27,3 +27,11 @@ export interface Permission {
   action: string;
   allowed: boolean;
 }
+
+export interface SubrecetaOpt {
+  id: number;
+  nombre: string;
+  unidad_rendimiento: string | null;
+  porciones_por_lote: number;
+  costo_por_porcion: number;
+}

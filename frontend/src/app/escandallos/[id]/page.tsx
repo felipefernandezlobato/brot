@@ -7,6 +7,11 @@ import { apiFetch } from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/format";
 import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
+import { useLineasReceta } from "@/lib/useLineasReceta";
+import { useRecetaFormOptions } from "@/lib/useRecetaFormOptions";
+import { IngredientOrSubrecetaPicker } from "@/components/IngredientOrSubrecetaPicker";
+import { RecetaInfoFields } from "@/components/RecetaInfoFields";
+import { RecetaLineasEditor } from "@/components/RecetaLineasEditor";
 import {
   ComposedChart,
   Line,
@@ -107,6 +112,20 @@ export default function RecetaCompletoPage() {
   const [data, setData] = useState<CompletoData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Edit mode
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [eNombre, setENombre] = useState("");
+  const [eCategoriaId, setECategoriaId] = useState("");
+  const [ePorciones, setEPorciones] = useState("1");
+  const [ePrecioVenta, setEPrecioVenta] = useState("");
+  const [eEsSubreceta, setEEsSubreceta] = useState(false);
+  const [eUnidadRendimiento, setEUnidadRendimiento] = useState("");
+  const [eNotas, setENotas] = useState("");
+  const { lineas, setLineas, addItem, removeLinea, updateLinea, costoTotal, toApiPayload } = useLineasReceta();
+  const { categorias, ingredientesOpts, subrecetasOpts } = useRecetaFormOptions();
+
   useEffect(() => {
     if (!params?.id) return;
     apiFetch<CompletoData>(`/api/recetas/${params.id}/completo`)
@@ -117,6 +136,61 @@ export default function RecetaCompletoPage() {
 
   if (loading) return <div className="p-8 text-center text-warm-gray">Cargando...</div>;
   if (!data) return <div className="p-8 text-center text-warm-gray">Receta no encontrada.</div>;
+
+  const startEditing = () => {
+    const r = data.receta;
+    setENombre(r.nombre);
+    setECategoriaId(String(r.categoria_id));
+    setEPorciones(String(r.porciones_por_lote));
+    setEPrecioVenta(r.precio_venta != null ? String(r.precio_venta) : "");
+    setEEsSubreceta(r.es_subreceta);
+    setEUnidadRendimiento(r.unidad_rendimiento || "");
+    setENotas(r.notas || "");
+    setLineas(
+      r.lineas.map((l) => ({
+        key: -l.id,
+        ingrediente_id: l.ingrediente_id,
+        subreceta_id: l.subreceta_id,
+        tipo: l.ingrediente_id ? "ingrediente" : "subreceta",
+        nombre: l.nombre,
+        cantidad: String(l.cantidad),
+        unidad: l.unidad,
+        costoPorUnidad: l.cantidad !== 0 ? l.costo_linea / l.cantidad : 0,
+      }))
+    );
+    setEditing(true);
+  };
+
+  const handleSave = async () => {
+    if (!eNombre.trim() || !eCategoriaId) {
+      toast("Nombre y categoría son obligatorios", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const body = {
+        nombre: eNombre.trim(),
+        categoria_id: parseInt(eCategoriaId),
+        porciones_por_lote: parseFloat(ePorciones) || 1,
+        precio_venta: ePrecioVenta ? parseFloat(ePrecioVenta) : null,
+        es_subreceta: eEsSubreceta,
+        unidad_rendimiento: eEsSubreceta ? eUnidadRendimiento || null : null,
+        notas: eNotas || null,
+        lineas: toApiPayload(),
+      };
+      await apiFetch(`/api/recetas/${params.id}`, { method: "PUT", body: JSON.stringify(body) });
+      toast("Receta actualizada");
+      setEditing(false);
+      const fresh = await apiFetch<CompletoData>(`/api/recetas/${params.id}/completo`);
+      setData(fresh);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al guardar";
+      toast(msg, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
 
   const { receta, producto, stock_actual, stock_history, movimientos, ancestors, padre, hijos, usado_en, consume_productos } = data;
 
@@ -176,7 +250,55 @@ export default function RecetaCompletoPage() {
             </span>
           )}
         </div>
+        <PermissionGate module="recetas" action="edit">
+          {editing ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditing(false)}
+                className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="bg-brot text-white px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] hover:bg-brot-dark transition-colors disabled:opacity-50"
+              >
+                {saving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={startEditing}
+              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-text hover:bg-cream transition-colors min-h-[44px]"
+            >
+              Editar
+            </button>
+          )}
+        </PermissionGate>
       </div>
+
+      {editing && (
+        <div className="mb-4">
+          <RecetaInfoFields
+            nombre={eNombre}
+            onNombreChange={setENombre}
+            categoriaId={eCategoriaId}
+            onCategoriaIdChange={setECategoriaId}
+            categorias={categorias}
+            porciones={ePorciones}
+            onPorcionesChange={setEPorciones}
+            precioVenta={ePrecioVenta}
+            onPrecioVentaChange={setEPrecioVenta}
+            esSubreceta={eEsSubreceta}
+            onEsSubrecetaChange={setEEsSubreceta}
+            unidadRendimiento={eUnidadRendimiento}
+            onUnidadRendimientoChange={setEUnidadRendimiento}
+            notas={eNotas}
+            onNotasChange={setENotas}
+          />
+        </div>
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
@@ -274,46 +396,58 @@ export default function RecetaCompletoPage() {
         </div>
       )}
 
-      {/* Ingredients table */}
-      <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
-        <div className="px-4 py-3 border-b border-cream-dark">
-          <h2 className="font-medium text-text text-sm">Ingredientes / Lineas de receta</h2>
+      {/* Ingredients table / editor */}
+      {editing ? (
+        <div className="mb-4">
+          <RecetaLineasEditor
+            lineas={lineas}
+            onAdd={() => setSelectorOpen(true)}
+            onRemove={removeLinea}
+            onChange={updateLinea}
+            costoTotal={costoTotal}
+          />
         </div>
-        {receta.lineas.length === 0 ? (
-          <p className="p-4 text-center text-warm-gray text-sm">Sin ingredientes.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-cream-dark bg-cream/50">
-                <th className="text-left px-4 py-2 font-medium text-warm-gray">Ingrediente</th>
-                <th className="text-right px-3 py-2 font-medium text-warm-gray">Cantidad</th>
-                <th className="text-left px-3 py-2 font-medium text-warm-gray">Unidad</th>
-                <th className="text-right px-4 py-2 font-medium text-warm-gray">Costo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {receta.lineas.map((l, idx) => (
-                <tr key={l.id} className={idx < receta.lineas.length - 1 ? "border-b border-cream-dark" : ""}>
-                  <td className="px-4 py-2">
-                    {l.ingrediente_id ? (
-                      <Link href={`/ingredientes/${l.ingrediente_id}`} className="text-text hover:text-brot hover:underline">{l.nombre}</Link>
-                    ) : l.subreceta_id ? (
-                      <Link href={`/escandallos/${l.subreceta_id}`} className="text-brot hover:underline">{l.nombre} <span className="text-xs text-warm-gray">(subreceta)</span></Link>
-                    ) : l.nombre}
-                  </td>
-                  <td className="text-right px-3 py-2 text-text tabular-nums">{l.cantidad}</td>
-                  <td className="px-3 py-2 text-warm-gray">{l.unidad}</td>
-                  <td className="text-right px-4 py-2 text-text tabular-nums">{formatARS(l.costo_linea)}</td>
+      ) : (
+        <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+          <div className="px-4 py-3 border-b border-cream-dark">
+            <h2 className="font-medium text-text text-sm">Ingredientes / Lineas de receta</h2>
+          </div>
+          {receta.lineas.length === 0 ? (
+            <p className="p-4 text-center text-warm-gray text-sm">Sin ingredientes.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-cream-dark bg-cream/50">
+                  <th className="text-left px-4 py-2 font-medium text-warm-gray">Ingrediente</th>
+                  <th className="text-right px-3 py-2 font-medium text-warm-gray">Cantidad</th>
+                  <th className="text-left px-3 py-2 font-medium text-warm-gray">Unidad</th>
+                  <th className="text-right px-4 py-2 font-medium text-warm-gray">Costo</th>
                 </tr>
-              ))}
-              <tr className="border-t border-cream-dark bg-cream/30">
-                <td colSpan={3} className="px-4 py-2 font-medium text-text">Total lote</td>
-                <td className="text-right px-4 py-2 font-bold text-text">{formatARS(receta.costo_total)}</td>
-              </tr>
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {receta.lineas.map((l, idx) => (
+                  <tr key={l.id} className={idx < receta.lineas.length - 1 ? "border-b border-cream-dark" : ""}>
+                    <td className="px-4 py-2">
+                      {l.ingrediente_id ? (
+                        <Link href={`/ingredientes/${l.ingrediente_id}`} className="text-text hover:text-brot hover:underline">{l.nombre}</Link>
+                      ) : l.subreceta_id ? (
+                        <Link href={`/escandallos/${l.subreceta_id}`} className="text-brot hover:underline">{l.nombre} <span className="text-xs text-warm-gray">(subreceta)</span></Link>
+                      ) : l.nombre}
+                    </td>
+                    <td className="text-right px-3 py-2 text-text tabular-nums">{l.cantidad}</td>
+                    <td className="px-3 py-2 text-warm-gray">{l.unidad}</td>
+                    <td className="text-right px-4 py-2 text-text tabular-nums">{formatARS(l.costo_linea)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t border-cream-dark bg-cream/30">
+                  <td colSpan={3} className="px-4 py-2 font-medium text-text">Total lote</td>
+                  <td className="text-right px-4 py-2 font-bold text-text">{formatARS(receta.costo_total)}</td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {/* Stock chart */}
       {chartData.length > 1 && (
@@ -377,12 +511,21 @@ export default function RecetaCompletoPage() {
       )}
 
       {/* Notes */}
-      {receta.notas && (
+      {!editing && receta.notas && (
         <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
           <p className="text-xs font-medium text-warm-gray mb-1">Notas</p>
           <p className="text-sm text-text whitespace-pre-line">{receta.notas}</p>
         </div>
       )}
+
+      <IngredientOrSubrecetaPicker
+        open={selectorOpen}
+        onClose={() => setSelectorOpen(false)}
+        onSelect={addItem}
+        ingredientes={ingredientesOpts}
+        subrecetas={subrecetasOpts}
+        excludeRecetaId={receta.id}
+      />
 
       {/* Delete */}
       <PermissionGate module="recetas" action="delete">

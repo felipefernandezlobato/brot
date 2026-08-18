@@ -10,6 +10,7 @@ from app.permissions import require_permission
 from app.schemas import RecetaCreate, RecetaOut, RecetaUpdate, LineaRecetaOut
 from app.services.costes import costo_linea, costo_receta
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
+from app.services.recetas_validacion import validar_lineas_receta
 from app.services.stock import historial_movimientos_acumulado
 
 router = APIRouter(prefix="/api/recetas", tags=["recetas"])
@@ -323,6 +324,11 @@ def create_receta(
     user: User = require_permission("recetas", "create"),
     db: Session = Depends(get_db),
 ):
+    try:
+        validar_lineas_receta(db, None, data.lineas)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     receta = Receta(
         nombre=data.nombre,
         categoria_id=data.categoria_id,
@@ -368,6 +374,12 @@ def update_receta(
 
     updates = data.model_dump(exclude_unset=True)
     lineas_data = updates.pop("lineas", None)
+
+    if lineas_data is not None:
+        try:
+            validar_lineas_receta(db, rec_id, lineas_data)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
 
     for key, val in updates.items():
         setattr(receta, key, val)
