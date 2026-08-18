@@ -113,9 +113,10 @@ Felipe pegó un log de deploy de Render fallando con
   no reflejan producción/consumo real). `historial_movimientos_acumulado()`
   generaliza la lógica para ambos tipos de stock. Celdas con diferencia >0.5
   entre calculado y conteo real se marcan.
-- `42ac994` — el gráfico de evolución usa esos mismos valores calculados
-  (antes casi todos los productos tenían un solo punto manual y Recharts no
-  podía dibujar una línea).
+- `42ac994` — el gráfico de evolución de Stock Congelado usa esos mismos
+  valores calculados (antes casi todos los productos tenían un solo punto
+  manual y Recharts no podía dibujar una línea).
+- `1811697` — mismo arreglo para el gráfico de Stock Materia Prima.
 
 ### 8. Focaccia (trabajo nuevo, no relacionado al bug de manteca)
 - `0db51db`, `479ac97`, `4337b70` — receta de Focaccia rehecha con cantidades
