@@ -245,3 +245,69 @@ def test_entrega_mayor_al_stock_no_deja_el_ledger_negativo(client, db):
     ).one()
     assert mov.cantidad == -5.0  # lo que realmente salio, not -9
     assert "insuficiente" in (mov.notas or "").lower()
+
+
+def _catalogo_de_terminado_sin_receta_propia(db, unidades_masa=100.0, unidades_terminado=20.0):
+    """Ensaimadas: la masa tiene receta_id=X, pero el terminado (solo horneado,
+    sin insumos propios) no tiene receta -- comparten familia via producto_padre_id,
+    no via receta_id. El catalogo apunta a la receta de la masa (es la unica que
+    existe), pero una venta debe salir del terminado, nunca de la masa cruda."""
+    cat = Categoria(nombre="Bolleria", tipo="receta")
+    db.add(cat)
+    db.flush()
+    receta_masa = Receta(nombre="Ensaimadas", categoria_id=cat.id, porciones_por_lote=1)
+    db.add(receta_masa)
+    db.flush()
+
+    masa = ProductoCongelado(
+        nombre="Ensaimada Amasada", categoria="masas", unidad="u",
+        receta_id=receta_masa.id, nivel="masa",
+    )
+    db.add(masa)
+    db.flush()
+    db.add(StockCongelado(
+        producto_congelado_id=masa.id, cantidad=unidades_masa,
+        fecha_entrada=date.today(), is_active=True,
+    ))
+
+    terminado = ProductoCongelado(
+        nombre="Ensaimadas Cocinado", categoria="Bolleria", unidad="u",
+        receta_id=None, nivel="terminado",
+        producto_padre_id=masa.id, cantidad_por_padre=1.0,
+    )
+    db.add(terminado)
+    db.flush()
+    db.add(StockCongelado(
+        producto_congelado_id=terminado.id, cantidad=unidades_terminado,
+        fecha_entrada=date.today(), is_active=True,
+    ))
+
+    catalogo = ProductoCatalogo(
+        nombre="Ensaimadas", precio=500.0, categoria="Bolleria",
+        receta_id=receta_masa.id, disponible=True,
+    )
+    cli = ClienteB2B(nombre="Olula")
+    db.add_all([catalogo, cli])
+    db.commit()
+    return masa, terminado, catalogo, cli
+
+
+def test_entrega_de_terminado_sin_receta_propia_no_descuenta_la_masa(client, db):
+    """Bug real: el catalogo resolvia por receta_id y encontraba la masa (unica
+    con esa receta), asi que una entrega de Ensaimadas terminadas vaciaba la
+    masa cruda en vez del producto horneado."""
+    headers = _auth(client, db)
+    masa, terminado, catalogo, cli = _catalogo_de_terminado_sin_receta_propia(db)
+
+    res = client.post(
+        "/api/entregas-b2b",
+        json={
+            "cliente_b2b_id": cli.id, "fecha_entrega": HOY, "estado": "entregado",
+            "lineas": [{"producto_id": catalogo.id, "cantidad": 8, "precio_unitario": 500.0}],
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+
+    assert _stock(db, terminado.id) == 12.0  # 20 - 8
+    assert _stock(db, masa.id) == 100.0  # sin tocar

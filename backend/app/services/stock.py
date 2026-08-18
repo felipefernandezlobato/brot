@@ -436,6 +436,31 @@ def producir_producto(
     return movimientos
 
 
+def _unico_terminado_descendiente(db: Session, producto: "ProductoCongelado") -> Optional["ProductoCongelado"]:
+    """The single terminado reachable by walking down producto_padre_id children.
+
+    Returns None if the chain branches into more than one terminado (ambiguous --
+    caller should not guess) or dead-ends without one.
+    """
+    encontrados: list[ProductoCongelado] = []
+    nivel_actual = [producto]
+    visitados = {producto.id}
+    while nivel_actual:
+        siguiente = []
+        for p in nivel_actual:
+            hijos = db.query(ProductoCongelado).filter(ProductoCongelado.producto_padre_id == p.id).all()
+            for h in hijos:
+                if h.id in visitados:
+                    continue
+                visitados.add(h.id)
+                if h.nivel == "terminado":
+                    encontrados.append(h)
+                else:
+                    siguiente.append(h)
+        nivel_actual = siguiente
+    return encontrados[0] if len(encontrados) == 1 else None
+
+
 def deducir_congelado_por_catalogo(
     db: Session,
     producto_catalogo_id: int,
@@ -449,11 +474,22 @@ def deducir_congelado_por_catalogo(
     if not cat or not cat.receta_id:
         return None
 
-    prod_cong = (
+    candidatos = (
         db.query(ProductoCongelado)
         .filter(ProductoCongelado.receta_id == cat.receta_id)
-        .first()
+        .all()
     )
+    prod_cong = next((p for p in candidatos if p.nivel == "terminado"), None)
+    if not prod_cong and candidatos:
+        # No terminado shares this receta_id directly -- e.g. Ensaimadas Cocinado
+        # needs no recipe of its own (baking adds no ingredients), so only the
+        # masa (Ensaimada Amasada) carries receta_id=17. A catalog sale must
+        # still come off the finished good, so walk down the production chain
+        # from whatever matched. Only used when it resolves to exactly one
+        # terminado -- a branching chain (one masa feeding several distinct
+        # terminados, each with its own receta_id already) is left alone rather
+        # than guessed at.
+        prod_cong = _unico_terminado_descendiente(db, candidatos[0])
     if not prod_cong:
         return None
 
