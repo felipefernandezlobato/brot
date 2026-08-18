@@ -740,21 +740,49 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
     setExpandedCategory(null);
   };
 
-  // Chart data from selected individual ingredients
+  // Only genuine manual counts feed the chart/pivot's "raw" side (see
+  // esConteoManual) -- production-driven rows are already what `calculado`
+  // is built from, so a date/ingredient can still show up via `calculado`
+  // alone even with zero manual counts.
+  const conteosManuales = useMemo(() => registros.filter((r) => esConteoManual(r.notas)), [registros]);
+
+  // Chart data from selected individual ingredients. A raw manual count only
+  // exists on the exact day someone counted -- most ingredients have just
+  // one, which Recharts can only draw as a lone dot (a line needs 2+
+  // points). The calculated ledger balance is a real day-by-day trend
+  // wherever it exists (production consumption, mermas, pedido receptions),
+  // so prefer it per date and only fall back to the raw count where there's
+  // no ledger activity at all for that ingredient.
   const chartData = useMemo(() => {
     if (selectedIds.size === 0) return [];
 
-    const byDate = new Map<string, Record<string, number>>();
-    for (const r of registros) {
-      if (!selectedIds.has(r.ingrediente_id)) continue;
-      const name = ingMap.get(r.ingrediente_id)?.nombre ?? `#${r.ingrediente_id}`;
-      if (!byDate.has(r.fecha_registro)) byDate.set(r.fecha_registro, {});
-      byDate.get(r.fecha_registro)![name] = r.cantidad;
+    const dates = new Set<string>();
+    for (const id of selectedIds) {
+      for (const p of calculado.get(id) ?? []) dates.add(p.fecha);
+    }
+    for (const r of conteosManuales) {
+      if (selectedIds.has(r.ingrediente_id)) dates.add(r.fecha_registro);
     }
 
-    const sorted = Array.from(byDate.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([fecha, values]) => ({ fecha, ...values }));
+    const rawByDate = new Map<string, Map<number, number>>();
+    for (const r of conteosManuales) {
+      if (!rawByDate.has(r.fecha_registro)) rawByDate.set(r.fecha_registro, new Map());
+      rawByDate.get(r.fecha_registro)!.set(r.ingrediente_id, r.cantidad);
+    }
+
+    const sorted = Array.from(dates)
+      .sort()
+      .map((fecha) => {
+        const row: Record<string, number> = {};
+        for (const id of selectedIds) {
+          const name = ingMap.get(id)?.nombre ?? `#${id}`;
+          const calc = valorCalculadoEnFecha(calculado.get(id), fecha);
+          const raw = rawByDate.get(fecha)?.get(id);
+          const val = calc !== null ? calc : raw;
+          if (val !== undefined) row[name] = val;
+        }
+        return { fecha, ...row };
+      });
 
     // Calculate total consumption between consecutive dates
     for (let i = 1; i < sorted.length; i++) {
@@ -774,7 +802,7 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
     }
 
     return sorted;
-  }, [registros, selectedIds, ingMap]);
+  }, [calculado, conteosManuales, selectedIds, ingMap]);
 
   const chartNames = useMemo(
     () =>
@@ -785,10 +813,6 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
   );
 
   // Pivot table: all ingredients (rows) x dates (columns, most recent first)
-  // Only genuine manual counts feed the "raw" side (see esConteoManual) --
-  // automated rows are already what `calculado` is built from, so a
-  // date/ingredient can still show up here via `calculado` alone.
-  const conteosManuales = useMemo(() => registros.filter((r) => esConteoManual(r.notas)), [registros]);
 
   const allDates = useMemo(() => {
     const dates = new Set(conteosManuales.map((r) => r.fecha_registro));
