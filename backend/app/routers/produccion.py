@@ -55,6 +55,7 @@ def _tarea_to_out(t: TareaProduccion) -> dict:
         "unidad_cantidad": t.unidad_cantidad,
         "receta_id": t.receta_id,
         "receta_nombre": t.receta.nombre if t.receta else None,
+        "producto_congelado_id": t.producto_congelado_id,
         "tipo": t.tipo,
         "posicion": t.posicion,
         "is_active": t.is_active,

@@ -108,6 +108,7 @@ export default function ProduccionHoy() {
   const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
   const [recetas, setRecetas] = useState<RecetaDropdown[]>([]);
   const [productosCongelados, setProductosCongelados] = useState<{id:number;nombre:string;nivel:string;necesita_bastones?:boolean}[]>([]);
+  const [procesoPorProducto, setProcesoPorProducto] = useState<Map<number, string>>(new Map());
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [editando, setEditando] = useState<Set<number>>(new Set());
   const { toast } = useToast();
@@ -117,13 +118,21 @@ export default function ProduccionHoy() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [d, recs, prods] = await Promise.all([
+      const [d, recs, prods, tareas] = await Promise.all([
         apiFetch<DiaData>(`/api/produccion/dia?fecha=${fecha}`),
         apiFetch<RecetaDropdown[]>("/api/produccion/productos-dropdown"),
         apiFetch<{id:number;nombre:string;nivel:string;producto_padre_id:number|null;cantidad_por_padre:number|null}[]>("/api/congelados/productos"),
+        apiFetch<{titulo:string;producto_congelado_id:number|null;is_active:boolean}[]>("/api/produccion/tareas"),
       ]);
       setData(d);
       setRecetas(recs);
+      const procesoMap = new Map<number, string>();
+      for (const t of tareas) {
+        if (t.is_active && t.producto_congelado_id && !procesoMap.has(t.producto_congelado_id)) {
+          procesoMap.set(t.producto_congelado_id, t.titulo);
+        }
+      }
+      setProcesoPorProducto(procesoMap);
       // Restore any unsaved typing for this day — nothing is lost just because the
       // tab closed before someone hit Guardar.
       const saved = sessionStorage.getItem(`brot_produccion_dia_${fecha}`);
@@ -752,7 +761,14 @@ export default function ProduccionHoy() {
                   const labels: Record<string,string> = {masa:"Masas",semi:"Semi-elaborados",crudo:"Crudos",terminado:"Terminados"};
                   return (
                     <optgroup key={nivel} label={labels[nivel] || nivel}>
-                      {items.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                      {items.map(p => {
+                        const proceso = procesoPorProducto.get(p.id);
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {proceso ? `${proceso} (${p.nombre})` : p.nombre}
+                          </option>
+                        );
+                      })}
                     </optgroup>
                   );
                 })}

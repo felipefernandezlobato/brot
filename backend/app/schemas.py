@@ -475,6 +475,7 @@ class TareaProduccionOut(BaseModel):
     unidad_cantidad: Optional[str] = None
     receta_id: Optional[int] = None
     receta_nombre: Optional[str] = None
+    producto_congelado_id: Optional[int] = None
     tipo: str
     posicion: int
     is_active: bool
