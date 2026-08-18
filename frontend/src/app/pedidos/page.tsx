@@ -303,6 +303,7 @@ function TabPropuesta({ onCreated }: { onCreated: () => void }) {
   const [loading, setLoading] = useState(true);
   const [cantidades, setCantidades] = useState<Record<number, string>>({});
   const [creating, setCreating] = useState(false);
+  const [overrideProveedorId, setOverrideProveedorId] = useState<Record<string, string>>({});
 
   useEffect(() => {
     Promise.all([
@@ -326,7 +327,7 @@ function TabPropuesta({ onCreated }: { onCreated: () => void }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const crearPedido = async (proveedorNombre: string, items: RecomendacionItem[]) => {
+  const crearPedido = async (proveedorId: number, proveedorLabel: string, items: RecomendacionItem[]) => {
     const lineas = items
       .filter((i) => {
         const val = cantidades[i.ingrediente_id];
@@ -343,22 +344,16 @@ function TabPropuesta({ onCreated }: { onCreated: () => void }) {
       return;
     }
 
-    const prov = proveedores.find((p) => p.nombre.toLowerCase() === proveedorNombre.toLowerCase());
-    if (!prov) {
-      toast(`Proveedor "${proveedorNombre}" no encontrado`, "error");
-      return;
-    }
-
     setCreating(true);
     try {
       await apiFetch("/api/pedidos", {
         method: "POST",
         body: JSON.stringify({
-          proveedor_id: prov.id,
+          proveedor_id: proveedorId,
           lineas,
         }),
       });
-      toast(`Pedido creado para ${proveedorNombre}`);
+      toast(`Pedido creado para ${proveedorLabel}`);
       onCreated();
     } catch {
       toast("Error al crear pedido", "error");
@@ -389,23 +384,43 @@ function TabPropuesta({ onCreated }: { onCreated: () => void }) {
             const val = cantidades[i.ingrediente_id];
             return val && parseFloat(val) > 0;
           });
+          const matched = proveedores.find((p) => p.nombre.toLowerCase() === group.proveedor.toLowerCase());
+          const needsOverride = !matched;
+          const overrideVal = overrideProveedorId[group.proveedor] ?? "";
+          const resolvedId = needsOverride ? (overrideVal ? parseInt(overrideVal) : null) : matched!.id;
 
           return (
             <div key={group.proveedor} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
-              <div className="px-4 py-3 bg-cream/50 border-b border-cream-dark flex items-center justify-between">
+              <div className="px-4 py-3 bg-cream/50 border-b border-cream-dark flex items-center justify-between gap-3 flex-wrap">
                 <div>
                   <p className="font-medium text-text">{group.proveedor}</p>
                   <p className="text-xs text-warm-gray">{group.items.length} ingredientes</p>
                 </div>
-                <PermissionGate module="pedidos_proveedores" action="create">
-                  <button
-                    onClick={() => crearPedido(group.proveedor, group.items)}
-                    disabled={creating || groupItems.length === 0}
-                    className="px-4 py-2 bg-brot text-white rounded-lg text-sm font-medium hover:bg-brot-dark transition-colors min-h-[40px] disabled:opacity-50"
-                  >
-                    {creating ? "..." : `Crear Pedido (${groupItems.length})`}
-                  </button>
-                </PermissionGate>
+                <div className="flex items-center gap-2">
+                  {needsOverride && (
+                    <select
+                      value={overrideVal}
+                      onChange={(e) =>
+                        setOverrideProveedorId((prev) => ({ ...prev, [group.proveedor]: e.target.value }))
+                      }
+                      className="border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
+                    >
+                      <option value="">Elegir proveedor...</option>
+                      {proveedores.map((p) => (
+                        <option key={p.id} value={p.id}>{p.nombre}</option>
+                      ))}
+                    </select>
+                  )}
+                  <PermissionGate module="pedidos_proveedores" action="create">
+                    <button
+                      onClick={() => resolvedId != null && crearPedido(resolvedId, group.proveedor, group.items)}
+                      disabled={creating || groupItems.length === 0 || resolvedId == null}
+                      className="px-4 py-2 bg-brot text-white rounded-lg text-sm font-medium hover:bg-brot-dark transition-colors min-h-[40px] disabled:opacity-50"
+                    >
+                      {creating ? "..." : `Crear Pedido (${groupItems.length})`}
+                    </button>
+                  </PermissionGate>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
