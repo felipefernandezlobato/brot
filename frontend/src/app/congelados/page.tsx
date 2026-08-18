@@ -93,6 +93,11 @@ function formatCantidad(n: number): string {
 
 const NOTAS_AUTOMATICAS = ["Produccion:", "Ajuste por reversion", "Reversion de"];
 
+/** Historial pivot table row order: terminado on top, masa at the bottom —
+ * mirrors the production chain direction (masa -> semi -> crudo -> terminado)
+ * read backwards, since that's the order operators scan it in. */
+const NIVEL_ORDEN: Record<string, number> = { terminado: 0, crudo: 1, semi: 2, masa: 3 };
+
 /** A StockCongelado row is a real physical count only if nothing wrote it
  * automatically -- production output, FIFO shortfall adjustments, and
  * reversal-rebuilt lots all carry a recognizable notas prefix. Comparing the
@@ -938,7 +943,13 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
   const allProductsWithData = useMemo(() => {
     const ids = new Set(conteosManuales.map((e) => e.producto_congelado_id));
     for (const pid of calculado.keys()) ids.add(pid);
-    return productos.filter((p) => ids.has(p.id));
+    return productos
+      .filter((p) => ids.has(p.id))
+      .sort((a, b) => {
+        const oa = NIVEL_ORDEN[a.nivel] ?? 99;
+        const ob = NIVEL_ORDEN[b.nivel] ?? 99;
+        return oa !== ob ? oa - ob : a.nombre.localeCompare(b.nombre);
+      });
   }, [conteosManuales, calculado, productos]);
 
   // For congelados, aggregate quantities per (date, product) since there can be multiple entries
