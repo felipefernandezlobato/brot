@@ -1,4 +1,6 @@
 """Tests for the pedidos (supplier orders) router."""
+from datetime import date
+
 from app.auth import hash_pin
 from app.main import app  # noqa: F401  — routers already mounted in main
 from app.models import Categoria, Ingrediente, InventarioRegistro, Proveedor, User
@@ -22,6 +24,16 @@ def _setup(client, db):
     db.commit()
     token = client.post("/api/auth/login", json={"name": "Admin", "pin": "0000"}).json()["token"]
     return token, prov.id, ing.id
+
+
+def _saldo(db, ing_id):
+    return (
+        db.query(InventarioRegistro)
+        .filter(InventarioRegistro.ingrediente_id == ing_id)
+        .order_by(InventarioRegistro.fecha_registro.desc(), InventarioRegistro.id.desc())
+        .first()
+        .cantidad
+    )
 
 
 # ── Basic CRUD ─────────────────────────────────────────────────────────────────
@@ -91,6 +103,7 @@ def test_lifecycle_borrador_enviado_recibido(client, db):
         headers={"Authorization": f"Bearer {token}"},
     )
     pid = created.json()["id"]
+    linea_id = created.json()["lineas"][0]["id"]
 
     # borrador → enviado
     enviado = client.post(f"/api/pedidos/{pid}/enviar",
@@ -98,9 +111,12 @@ def test_lifecycle_borrador_enviado_recibido(client, db):
     assert enviado.status_code == 200
     assert enviado.json()["estado"] == "enviado"
 
-    # enviado → recibido
-    recibido = client.post(f"/api/pedidos/{pid}/recibir",
-                           headers={"Authorization": f"Bearer {token}"})
+    # enviado → recibido, with confirmed quantities
+    recibido = client.post(
+        f"/api/pedidos/{pid}/recibir",
+        json={"lineas": [{"linea_id": linea_id, "cantidad_recibida": 5.0}]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert recibido.status_code == 200
     assert recibido.json()["estado"] == "recibido"
     assert recibido.json()["fecha_recepcion"] is not None
@@ -118,14 +134,43 @@ def test_enviar_requires_borrador(client, db):
     assert res.status_code == 409
 
 
+def test_recibir_requires_confirmed_quantities(client, db):
+    token, prov_id, ing_id = _setup(client, db)
+    created = client.post(
+        "/api/pedidos",
+        json={
+            "proveedor_id": prov_id,
+            "lineas": [{"ingrediente_id": ing_id, "cantidad_pedida": 5.0, "unidad": "kg"}],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    pid = created.json()["id"]
+    client.post(f"/api/pedidos/{pid}/enviar", headers={"Authorization": f"Bearer {token}"})
+    # No lineas confirmed at all — the request body itself is invalid.
+    res = client.post(f"/api/pedidos/{pid}/recibir", json={"lineas": []},
+                      headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 422
+
+
 def test_recibir_requires_enviado(client, db):
     token, prov_id, ing_id = _setup(client, db)
-    created = client.post("/api/pedidos", json={"proveedor_id": prov_id, "lineas": []},
-                          headers={"Authorization": f"Bearer {token}"})
+    created = client.post(
+        "/api/pedidos",
+        json={
+            "proveedor_id": prov_id,
+            "lineas": [{"ingrediente_id": ing_id, "cantidad_pedida": 5.0, "unidad": "kg"}],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
     pid = created.json()["id"]
-    # Trying to receive a borrador directly must fail
-    res = client.post(f"/api/pedidos/{pid}/recibir",
-                      headers={"Authorization": f"Bearer {token}"})
+    linea_id = created.json()["lineas"][0]["id"]
+    # Trying to receive a borrador directly (never sent) must fail even with a
+    # well-formed confirmation body — the state check, not just validation.
+    res = client.post(
+        f"/api/pedidos/{pid}/recibir",
+        json={"lineas": [{"linea_id": linea_id, "cantidad_recibida": 5.0}]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert res.status_code == 409
 
 
@@ -140,14 +185,45 @@ def test_delete_borrador_succeeds(client, db):
     assert res.status_code == 200
 
 
-def test_delete_blocked_if_not_borrador(client, db):
+def test_delete_enviado_succeeds(client, db):
+    """Nothing external has happened yet for an 'enviado' order, so it can be
+    deleted freely — only a 'recibido' order needs its stock effect reversed
+    (see test_delete_recibido_reverses_stock)."""
     token, prov_id, ing_id = _setup(client, db)
     created = client.post("/api/pedidos", json={"proveedor_id": prov_id, "lineas": []},
                           headers={"Authorization": f"Bearer {token}"})
     pid = created.json()["id"]
     client.post(f"/api/pedidos/{pid}/enviar", headers={"Authorization": f"Bearer {token}"})
     res = client.delete(f"/api/pedidos/{pid}", headers={"Authorization": f"Bearer {token}"})
-    assert res.status_code == 409
+    assert res.status_code == 200
+
+
+def test_delete_recibido_reverses_stock(client, db):
+    token, prov_id, ing_id = _setup(client, db)
+    db.add(InventarioRegistro(ingrediente_id=ing_id, cantidad=10.0, unidad="kg", fecha_registro=date.today()))
+    db.commit()
+
+    created = client.post(
+        "/api/pedidos",
+        json={
+            "proveedor_id": prov_id,
+            "lineas": [{"ingrediente_id": ing_id, "cantidad_pedida": 20.0, "unidad": "kg"}],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    pid = created.json()["id"]
+    linea_id = created.json()["lineas"][0]["id"]
+    client.post(f"/api/pedidos/{pid}/enviar", headers={"Authorization": f"Bearer {token}"})
+    client.post(
+        f"/api/pedidos/{pid}/recibir",
+        json={"lineas": [{"linea_id": linea_id, "cantidad_recibida": 20.0}]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert _saldo(db, ing_id) == 30.0  # 10 + 20
+
+    res = client.delete(f"/api/pedidos/{pid}", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    assert _saldo(db, ing_id) == 10.0  # given back
 
 
 # ── Auto stock update on receive ───────────────────────────────────────────────
@@ -165,8 +241,13 @@ def test_recibir_creates_inventario_entries(client, db):
         headers={"Authorization": f"Bearer {token}"},
     )
     pid = created.json()["id"]
+    linea_id = created.json()["lineas"][0]["id"]
     client.post(f"/api/pedidos/{pid}/enviar", headers={"Authorization": f"Bearer {token}"})
-    client.post(f"/api/pedidos/{pid}/recibir", headers={"Authorization": f"Bearer {token}"})
+    client.post(
+        f"/api/pedidos/{pid}/recibir",
+        json={"lineas": [{"linea_id": linea_id, "cantidad_recibida": 20.0}]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
 
     registros = (
         db.query(InventarioRegistro)
@@ -178,33 +259,68 @@ def test_recibir_creates_inventario_entries(client, db):
     assert registros[0].unidad == "kg"
 
 
-def test_recibir_uses_cantidad_recibida_when_set(client, db):
+def test_recibir_confirmation_overrides_cantidad_pedida(client, db):
     token, prov_id, ing_id = _setup(client, db)
     created = client.post(
         "/api/pedidos",
         json={
             "proveedor_id": prov_id,
+            "lineas": [{"ingrediente_id": ing_id, "cantidad_pedida": 20.0, "unidad": "kg"}],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    pid = created.json()["id"]
+    linea_id = created.json()["lineas"][0]["id"]
+    client.post(f"/api/pedidos/{pid}/enviar", headers={"Authorization": f"Bearer {token}"})
+    client.post(
+        f"/api/pedidos/{pid}/recibir",
+        json={"lineas": [{"linea_id": linea_id, "cantidad_recibida": 18.5}]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert _saldo(db, ing_id) == 18.5
+
+    pedido = client.get(f"/api/pedidos/{pid}", headers={"Authorization": f"Bearer {token}"}).json()
+    assert pedido["lineas"][0]["cantidad_recibida"] == 18.5
+
+
+def test_recibir_falls_back_to_preset_cantidad_for_unconfirmed_lines(client, db):
+    """A line left out of the confirmation body keeps whatever cantidad_recibida
+    was already set on it (e.g. from a prior partial confirmation) — /recibir
+    only requires at least one line to be present, not all of them."""
+    token, prov_id, ing_id = _setup(client, db)
+    cat = db.query(Categoria).filter(Categoria.nombre == "Harinas").first()
+    ing2 = Ingrediente(
+        nombre="Levadura", categoria_id=cat.id, unidad_compra="kg",
+        cantidad_compra=1, precio_compra=8000, unidad_uso="g",
+    )
+    db.add(ing2)
+    db.commit()
+
+    created = client.post(
+        "/api/pedidos",
+        json={
+            "proveedor_id": prov_id,
             "lineas": [
-                {
-                    "ingrediente_id": ing_id,
-                    "cantidad_pedida": 20.0,
-                    "unidad": "kg",
-                    "cantidad_recibida": 18.5,
-                },
+                {"ingrediente_id": ing_id, "cantidad_pedida": 20.0, "unidad": "kg", "cantidad_recibida": 18.5},
+                {"ingrediente_id": ing2.id, "cantidad_pedida": 5.0, "unidad": "kg"},
             ],
         },
         headers={"Authorization": f"Bearer {token}"},
     )
     pid = created.json()["id"]
+    linea_ing2_id = created.json()["lineas"][1]["id"]
     client.post(f"/api/pedidos/{pid}/enviar", headers={"Authorization": f"Bearer {token}"})
-    client.post(f"/api/pedidos/{pid}/recibir", headers={"Authorization": f"Bearer {token}"})
 
-    registros = (
-        db.query(InventarioRegistro)
-        .filter(InventarioRegistro.ingrediente_id == ing_id)
-        .all()
+    # Only confirm the second line — the first must fall back to its preset value.
+    res = client.post(
+        f"/api/pedidos/{pid}/recibir",
+        json={"lineas": [{"linea_id": linea_ing2_id, "cantidad_recibida": 5.0}]},
+        headers={"Authorization": f"Bearer {token}"},
     )
-    assert registros[0].cantidad == 18.5
+    assert res.status_code == 200
+    assert _saldo(db, ing_id) == 18.5
+    assert _saldo(db, ing2.id) == 5.0
 
 
 # ── Line-level endpoints ───────────────────────────────────────────────────────

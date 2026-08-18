@@ -21,6 +21,7 @@ from app.services.produccion_registro import aplicar_efectos, revertir_efectos
 from app.permissions import require_permission
 from app.schemas import (
     RegistroExtraCreate,
+    RegistroExtraUpdate,
     RegistroProduccionCreate,
     RegistroProduccionOut,
     TareaProduccionCreate,
@@ -224,14 +225,21 @@ def get_dia(
 
     extras_out = []
     for r in extras:
+        prod_extra = (
+            db.query(ProductoCongelado).filter(ProductoCongelado.id == r.producto_congelado_id).first()
+            if r.producto_congelado_id else None
+        )
         extras_out.append({
             "registro_id": r.id,
             "titulo": r.receta.nombre if r.receta else r.titulo_extra,
             "receta_id": r.receta_id,
-            "unidad_cantidad": r.unidad_extra,
+            "producto_congelado_id": r.producto_congelado_id,
+            "unidad_cantidad": r.unidad_extra or (prod_extra.unidad if prod_extra else None),
+            "necesita_bastones": _necesita_bastones(db, r.producto_congelado_id),
             "completada": r.completada,
             "cantidad_real": r.cantidad_real,
             "duracion_real": r.duracion_real,
+            "bastones_consumidos": r.bastones_consumidos,
             "notas": r.notas,
         })
 
@@ -338,6 +346,39 @@ def create_extra(
     )
     db.add(reg)
     db.flush()
+
+    movimientos = aplicar_efectos(db, reg, user.id)
+
+    db.commit()
+    db.refresh(reg)
+    return _registro_to_out(reg, movimientos, movimientos > 0)
+
+
+@router.put("/registro/{registro_id}", response_model=RegistroProduccionOut)
+def update_registro(
+    registro_id: int,
+    data: RegistroExtraUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Edit an existing record in place, keyed by its own id.
+
+    /registro's upsert keys off (tarea_id, fecha), which "produccion extra"
+    records don't have -- they carry no tarea_id at all. This is what lets an
+    extra be corrected the same way a planned task is, instead of only
+    delete-and-recreate.
+    """
+    reg = db.query(RegistroProduccion).filter(RegistroProduccion.id == registro_id).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    if data.cantidad_real is None or data.cantidad_real <= 0:
+        raise HTTPException(status_code=422, detail="Ingresa la cantidad producida.")
+
+    revertir_efectos(db, reg, user.id)
+    reg.cantidad_real = data.cantidad_real
+    reg.duracion_real = data.duracion_real
+    reg.notas = data.notas
+    reg.bastones_consumidos = data.bastones_consumidos
 
     movimientos = aplicar_efectos(db, reg, user.id)
 

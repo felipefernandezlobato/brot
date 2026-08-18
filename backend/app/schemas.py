@@ -500,6 +500,13 @@ class RegistroExtraCreate(BaseModel):
     bastones_consumidos: Optional[float] = None
 
 
+class RegistroExtraUpdate(BaseModel):
+    cantidad_real: Optional[float] = None
+    duracion_real: Optional[int] = None
+    notas: Optional[str] = None
+    bastones_consumidos: Optional[float] = None
+
+
 class RegistroProduccionOut(BaseModel):
     id: int
     tarea_id: Optional[int] = None

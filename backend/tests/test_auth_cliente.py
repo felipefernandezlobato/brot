@@ -12,8 +12,14 @@ def test_register_cliente(client):
         "telefono": "+5491155551234",
     })
     assert res.status_code == 201
-    assert res.json()["email"] == "test@example.com"
-    assert "password" not in res.json()
+    # Registration logs the customer straight in — no separate login step needed.
+    token = res.json()["token"]
+    assert token
+
+    me = client.get("/api/auth/cliente/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["nombre"] == "Juan"
+    assert me.json()["email"] == "test@example.com"
 
 
 def test_register_duplicate_email(client):

@@ -47,10 +47,13 @@ interface ExtraDia {
   registro_id: number;
   titulo: string;
   receta_id: number | null;
+  producto_congelado_id: number | null;
+  necesita_bastones: boolean;
   unidad_cantidad: string | null;
   completada: boolean;
   cantidad_real: number | null;
   duracion_real: number | null;
+  bastones_consumidos: number | null;
   notas: string | null;
 }
 
@@ -111,6 +114,9 @@ export default function ProduccionHoy() {
   const [procesoPorProducto, setProcesoPorProducto] = useState<Map<number, string>>(new Map());
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [editando, setEditando] = useState<Set<number>>(new Set());
+  const [extraDrafts, setExtraDrafts] = useState<Record<number, Draft>>({});
+  const [extraEditando, setExtraEditando] = useState<Set<number>>(new Set());
+  const [savingExtra, setSavingExtra] = useState<number | null>(null);
   const { toast } = useToast();
 
   const draftKey = `brot_produccion_dia_${fecha}`;
@@ -327,6 +333,81 @@ export default function ProduccionHoy() {
       next.delete(tarea.tarea_id);
       return next;
     });
+  }
+
+  /** Same draft/editar/guardar pattern as the planned tasks, keyed separately
+   * so an extra's registro_id can't collide with a tarea_id from another table. */
+  function extraDraftOf(extra: ExtraDia): Draft {
+    return (
+      extraDrafts[extra.registro_id] ?? {
+        cantidad: extra.cantidad_real != null ? String(extra.cantidad_real) : "",
+        duracion: extra.duracion_real != null ? String(extra.duracion_real) : "",
+        bastones: extra.bastones_consumidos != null ? String(extra.bastones_consumidos) : "",
+        notas: extra.notas ?? "",
+      }
+    );
+  }
+
+  function setExtraDraft(extra: ExtraDia, patch: Partial<Draft>) {
+    setExtraDrafts((prev) => ({
+      ...prev,
+      [extra.registro_id]: { ...extraDraftOf(extra), ...patch },
+    }));
+  }
+
+  function editarExtra(extra: ExtraDia) {
+    setExtraEditando((prev) => new Set(prev).add(extra.registro_id));
+  }
+
+  function cancelarEdicionExtra(extra: ExtraDia) {
+    setExtraDrafts((prev) => {
+      const next = { ...prev };
+      delete next[extra.registro_id];
+      return next;
+    });
+    setExtraEditando((prev) => {
+      const next = new Set(prev);
+      next.delete(extra.registro_id);
+      return next;
+    });
+  }
+
+  function resumenGuardadoExtra(extra: ExtraDia): string {
+    const partes: string[] = [];
+    if (extra.cantidad_real != null) {
+      partes.push(`${fmt(extra.cantidad_real)} ${extra.unidad_cantidad ?? ""}`.trim());
+    }
+    if (extra.bastones_consumidos != null) partes.push(`${fmt(extra.bastones_consumidos)} bastones`);
+    if (extra.duracion_real != null) partes.push(`${extra.duracion_real} min`);
+    return partes.length ? partes.join(" · ") : "completada";
+  }
+
+  async function guardarExtra(extra: ExtraDia) {
+    const d = extraDraftOf(extra);
+    const cantidad = num(d.cantidad);
+    if (cantidad === null || cantidad <= 0) {
+      toast("Ingresa la cantidad producida", "error");
+      return;
+    }
+    setSavingExtra(extra.registro_id);
+    try {
+      await apiFetch(`/api/produccion/registro/${extra.registro_id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          cantidad_real: cantidad,
+          duracion_real: d.duracion ? parseInt(d.duracion) : null,
+          notas: d.notas || null,
+          bastones_consumidos: num(d.bastones),
+        }),
+      });
+      cancelarEdicionExtra(extra);
+      toast("Guardado");
+      await load();
+    } catch {
+      toast("Error al guardar", "error");
+    } finally {
+      setSavingExtra(null);
+    }
   }
 
   async function submitExtra() {
@@ -703,31 +784,150 @@ export default function ProduccionHoy() {
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">
             Produccion extra
           </p>
-          <div className="space-y-1">
-            {data!.extras.map((extra) => (
-              <div
-                key={extra.registro_id}
-                className="flex items-center gap-2 bg-white rounded-lg border border-dashed border-gray-300 px-3 py-2"
-              >
-                <span className="w-2 h-2 rounded-full shrink-0 bg-teal-500" />
-                <span className="text-sm text-gray-700 font-medium">{extra.titulo}</span>
-                {extra.cantidad_real !== null && (
-                  <span className="text-xs text-gray-500">
-                    {extra.cantidad_real} {extra.unidad_cantidad || ""}
-                  </span>
-                )}
-                {extra.duracion_real !== null && (
-                  <span className="text-xs text-gray-400">{extra.duracion_real} min</span>
-                )}
-                <button
-                  onClick={() => deleteExtra(extra.registro_id)}
-                  className="ml-auto text-xs text-red-400 hover:text-red-600"
-                  style={{ touchAction: "manipulation", minHeight: 36, minWidth: 36 }}
+          <div className="space-y-2">
+            {data!.extras.map((extra) => {
+              const d = extraDraftOf(extra);
+              const enEdicion = extraEditando.has(extra.registro_id);
+              const guardado = extra.completada && !enEdicion;
+              const isSaving = savingExtra === extra.registro_id;
+              const habilitado = num(d.cantidad) !== null && (num(d.cantidad) as number) > 0;
+
+              return (
+                <div
+                  key={extra.registro_id}
+                  className={`bg-white rounded-xl border p-3 transition-all ${
+                    guardado ? "border-green-200 bg-green-50/50" : "border-dashed border-gray-300"
+                  }`}
                 >
-                  x
-                </button>
-              </div>
-            ))}
+                  {/* Row 1: status + title */}
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 mt-0.5 ${
+                        guardado ? "bg-teal-600 border-teal-600 text-white" : "border-teal-300"
+                      }`}
+                    >
+                      {guardado && (
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path d="M3 7L6 10L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full shrink-0 bg-teal-500" />
+                        <span className="text-xs text-teal-600 uppercase tracking-wide">Extra</span>
+                        {extra.producto_congelado_id ? (
+                          <Link href={`/congelados/${extra.producto_congelado_id}`}
+                            className={`text-sm font-medium hover:text-brot hover:underline ${guardado ? "text-gray-500" : "text-gray-900"}`}
+                            onClick={(e) => e.stopPropagation()}>
+                            {extra.titulo}
+                          </Link>
+                        ) : (
+                          <span className={`text-sm font-medium ${guardado ? "text-gray-500" : "text-gray-900"}`}>
+                            {extra.titulo}
+                          </span>
+                        )}
+                        {isSaving && <span className="text-[10px] text-gray-400">...</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {guardado ? (
+                    /* ---------- SAVED ---------- */
+                    <div className="flex items-center gap-2 mt-2 ml-10 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-green-800 font-medium">
+                          Guardado: {resumenGuardadoExtra(extra)}
+                        </p>
+                        {extra.notas && (
+                          <p className="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{extra.notas}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => editarExtra(extra)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#004225] border border-[#004225]/30 hover:bg-[#004225]/5 transition-colors"
+                        style={{ touchAction: "manipulation", minHeight: 36 }}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => deleteExtra(extra.registro_id)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
+                        style={{ touchAction: "manipulation", minHeight: 36 }}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  ) : (
+                    /* ---------- EDITING ---------- */
+                    <div className="flex items-center gap-2 mt-2 ml-10 flex-wrap">
+                      {extra.necesita_bastones && (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            placeholder="1"
+                            value={d.bastones}
+                            onChange={(e) => setExtraDraft(extra, { bastones: e.target.value })}
+                            className="w-14 border border-blue-200 bg-blue-50/50 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 outline-none"
+                            style={{ minHeight: 36 }}
+                          />
+                          <span className="text-xs text-blue-500">bast.</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={d.cantidad}
+                          onChange={(e) => setExtraDraft(extra, { cantidad: e.target.value })}
+                          className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                          style={{ minHeight: 36 }}
+                        />
+                        <span className="text-xs text-gray-400">{extra.unidad_cantidad}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          placeholder="-"
+                          value={d.duracion}
+                          onChange={(e) => setExtraDraft(extra, { duracion: e.target.value })}
+                          className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                          style={{ minHeight: 36 }}
+                        />
+                        <span className="text-xs text-gray-400">min</span>
+                      </div>
+                      <button
+                        onClick={() => guardarExtra(extra)}
+                        disabled={!habilitado || isSaving}
+                        className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[#004225] text-white hover:bg-[#00331C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ touchAction: "manipulation", minHeight: 36 }}
+                      >
+                        {isSaving ? "Guardando..." : "Guardar"}
+                      </button>
+                      {enEdicion && (
+                        <button
+                          onClick={() => cancelarEdicionExtra(extra)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                          style={{ touchAction: "manipulation", minHeight: 36 }}
+                        >
+                          Cancelar
+                        </button>
+                      )}
+                      <button
+                        onClick={() => deleteExtra(extra.registro_id)}
+                        className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
+                        style={{ touchAction: "manipulation", minHeight: 36 }}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -699,6 +699,63 @@ def test_terminado_no_duplica_consumo_del_baston_via_crudo_intermedio(client, db
     assert _stock_congelado(db, baston_prod.id) == stock_baston_tras_laminar
 
 
+# ==============================================================
+# Editar produccion extra (sin tarea_id, no puede pasar por /registro)
+# ==============================================================
+
+
+def test_editar_produccion_extra_recalcula_stock(client, db):
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=200.0)
+    _, prod, _ = _masa(db, ing, harina_g=12000.0, porciones=1.0)
+
+    res = client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod.id, "cantidad_producida": 2, "fecha": HOY, "duracion_real": 30, "notas": None},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    registro_id = res.json()["registro_id"]
+
+    assert _stock_congelado(db, prod.id) == 2.0
+    assert _saldo(db, ing.id) == 200.0 - 12.0 * 2
+
+    res2 = client.put(
+        f"/api/produccion/registro/{registro_id}",
+        json={"cantidad_real": 3, "duracion_real": 45, "notas": "ajustado", "bastones_consumidos": None},
+        headers=headers,
+    )
+    assert res2.status_code == 200, res2.text
+    assert res2.json()["cantidad_real"] == 3
+    assert res2.json()["duracion_real"] == 45
+
+    # Corregir 2 a 3 debe dejar el stock en 3, no en 5 (revierte antes de reaplicar).
+    assert _stock_congelado(db, prod.id) == 3.0
+    assert _saldo(db, ing.id) == 200.0 - 12.0 * 3
+
+
+def test_editar_produccion_extra_sin_cantidad_rechaza(client, db):
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=200.0)
+    _, prod, _ = _masa(db, ing, harina_g=12000.0, porciones=1.0)
+
+    res = client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod.id, "cantidad_producida": 2, "fecha": HOY, "duracion_real": None, "notas": None},
+        headers=headers,
+    )
+    registro_id = res.json()["registro_id"]
+
+    res2 = client.put(
+        f"/api/produccion/registro/{registro_id}",
+        json={"cantidad_real": None, "duracion_real": None, "notas": None, "bastones_consumidos": None},
+        headers=headers,
+    )
+    assert res2.status_code == 422
+    # El registro original no debe haberse tocado.
+    assert _stock_congelado(db, prod.id) == 2.0
+
+
 def test_tarea_sin_producto_se_completa_sin_cantidad(client, db):
     headers = _auth(client, db)
     tarea = TareaProduccion(

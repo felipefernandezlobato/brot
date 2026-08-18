@@ -1,16 +1,28 @@
+"""Production module tests, against the current TareaProduccion/RegistroProduccion
+API — the old ProductoProduccion/PlanProduccion/LogProduccion CRUD these tests used
+to exercise was removed from the router a while back (the models are still in
+models.py but have zero routes), and nobody updated the tests to match. The current
+system is: a weekly recurring schedule (TareaProduccion), daily completion records
+(RegistroProduccion) that move stock, and a direct /producir endpoint for
+unplanned/extra production tied straight to a ProductoCongelado.
+"""
+
 from datetime import date
 
 from app.auth import hash_pin
-from app.main import app
-from app.models import User
-from app.routers.produccion import router
+from app.models import (
+    Categoria,
+    Ingrediente,
+    InventarioRegistro,
+    LineaReceta,
+    ProductoCongelado,
+    Receta,
+    TareaProduccion,
+    User,
+)
 
-app.include_router(router)
-
-
-# ==============================================================
-# Helpers
-# ==============================================================
+HOY = date.today()
+DOW_HOY = min(HOY.isoweekday(), 6)
 
 
 def _setup(client, db):
@@ -21,217 +33,347 @@ def _setup(client, db):
     return token, user.id
 
 
-def _create_producto(client, token, nombre="Pan de campo", categoria="panes", unidad="u"):
-    res = client.post(
-        "/api/produccion/productos",
-        json={"nombre": nombre, "categoria": categoria, "unidad": unidad, "shelf_life_days": 3},
-        headers={"Authorization": f"Bearer {token}"},
-    )
+def _headers(token):
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _crear_tarea(client, token, **overrides):
+    body = {"dia_semana": 1, "titulo": "Limpieza general", "tipo": "limpieza"}
+    body.update(overrides)
+    res = client.post("/api/produccion/tareas", json=body, headers=_headers(token))
     assert res.status_code == 201, res.text
     return res.json()
 
 
+def _producto_con_receta(db, stock_ingrediente=50.0):
+    """A terminado product with a one-ingredient recipe, so producing it deducts stock."""
+    cat_r = Categoria(nombre="Panes", tipo="receta")
+    cat_i = Categoria(nombre="Harinas", tipo="ingrediente")
+    db.add_all([cat_r, cat_i])
+    db.flush()
+    receta = Receta(nombre="Pan de Prueba", categoria_id=cat_r.id, porciones_por_lote=1)
+    db.add(receta)
+    db.flush()
+    ing = Ingrediente(
+        nombre="Harina Test", categoria_id=cat_i.id, unidad_compra="kg", unidad_uso="kg",
+        precio_compra=100.0, cantidad_compra=1.0,
+    )
+    db.add(ing)
+    db.flush()
+    db.add(LineaReceta(receta_id=receta.id, ingrediente_id=ing.id, cantidad=1.0, unidad="kg"))
+    db.add(InventarioRegistro(ingrediente_id=ing.id, cantidad=stock_ingrediente, unidad="kg", fecha_registro=HOY))
+    prod = ProductoCongelado(nombre="Pan de Prueba", categoria="panes", unidad="u", receta_id=receta.id, nivel="terminado")
+    db.add(prod)
+    db.commit()
+    return prod, receta, ing
+
+
+def _saldo(db, ing_id):
+    return (
+        db.query(InventarioRegistro)
+        .filter(InventarioRegistro.ingrediente_id == ing_id)
+        .order_by(InventarioRegistro.fecha_registro.desc(), InventarioRegistro.id.desc())
+        .first()
+        .cantidad
+    )
+
+
 # ==============================================================
-# Tests
+# Tareas — CRUD
 # ==============================================================
 
 
-def test_create_producto_produccion(client, db):
+def test_tareas_crud(client, db):
     token, _ = _setup(client, db)
+    tarea = _crear_tarea(client, token, titulo="Apertura obrador", dia_semana=1, hora="07:00")
+    tarea_id = tarea["id"]
+    assert tarea["titulo"] == "Apertura obrador"
+    assert tarea["is_active"] is True
 
-    res = client.post(
-        "/api/produccion/productos",
-        json={
-            "nombre": "Pan de campo",
-            "categoria": "panes",
-            "unidad": "u",
-            "shelf_life_days": 3,
-            "default_qty": 20.0,
-            "position": 1,
-        },
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert res.status_code == 201
-    data = res.json()
-    assert data["nombre"] == "Pan de campo"
-    assert data["categoria"] == "panes"
-    assert data["unidad"] == "u"
-    assert data["shelf_life_days"] == 3
-    assert data["default_qty"] == 20.0
-    assert "id" in data
+    res = client.get("/api/produccion/tareas", headers=_headers(token))
+    assert res.status_code == 200
+    assert any(t["id"] == tarea_id for t in res.json())
 
-    # Verify GET list
-    res2 = client.get("/api/produccion/productos", headers={"Authorization": f"Bearer {token}"})
+    res2 = client.get(f"/api/produccion/tareas/{tarea_id}", headers=_headers(token))
     assert res2.status_code == 200
-    assert len(res2.json()) == 1
+    assert res2.json()["titulo"] == "Apertura obrador"
 
-    # Verify GET by id
-    prod_id = data["id"]
-    res3 = client.get(f"/api/produccion/productos/{prod_id}", headers={"Authorization": f"Bearer {token}"})
-    assert res3.status_code == 200
-    assert res3.json()["nombre"] == "Pan de campo"
-
-    # Update
-    res4 = client.put(
-        f"/api/produccion/productos/{prod_id}",
-        json={"default_qty": 25.0, "is_active": False},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert res4.status_code == 200
-    assert res4.json()["default_qty"] == 25.0
-    assert res4.json()["is_active"] is False
-
-    # Delete
-    res5 = client.delete(f"/api/produccion/productos/{prod_id}", headers={"Authorization": f"Bearer {token}"})
-    assert res5.status_code == 200
-    assert res5.json()["ok"] is True
-
-
-def test_create_plan_entry(client, db):
-    token, _ = _setup(client, db)
-    prod = _create_producto(client, token, nombre="Croissant", categoria="bollería")
-    prod_id = prod["id"]
-
-    # Create plan entry — week 1, Monday (day_of_week=0)
-    res = client.post(
-        "/api/produccion/plan",
-        json={"producto_id": prod_id, "week_number": 1, "day_of_week": 0, "planned_qty": 50.0},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert res.status_code == 201
-    data = res.json()
-    assert data["producto_id"] == prod_id
-    assert data["week_number"] == 1
-    assert data["day_of_week"] == 0
-    assert data["planned_qty"] == 50.0
-
-    # GET plan filtered by week and day
-    res2 = client.get(
-        "/api/produccion/plan?week_number=1&day_of_week=0",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert res2.status_code == 200
-    assert len(res2.json()) == 1
-    assert res2.json()[0]["planned_qty"] == 50.0
-
-    # POST again (same key) should upsert, not error
-    res3 = client.post(
-        "/api/produccion/plan",
-        json={"producto_id": prod_id, "week_number": 1, "day_of_week": 0, "planned_qty": 75.0},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert res3.status_code == 201
-    assert res3.json()["planned_qty"] == 75.0
-
-    # Only one entry should exist
-    res4 = client.get(
-        "/api/produccion/plan?week_number=1&day_of_week=0",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert len(res4.json()) == 1
-
-
-def test_log_production(client, db):
-    token, user_id = _setup(client, db)
-    prod = _create_producto(client, token, nombre="Baguette")
-    prod_id = prod["id"]
-
-    fecha = date.today().isoformat()
-
-    # Create log entry
-    res = client.post(
-        "/api/produccion/log",
-        json={
-            "producto_id": prod_id,
-            "target_date": fecha,
-            "actual_qty": 30.0,
-            "duration_minutes_machine": 45,
-            "duration_minutes_human": 60,
-            "recorded_by": user_id,
-        },
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert res.status_code == 201
-    data = res.json()
-    assert data["producto_id"] == prod_id
-    assert data["actual_qty"] == 30.0
-    assert data["duration_minutes_machine"] == 45
-    assert data["duration_minutes_human"] == 60
-    log_id = data["id"]
-
-    # GET log for today
-    res2 = client.get(
-        f"/api/produccion/log?fecha={fecha}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert res2.status_code == 200
-    assert len(res2.json()) == 1
-    assert res2.json()[0]["id"] == log_id
-
-    # PUT — update log entry
     res3 = client.put(
-        f"/api/produccion/log/{log_id}",
-        json={"actual_qty": 35.0, "notes": "Lote adicional"},
-        headers={"Authorization": f"Bearer {token}"},
+        f"/api/produccion/tareas/{tarea_id}",
+        json={"titulo": "Apertura y ventilacion"},
+        headers=_headers(token),
     )
     assert res3.status_code == 200
-    assert res3.json()["actual_qty"] == 35.0
-    assert res3.json()["notes"] == "Lote adicional"
+    assert res3.json()["titulo"] == "Apertura y ventilacion"
 
-    # Duplicate log for same product+date should upsert (update existing)
-    res4 = client.post(
-        "/api/produccion/log",
-        json={"producto_id": prod_id, "target_date": fecha, "actual_qty": 5.0, "recorded_by": user_id},
-        headers={"Authorization": f"Bearer {token}"},
+    res4 = client.delete(f"/api/produccion/tareas/{tarea_id}", headers=_headers(token))
+    assert res4.status_code == 200
+    assert res4.json()["ok"] is True
+
+    res5 = client.get(f"/api/produccion/tareas/{tarea_id}", headers=_headers(token))
+    assert res5.status_code == 404
+
+
+def test_calendario_groups_tareas_by_dia(client, db):
+    token, _ = _setup(client, db)
+    _crear_tarea(client, token, titulo="Lunes task", dia_semana=1)
+    _crear_tarea(client, token, titulo="Viernes task", dia_semana=5)
+
+    res = client.get("/api/produccion/calendario", headers=_headers(token))
+    assert res.status_code == 200
+    data = res.json()
+    assert data["1"]["nombre"] == "Lunes"
+    assert any(t["titulo"] == "Lunes task" for t in data["1"]["tareas"])
+    assert any(t["titulo"] == "Viernes task" for t in data["5"]["tareas"])
+    assert data["2"]["tareas"] == []
+
+
+# ==============================================================
+# Day view + registro
+# ==============================================================
+
+
+def test_dia_view_shows_todays_tareas(client, db):
+    token, _ = _setup(client, db)
+    tarea = _crear_tarea(client, token, titulo="Tarea de hoy", dia_semana=DOW_HOY)
+
+    res = client.get(f"/api/produccion/dia?fecha={HOY.isoformat()}", headers=_headers(token))
+    assert res.status_code == 200
+    data = res.json()
+    assert data["dia_semana"] == DOW_HOY
+    entry = next((t for t in data["tareas"] if t["tarea_id"] == tarea["id"]), None)
+    assert entry is not None
+    assert entry["completada"] is False
+
+
+def test_dia_view_rejects_bad_date(client, db):
+    token, _ = _setup(client, db)
+    res = client.get("/api/produccion/dia?fecha=not-a-date", headers=_headers(token))
+    assert res.status_code == 400
+
+
+def test_registro_toggle_completada_without_producto(client, db):
+    """A task with no product tied (cleaning, notes) never needs a cantidad."""
+    token, _ = _setup(client, db)
+    tarea = _crear_tarea(client, token, titulo="Limpiar obrador", dia_semana=DOW_HOY, tipo="limpieza")
+
+    res = client.post(
+        "/api/produccion/registro",
+        json={"tarea_id": tarea["id"], "fecha": HOY.isoformat(), "completada": True},
+        headers=_headers(token),
     )
-    assert res4.status_code == 201
-    assert res4.json()["actual_qty"] == 5.0
-    assert res4.json()["id"] == log_id
+    assert res.status_code == 201
+    assert res.json()["completada"] is True
+    assert res.json()["movimientos"] == 0
 
+    dia = client.get(f"/api/produccion/dia?fecha={HOY.isoformat()}", headers=_headers(token)).json()
+    entry = next(t for t in dia["tareas"] if t["tarea_id"] == tarea["id"])
+    assert entry["completada"] is True
 
-def test_calendario_view(client, db):
-    token, user_id = _setup(client, db)
-    prod = _create_producto(client, token, nombre="Focaccia")
-    prod_id = prod["id"]
-
-    today = date.today()
-    week_num = (today.isocalendar().week - 1) % 4 + 1
-    dow = today.weekday()
-
-    # Create a plan entry matching today's cycle slot
-    client.post(
-        "/api/produccion/plan",
-        json={"producto_id": prod_id, "week_number": week_num, "day_of_week": dow, "planned_qty": 40.0},
-        headers={"Authorization": f"Bearer {token}"},
+    # Un-completing (undo) upserts the same record back to false.
+    res2 = client.post(
+        "/api/produccion/registro",
+        json={"tarea_id": tarea["id"], "fecha": HOY.isoformat(), "completada": False},
+        headers=_headers(token),
     )
+    assert res2.status_code == 201
+    assert res2.json()["completada"] is False
 
-    # Log actual production for today
-    client.post(
-        "/api/produccion/log",
-        json={"producto_id": prod_id, "target_date": today.isoformat(), "actual_qty": 38.0, "recorded_by": user_id},
-        headers={"Authorization": f"Bearer {token}"},
+
+def test_registro_requires_cantidad_when_tarea_has_producto(client, db):
+    token, _ = _setup(client, db)
+    prod, receta, ing = _producto_con_receta(db)
+    tarea = _crear_tarea(client, token, titulo="Hornear Pan de Prueba", dia_semana=DOW_HOY, receta_id=receta.id)
+    # producto_congelado_id isn't settable via TareaProduccionCreate (real schedules
+    # seed it directly), so wire it up the same way here.
+    t_row = db.query(TareaProduccion).filter(TareaProduccion.id == tarea["id"]).first()
+    t_row.producto_congelado_id = prod.id
+    db.commit()
+
+    res = client.post(
+        "/api/produccion/registro",
+        json={"tarea_id": tarea["id"], "fecha": HOY.isoformat(), "completada": True},
+        headers=_headers(token),
     )
+    assert res.status_code == 422
 
-    # Query the calendar for today only
-    res = client.get(
-        f"/api/produccion/calendario?fecha_desde={today.isoformat()}&fecha_hasta={today.isoformat()}",
-        headers={"Authorization": f"Bearer {token}"},
+    res2 = client.post(
+        "/api/produccion/registro",
+        json={"tarea_id": tarea["id"], "fecha": HOY.isoformat(), "completada": True, "cantidad_real": 10.0},
+        headers=_headers(token),
+    )
+    assert res2.status_code == 201
+    data = res2.json()
+    assert data["cantidad_real"] == 10.0
+    assert data["stock_aplicado"] is True
+    assert data["movimientos"] >= 1
+    assert _saldo(db, ing.id) == 40.0  # 50 - 10 * 1kg
+
+
+# ==============================================================
+# Extra (unplanned) production
+# ==============================================================
+
+
+def test_registro_extra_requires_cantidad(client, db):
+    token, _ = _setup(client, db)
+    cat = Categoria(nombre="Panes", tipo="receta")
+    db.add(cat)
+    db.flush()
+    receta = Receta(nombre="Receta X", categoria_id=cat.id, porciones_por_lote=1)
+    db.add(receta)
+    db.commit()
+
+    res = client.post(
+        "/api/produccion/registro/extra",
+        json={"fecha": HOY.isoformat(), "receta_id": receta.id},
+        headers=_headers(token),
+    )
+    assert res.status_code == 422
+
+
+def test_registro_extra_appears_in_dia_view(client, db):
+    token, _ = _setup(client, db)
+    cat = Categoria(nombre="Panes", tipo="receta")
+    db.add(cat)
+    db.flush()
+    receta = Receta(nombre="Receta Suelta", categoria_id=cat.id, porciones_por_lote=1)
+    db.add(receta)
+    db.commit()
+
+    res = client.post(
+        "/api/produccion/registro/extra",
+        json={"fecha": HOY.isoformat(), "receta_id": receta.id, "cantidad_real": 5.0},
+        headers=_headers(token),
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["titulo_extra"] == "Receta Suelta"
+    assert data["tarea_id"] is None
+
+    dia = client.get(f"/api/produccion/dia?fecha={HOY.isoformat()}", headers=_headers(token)).json()
+    assert any(e["titulo"] == "Receta Suelta" for e in dia["extras"])
+
+
+def test_update_registro_extra_recomputes_stock(client, db):
+    """PUT /registro/{id} corrects an extra in place — revert old effects, apply new ones."""
+    token, _ = _setup(client, db)
+    prod, receta, ing = _producto_con_receta(db)
+
+    created = client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod.id, "cantidad_producida": 5.0},
+        headers=_headers(token),
+    ).json()
+    registro_id = created["registro_id"]
+    assert _saldo(db, ing.id) == 45.0  # 50 - 5 * 1kg
+
+    res = client.put(
+        f"/api/produccion/registro/{registro_id}",
+        json={"cantidad_real": 8.0},
+        headers=_headers(token),
     )
     assert res.status_code == 200
     data = res.json()
-    assert len(data) >= 1
+    assert data["cantidad_real"] == 8.0
+    assert _saldo(db, ing.id) == 42.0  # 50 - 8, not 50 - 5 - 8
 
-    entry = next((e for e in data if e["producto_id"] == prod_id), None)
-    assert entry is not None, "Calendar entry for producto not found"
-    assert entry["planned_qty"] == 40.0
-    assert entry["actual_qty"] == 38.0
-    assert entry["fecha"] == today.isoformat()
-    assert entry["week_number"] == week_num
-    assert entry["day_of_week"] == dow
 
-    # Invalid date range should return 400
-    res2 = client.get(
-        "/api/produccion/calendario?fecha_desde=2024-01-10&fecha_hasta=2024-01-05",
-        headers={"Authorization": f"Bearer {token}"},
+def test_update_registro_requires_positive_cantidad(client, db):
+    token, _ = _setup(client, db)
+    prod, receta, ing = _producto_con_receta(db)
+    created = client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod.id, "cantidad_producida": 5.0},
+        headers=_headers(token),
+    ).json()
+
+    res = client.put(
+        f"/api/produccion/registro/{created['registro_id']}",
+        json={"cantidad_real": 0},
+        headers=_headers(token),
     )
-    assert res2.status_code == 400
+    assert res.status_code == 422
+
+
+# ==============================================================
+# Direct production (/producir) + delete reverses stock
+# ==============================================================
+
+
+def test_producir_deducts_ingredient_stock(client, db):
+    token, _ = _setup(client, db)
+    prod, receta, ing = _producto_con_receta(db)
+
+    res = client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod.id, "cantidad_producida": 5.0},
+        headers=_headers(token),
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["ok"] is True
+    assert data["producto"] == "Pan de Prueba"
+    assert _saldo(db, ing.id) == 45.0  # 50 - 5 * 1kg
+
+
+def test_producir_requires_positive_cantidad(client, db):
+    token, _ = _setup(client, db)
+    prod, receta, ing = _producto_con_receta(db)
+    res = client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod.id, "cantidad_producida": 0},
+        headers=_headers(token),
+    )
+    assert res.status_code == 422
+
+
+def test_delete_registro_reverses_stock(client, db):
+    token, _ = _setup(client, db)
+    prod, receta, ing = _producto_con_receta(db)
+
+    res = client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod.id, "cantidad_producida": 5.0},
+        headers=_headers(token),
+    )
+    registro_id = res.json()["registro_id"]
+    assert _saldo(db, ing.id) == 45.0
+
+    res2 = client.delete(f"/api/produccion/registro/{registro_id}", headers=_headers(token))
+    assert res2.status_code == 200
+    assert res2.json()["ok"] is True
+    assert _saldo(db, ing.id) == 50.0
+
+
+# ==============================================================
+# Analytics
+# ==============================================================
+
+
+def test_analytics_reports_completion_rate(client, db):
+    token, _ = _setup(client, db)
+    tarea = _crear_tarea(client, token, titulo="Tarea analitica", dia_semana=DOW_HOY, tipo="produccion")
+    client.post(
+        "/api/produccion/registro",
+        json={"tarea_id": tarea["id"], "fecha": HOY.isoformat(), "completada": True},
+        headers=_headers(token),
+    )
+
+    res = client.get(
+        f"/api/produccion/analytics?desde={HOY.isoformat()}&hasta={HOY.isoformat()}",
+        headers=_headers(token),
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["resumen"]["total_planificadas"] >= 1
+    assert data["resumen"]["total_completadas"] >= 1
+    tarea_stat = next((t for t in data["por_tarea"] if t["tarea_id"] == tarea["id"]), None)
+    assert tarea_stat is not None
+    assert tarea_stat["veces_completada"] == 1
+
+
+def test_analytics_rejects_bad_date_range(client, db):
+    token, _ = _setup(client, db)
+    res = client.get("/api/produccion/analytics?desde=not-a-date&hasta=2024-01-05", headers=_headers(token))
+    assert res.status_code == 400
