@@ -154,7 +154,7 @@ def get_producto_detalle(
             MovimientoStock.referencia_producto_id == prod_id,
             movimiento_no_revertido(),
         )
-        .order_by(MovimientoStock.id.desc())
+        .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
         .limit(20)
         .all()
     ]

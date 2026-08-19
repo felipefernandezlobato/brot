@@ -34,4 +34,4 @@ def list_movimientos(
         q = q.filter(MovimientoStock.fecha >= fecha_desde)
     if fecha_hasta:
         q = q.filter(MovimientoStock.fecha <= fecha_hasta)
-    return q.order_by(MovimientoStock.id.desc()).limit(limit).all()
+    return q.order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc()).limit(limit).all()

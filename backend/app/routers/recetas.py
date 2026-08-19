@@ -156,7 +156,7 @@ def get_receta_completo(
                 MovimientoStock.referencia_producto_id == prod.id,
                 movimiento_no_revertido(),
             )
-            .order_by(MovimientoStock.id.desc())
+            .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
             .limit(20)
             .all()
         ]

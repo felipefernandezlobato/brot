@@ -171,7 +171,7 @@ def flujo_completo(
             MovimientoStock.fecha <= fecha_hasta,
             movimiento_no_revertido(),
         )
-        .order_by(MovimientoStock.id.desc())
+        .order_by(MovimientoStock.fecha.desc(), MovimientoStock.id.desc())
         .limit(50)
         .all()
     )
