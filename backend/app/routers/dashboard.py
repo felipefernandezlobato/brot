@@ -21,11 +21,11 @@ from app.models import (
     ProductoCongelado,
     Receta,
     RegistroProduccion,
-    StockCongelado,
     User,
 )
 from app.services.conversiones import convertir
 from app.services.produccion_registro import movimiento_no_revertido
+from app.services.stock import get_saldos_congelado
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -102,35 +102,18 @@ def flujo_completo(
     )
     total_producido = sum(r.cantidad_real or 0 for r in produccion)
 
-    # Stock congelado actual — latest entry per product (most recent fecha_entrada)
-    latest_cong_subq = (
-        db.query(
-            StockCongelado.producto_congelado_id,
-            func.max(StockCongelado.fecha_entrada).label("max_fecha"),
-        )
-        .filter(StockCongelado.is_active.is_(True))
-        .group_by(StockCongelado.producto_congelado_id)
-        .subquery()
-    )
-    latest_cong_entries = (
-        db.query(
-            ProductoCongelado.nombre,
-            ProductoCongelado.id,
-            StockCongelado.cantidad,
-        )
-        .join(StockCongelado, StockCongelado.producto_congelado_id == ProductoCongelado.id)
-        .join(
-            latest_cong_subq,
-            (StockCongelado.producto_congelado_id == latest_cong_subq.c.producto_congelado_id)
-            & (StockCongelado.fecha_entrada == latest_cong_subq.c.max_fecha),
-        )
-        .all()
-    )
-    stock_cong: list = [
-        type("Row", (), {"nombre": r.nombre, "id": r.id, "total": r.cantidad})()
-        for r in latest_cong_entries
+    # Stock congelado actual — sum of active lots per product, same method
+    # every other stock display uses (get_saldo_congelado). The old version
+    # here took only the single most-recently-dated lot per product, which
+    # under-/over-counted any product with more than one active lot.
+    productos_cong = db.query(ProductoCongelado).filter(ProductoCongelado.is_active.is_(True)).all()
+    saldos_cong = get_saldos_congelado(db, [p.id for p in productos_cong])
+    stock_cong = [
+        {"nombre": p.nombre, "id": p.id, "total": saldos_cong.get(p.id, 0.0)}
+        for p in productos_cong
+        if abs(saldos_cong.get(p.id, 0.0)) > 1e-9
     ]
-    stock_cong_total = sum(r.total for r in stock_cong)
+    stock_cong_total = sum(r["total"] for r in stock_cong)
 
     # Entregas B2B en el periodo
     entregas_b2b_total = (
@@ -158,7 +141,7 @@ def flujo_completo(
     for cong in stock_cong:
         prod_cat = (
             db.query(ProductoCatalogo)
-            .filter(ProductoCatalogo.receta_id == db.query(ProductoCongelado.receta_id).filter(ProductoCongelado.id == cong.id).scalar())
+            .filter(ProductoCatalogo.receta_id == db.query(ProductoCongelado.receta_id).filter(ProductoCongelado.id == cong["id"]).scalar())
             .first()
         )
         entregado = 0
@@ -175,8 +158,8 @@ def flujo_completo(
             ) or 0
 
         por_producto.append({
-            "nombre": cong.nombre,
-            "stock_congelado": cong.total,
+            "nombre": cong["nombre"],
+            "stock_congelado": cong["total"],
             "entregado": entregado,
         })
 
@@ -206,7 +189,7 @@ def flujo_completo(
         },
         "stock_materia_prima": stock_mp_items,
         "stock_congelado": [
-            {"nombre": c.nombre, "cantidad": c.total} for c in stock_cong
+            {"nombre": c["nombre"], "cantidad": c["total"]} for c in stock_cong
         ],
         "por_producto": por_producto,
         "movimientos_recientes": [

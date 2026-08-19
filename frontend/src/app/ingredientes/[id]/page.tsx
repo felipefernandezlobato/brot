@@ -290,7 +290,9 @@ export default function IngredienteDetailPage() {
               <p className="text-xs text-warm-gray">Costo / {ingrediente.unidad_uso}</p>
               <p className="text-lg font-bold text-brot">{formatARS(ingrediente.costo_por_unidad_uso)}</p>
             </div>
-            <div className="bg-white border border-cream-dark rounded-xl p-4">
+            <div className={`border rounded-xl p-4 ${
+              !stockInfo ? "bg-white border-cream-dark" : stockInfo.stock_actual > 0 ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
+            }`}>
               <p className="text-xs text-warm-gray">Stock actual</p>
               <p className="text-lg font-bold text-text">
                 {stockInfo ? `${stockInfo.stock_actual} ${stockInfo.unidad}` : "--"}

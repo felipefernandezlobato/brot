@@ -10,6 +10,7 @@ from app.auth import hash_pin
 from app.models import (
     Categoria,
     ClienteB2B,
+    ConsumoFifoDetalle,
     Ingrediente,
     InventarioRegistro,
     MovimientoStock,
@@ -93,6 +94,24 @@ def test_editar_cantidad_de_merma_sobrescribe(client, db):
     client.put(f"/api/mermas/{mid}", json={"cantidad": 8.0}, headers=headers)
 
     assert _saldo(db, ing.id) == 42.0  # 50 - 8, not 50 - 5 - 8
+
+
+def test_merma_mayor_al_stock_deja_el_stock_negativo(client, db):
+    """Materia prima es un solo saldo corrido (no lotes), asi que aca no hace
+    falta lote sintetico: restar sin clampear ya deja el saldo en negativo."""
+    headers = _auth(client, db)
+    ing = _ingrediente(db, stock=50.0)
+
+    res = client.post(
+        "/api/mermas",
+        json={"ingrediente_id": ing.id, "cantidad": 80.0, "unidad": "kg", "motivo": "dañado", "fecha": HOY},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert _saldo(db, ing.id) == -30.0  # 50 - 80
+
+    assert client.delete(f"/api/mermas/{res.json()['id']}", headers=headers).status_code == 200
+    assert _saldo(db, ing.id) == 50.0
 
 
 # ==============================================================
@@ -217,12 +236,13 @@ def test_entrega_no_entregada_no_toca_stock(client, db):
     assert _stock(db, prod.id) == 20.0
 
 
-def test_entrega_mayor_al_stock_no_deja_el_ledger_negativo(client, db):
-    """Pedir mas de lo que hay debe clampear en el stock real, no restar el pedido completo.
+def test_entrega_mayor_al_stock_deja_el_stock_negativo(client, db):
+    """Pedir mas de lo que hay debe dejar el stock en negativo, no clampear en 0.
 
-    Antes, el movimiento registraba -cantidad (lo pedido) sin importar cuanto
-    habia realmente: pedir 9 con solo 5 disponibles restaba 9 del ledger aunque
-    fisicamente solo salieron 5 unidades.
+    Antes esto clampeaba: pedir 9 con solo 5 disponibles restaba solo 5 del
+    ledger, y el faltante desaparecia salvo por una nota de texto. Ahora un
+    lote sintetico negativo (crear_lote_ajuste) absorbe el faltante, asi que
+    "olvidamos registrar una produccion" se vuelve visible en vez de invisible.
     """
     headers = _auth(client, db)
     prod, catalogo, cli = _catalogo_con_stock(db, unidades=5.0)
@@ -236,15 +256,49 @@ def test_entrega_mayor_al_stock_no_deja_el_ledger_negativo(client, db):
         headers=headers,
     )
     assert res.status_code == 201, res.text
-    assert _stock(db, prod.id) == 0.0
+    assert _stock(db, prod.id) == -4.0  # 5 - 9
 
     mov = db.query(MovimientoStock).filter(
         MovimientoStock.tipo_stock == "congelado",
         MovimientoStock.referencia_producto_id == prod.id,
         MovimientoStock.tipo_movimiento == "entrega_b2b",
     ).one()
-    assert mov.cantidad == -5.0  # lo que realmente salio, not -9
+    assert mov.cantidad == -9.0  # el pedido completo, not clamped to -5
     assert "insuficiente" in (mov.notas or "").lower()
+
+    ajuste = db.query(StockCongelado).filter(
+        StockCongelado.producto_congelado_id == prod.id,
+        StockCongelado.cantidad < 0,
+    ).one()
+    assert ajuste.cantidad == -4.0
+    assert ajuste.is_active is True
+    detalle = db.query(ConsumoFifoDetalle).filter(
+        ConsumoFifoDetalle.movimiento_stock_id == mov.id,
+        ConsumoFifoDetalle.stock_congelado_id == ajuste.id,
+    ).one()
+    assert detalle.cantidad == 4.0
+
+
+def test_borrar_entrega_mayor_al_stock_devuelve_exactamente_al_original(client, db):
+    """Revertir una entrega que dejo el stock negativo debe volver al valor
+    de antes de la entrega, no a 0 -- el lote sintetico se reversa como
+    cualquier lote real via su propio ConsumoFifoDetalle."""
+    headers = _auth(client, db)
+    prod, catalogo, cli = _catalogo_con_stock(db, unidades=5.0)
+
+    res = client.post(
+        "/api/entregas-b2b",
+        json={
+            "cliente_b2b_id": cli.id, "fecha_entrega": HOY, "estado": "entregado",
+            "lineas": [{"producto_id": catalogo.id, "cantidad": 9, "precio_unitario": 1262.0}],
+        },
+        headers=headers,
+    )
+    assert _stock(db, prod.id) == -4.0
+
+    assert client.delete(f"/api/entregas-b2b/{res.json()['id']}", headers=headers).status_code == 200
+
+    assert _stock(db, prod.id) == 5.0
 
 
 def _catalogo_de_terminado_sin_receta_propia(db, unidades_masa=100.0, unidades_terminado=20.0):

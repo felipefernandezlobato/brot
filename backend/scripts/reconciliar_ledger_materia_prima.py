@@ -18,6 +18,14 @@ make the ledger sum match the real (latest) `InventarioRegistro` balance
 again. Additive only -- no existing row is touched, and deleting the inserted
 rows fully undoes this.
 
+NOTE (post stock-can-go-negative change): a negative `InventarioRegistro`
+balance is no longer necessarily this script's problem -- `deducir_materia_prima`
+now allows a real, live shortfall (unrecorded consumption) to go negative on
+purpose. That kind of negative keeps the ledger and the physical balance in
+lockstep (both move together, atomically), so it will NOT produce a nonzero
+`real - ledger` diff here. Only act on what this script's diff actually finds;
+don't "fix" an unrelated negative balance by force-matching it to the ledger.
+
     DATABASE_URL=... python scripts/reconciliar_ledger_materia_prima.py           # dry run
     DATABASE_URL=... python scripts/reconciliar_ledger_materia_prima.py --apply
 """

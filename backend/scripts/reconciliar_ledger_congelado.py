@@ -16,6 +16,18 @@ no StockCongelado row left at all), sized to make the ledger sum match the real
 StockCongelado count again. Additive only -- no existing row is touched, and
 deleting the inserted rows fully undoes this.
 
+NOTE (post stock-can-go-negative change): `get_saldo_congelado`/`stock_actual`
+can now legitimately be negative for a reason that has nothing to do with a
+missing historical baseline -- a live operational shortfall (e.g. a
+production run that never got logged) also shows up as negative stock, by
+design (see `crear_lote_ajuste()` in `services/stock.py`). A future nonzero
+diff from this script's arithmetic (`real - ledger`) still only means "missing
+pre-app baseline" IF `real` and `ledger` actually disagree -- a live shortfall
+keeps them in lockstep (the deduction writes both atomically), so it will NOT
+show up as a diff here. Don't assume every negative `stock_actual` you
+encounter is this script's problem to fix; check whether the underlying event
+(a production/merma/entrega) should be logged for real instead.
+
     DATABASE_URL=... python scripts/reconciliar_ledger_congelado.py           # dry run
     DATABASE_URL=... python scripts/reconciliar_ledger_congelado.py --apply
 """

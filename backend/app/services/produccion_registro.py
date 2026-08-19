@@ -26,6 +26,7 @@ from app.models import (
     StockCongelado,
 )
 from app.services.stock import (
+    crear_lote_ajuste,
     get_saldo_congelado,
     producir_producto,
     registrar_movimiento,
@@ -247,13 +248,10 @@ def _revertir_salida_congelado(db, reg, mov, rev_ref, user_id, fecha) -> None:
     if a_quitar > EPSILON:
         # The batch was already consumed downstream. Book the shortfall explicitly
         # so the running total stays honest rather than silently over-counting.
-        db.add(StockCongelado(
-            producto_congelado_id=mov.referencia_producto_id,
-            cantidad=-a_quitar,
-            fecha_entrada=reg.fecha,
-            is_active=True,
+        crear_lote_ajuste(
+            db, mov.referencia_producto_id, -a_quitar, reg.fecha,
             notas="Ajuste por reversion: la produccion ya se habia consumido",
-        ))
+        )
 
     saldo = get_saldo_congelado(db, mov.referencia_producto_id)
     registrar_movimiento(

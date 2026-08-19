@@ -58,16 +58,24 @@ def get_saldo_materia_prima(db: Session, ingrediente_id: int) -> float:
     return reg.cantidad if reg else 0.0
 
 
-def get_saldo_congelado(db: Session, producto_congelado_id: int) -> float:
-    total = (
-        db.query(func.sum(StockCongelado.cantidad))
-        .filter(
-            StockCongelado.producto_congelado_id == producto_congelado_id,
-            StockCongelado.is_active.is_(True),
-        )
-        .scalar()
+def get_saldos_congelado(db: Session, ids: Optional[list[int]] = None) -> dict[int, float]:
+    """Current balance (sum of active lots) per producto_congelado_id.
+
+    ids=None batches every product with at least one active lot in one query
+    -- same "ids=None means everything" convention as
+    historial_movimientos_acumulado. Can go negative once a lot has been
+    driven below zero by crear_lote_ajuste().
+    """
+    q = db.query(StockCongelado.producto_congelado_id, func.sum(StockCongelado.cantidad)).filter(
+        StockCongelado.is_active.is_(True)
     )
-    return total or 0.0
+    if ids is not None:
+        q = q.filter(StockCongelado.producto_congelado_id.in_(ids))
+    return {pid: total or 0.0 for pid, total in q.group_by(StockCongelado.producto_congelado_id).all()}
+
+
+def get_saldo_congelado(db: Session, producto_congelado_id: int) -> float:
+    return get_saldos_congelado(db, [producto_congelado_id]).get(producto_congelado_id, 0.0)
 
 
 def historial_movimientos_acumulado(
@@ -138,13 +146,11 @@ def deducir_materia_prima(
 
     consumo = convertir(cantidad, unidad_receta, ing.unidad_uso)
     saldo_actual = get_saldo_materia_prima(db, ingrediente_id)
-    nuevo_saldo = max(0.0, saldo_actual - consumo)
-
-    # Record the movement the balance ACTUALLY moved, not the theoretical demand.
-    # When stock is insufficient the balance clamps at zero; storing the unclamped
-    # figure here would make a later reversal add back stock that never left.
-    consumo_real = saldo_actual - nuevo_saldo
-    faltante = consumo - consumo_real
+    # Deliberately unclamped: consuming more than what's on hand is a sign
+    # something else wasn't recorded (a delivery, a production run), and that
+    # should surface as a visible negative balance instead of silently
+    # vanishing at zero.
+    nuevo_saldo = saldo_actual - consumo
 
     db.add(InventarioRegistro(
         ingrediente_id=ingrediente_id,
@@ -164,17 +170,41 @@ def deducir_materia_prima(
     # "Consumido para Masa Pan Blanco" and "Consumido para Masa Madre" show as two
     # separate movements even though both belong to the same production event.
     notas = f"subreceta:{origen_subreceta}" if origen_subreceta else None
-    if faltante > 1e-9:
-        aviso = (
-            f"Stock insuficiente: la receta pedia {consumo:.3f} {ing.unidad_uso}, "
-            f"habia {saldo_actual:.3f}. Faltante: {faltante:.3f}."
-        )
+    if nuevo_saldo < -1e-9:
+        aviso = f"Stock insuficiente: quedo en {nuevo_saldo:.3f} {ing.unidad_uso}."
         notas = f"{notas} | {aviso}" if notas else aviso
 
     return registrar_movimiento(
-        db, "materia_prima", ingrediente_id, -consumo_real, ing.unidad_uso,
+        db, "materia_prima", ingrediente_id, -consumo, ing.unidad_uso,
         "produccion_consumo", referencia, nuevo_saldo, user_id, notas=notas, fecha=fecha,
     )
+
+
+def crear_lote_ajuste(
+    db: Session,
+    producto_congelado_id: int,
+    cantidad: float,
+    fecha: date,
+    notas: str,
+) -> StockCongelado:
+    """A synthetic StockCongelado row for stock that isn't backed by a real lot
+    -- always `cantidad` negative in practice, `is_active=True` so it counts
+    in get_saldo_congelado()'s sum (a deficit that doesn't count isn't visible
+    at all). Shared by deducir_congelado_fifo (real lots didn't cover the full
+    request) and produccion_registro._revertir_salida_congelado (a produced
+    batch was already consumed downstream by the time it's reversed) -- same
+    "debit stock we can't source from a real lot" shape, two different triggers.
+    """
+    lote = StockCongelado(
+        producto_congelado_id=producto_congelado_id,
+        cantidad=cantidad,
+        fecha_entrada=fecha,
+        is_active=True,
+        notas=notas,
+    )
+    db.add(lote)
+    db.flush()  # caller needs lote.id immediately for a ConsumoFifoDetalle row
+    return lote
 
 
 def deducir_congelado_fifo(
@@ -219,19 +249,22 @@ def deducir_congelado_fifo(
     # pre-consumption balance (same class of bug fixed in deducir_materia_prima).
     db.flush()
 
-    # Record what actually left the shelf, not the theoretical demand. Without
-    # this, a delivery bigger than what's on hand silently records the full
-    # amount, sending the ledger negative forever with nothing to reconcile it
-    # against (unlike materia_prima, there was no clamp/faltante note here).
-    consumo_real = cantidad - restante
-    faltante = restante
+    # Deliberately unclamped: when real lots don't cover the full request, book
+    # the remainder on a synthetic negative lot instead of dropping it. That
+    # makes the shortfall a visible negative balance (someone forgot to record
+    # a production run) instead of silently vanishing at zero, and keeps the
+    # ledger movement equal to the full theoretical demand -- not just what a
+    # real lot happened to cover.
     notas = None
-    if faltante > 1e-9:
-        notas = f"Stock insuficiente: se pidieron {cantidad:.3f}, habia {consumo_real:.3f}. Faltante: {faltante:.3f}."
+    if restante > 1e-9:
+        notas = f"Stock insuficiente: se pidieron {cantidad:.3f}, habia {cantidad - restante:.3f}. Faltante: {restante:.3f}."
+        ajuste = crear_lote_ajuste(db, producto_congelado_id, -restante, fecha or date.today(), notas)
+        tomado.append((ajuste, restante))
+        restante = 0
 
     saldo = get_saldo_congelado(db, producto_congelado_id)
     mov = registrar_movimiento(
-        db, "congelado", producto_congelado_id, -consumo_real, "u",
+        db, "congelado", producto_congelado_id, -cantidad, "u",
         "produccion_consumo" if "produccion" in referencia else "entrega_b2b",
         referencia, saldo, user_id, notas=notas, fecha=fecha,
     )
