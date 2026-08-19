@@ -20,6 +20,7 @@ from app.models import (
     StockCongelado,
     User,
 )
+from app.services.stock import registrar_movimiento, revertir_consumos
 
 HOY = date.today().isoformat()
 
@@ -365,3 +366,74 @@ def test_entrega_de_terminado_sin_receta_propia_no_descuenta_la_masa(client, db)
 
     assert _stock(db, terminado.id) == 12.0  # 20 - 8
     assert _stock(db, masa.id) == 100.0  # sin tocar
+
+
+# ==============================================================
+# revertir_consumos: a zero-quantity consumption must still be retagged
+# ==============================================================
+
+
+def test_revertir_consumos_retags_zero_quantity_movement(db):
+    """A consumption movement that happened to record cantidad=0 (a fully
+    unmet shortage under the old clamp, or any genuinely-zero deduction) must
+    still be marked reverted -- `revertir_consumos` used to treat `devuelto
+    <= 0` as "nothing to do here", which left it permanently un-retagged.
+    Reprocessing that referencia later then created a second, differently-
+    valued movement under the exact same referencia_origen, so both sat in
+    activity feeds side by side forever."""
+    ing = _ingrediente(db, stock=0.0)
+    ref = "test:1"
+    mov = registrar_movimiento(
+        db, "materia_prima", ing.id, 0.0, "kg", "produccion_consumo", ref, 0.0,
+        notas="Stock insuficiente: la receta pedia 5.000 kg, habia 0.000. Faltante: 5.000.",
+    )
+    db.commit()
+
+    revertidos = revertir_consumos(db, ref)
+    db.commit()
+    db.refresh(mov)
+
+    assert revertidos == 1
+    assert mov.referencia_origen == f"{ref}:rev"
+
+
+# ==============================================================
+# Movement labeling: merma-driven stock consumption must say "merma", not
+# whatever the deducing function guesses from the referencia string
+# ==============================================================
+
+
+def test_merma_de_ingrediente_movimiento_tipo_es_merma(client, db):
+    headers = _auth(client, db)
+    ing = _ingrediente(db)
+
+    res = client.post(
+        "/api/mermas",
+        json={"ingrediente_id": ing.id, "cantidad": 5.0, "unidad": "kg", "motivo": "dañado", "fecha": HOY},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+
+    mov = db.query(MovimientoStock).filter(
+        MovimientoStock.tipo_stock == "materia_prima",
+        MovimientoStock.referencia_producto_id == ing.id,
+    ).one()
+    assert mov.tipo_movimiento == "merma"
+
+
+def test_merma_de_receta_movimiento_tipo_es_merma(client, db):
+    headers = _auth(client, db)
+    prod, catalogo, cli = _catalogo_con_stock(db)
+
+    res = client.post(
+        "/api/mermas",
+        json={"receta_id": catalogo.receta_id, "cantidad": 3.0, "unidad": "u", "motivo": "dañado", "fecha": HOY},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+
+    mov = db.query(MovimientoStock).filter(
+        MovimientoStock.tipo_stock == "congelado",
+        MovimientoStock.referencia_producto_id == prod.id,
+    ).one()
+    assert mov.tipo_movimiento == "merma"

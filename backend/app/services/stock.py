@@ -139,6 +139,7 @@ def deducir_materia_prima(
     user_id: Optional[int] = None,
     fecha: Optional[date] = None,
     origen_subreceta: Optional[str] = None,
+    tipo_movimiento: str = "produccion_consumo",
 ) -> MovimientoStock:
     ing = db.query(Ingrediente).filter(Ingrediente.id == ingrediente_id).first()
     if not ing:
@@ -176,7 +177,7 @@ def deducir_materia_prima(
 
     return registrar_movimiento(
         db, "materia_prima", ingrediente_id, -consumo, ing.unidad_uso,
-        "produccion_consumo", referencia, nuevo_saldo, user_id, notas=notas, fecha=fecha,
+        tipo_movimiento, referencia, nuevo_saldo, user_id, notas=notas, fecha=fecha,
     )
 
 
@@ -214,6 +215,7 @@ def deducir_congelado_fifo(
     referencia: str,
     user_id: Optional[int] = None,
     fecha: Optional[date] = None,
+    tipo_movimiento: str = "entrega_b2b",
 ) -> MovimientoStock:
     restante = cantidad
     entries = (
@@ -265,8 +267,7 @@ def deducir_congelado_fifo(
     saldo = get_saldo_congelado(db, producto_congelado_id)
     mov = registrar_movimiento(
         db, "congelado", producto_congelado_id, -cantidad, "u",
-        "produccion_consumo" if "produccion" in referencia else "entrega_b2b",
-        referencia, saldo, user_id, notas=notas, fecha=fecha,
+        tipo_movimiento, referencia, saldo, user_id, notas=notas, fecha=fecha,
     )
 
     if tomado:
@@ -427,7 +428,8 @@ def producir_producto(
                     if sub_prod and not _es_ancestro_congelado(db, prod.id, sub_prod.id):
                         consumo = linea.cantidad * lotes
                         mov = deducir_congelado_fifo(
-                            db, sub_prod.id, consumo, referencia, user_id, fecha=fecha
+                            db, sub_prod.id, consumo, referencia, user_id, fecha=fecha,
+                            tipo_movimiento="produccion_consumo",
                         )
                         if mov:
                             movimientos.append(mov)
@@ -443,7 +445,8 @@ def producir_producto(
                 consumo_padre = cantidad_producida / prod.cantidad_por_padre
 
             mov = deducir_congelado_fifo(
-                db, padre.id, consumo_padre, referencia, user_id, fecha=fecha
+                db, padre.id, consumo_padre, referencia, user_id, fecha=fecha,
+                tipo_movimiento="produccion_consumo",
             )
             if mov:
                 movimientos.append(mov)
@@ -526,7 +529,10 @@ def deducir_congelado_por_catalogo(
     if not prod_cong:
         return None
 
-    return deducir_congelado_fifo(db, prod_cong.id, cantidad, referencia, user_id, fecha=fecha)
+    return deducir_congelado_fifo(
+        db, prod_cong.id, cantidad, referencia, user_id, fecha=fecha,
+        tipo_movimiento=tipo_movimiento,
+    )
 
 
 def revertir_consumos(
@@ -563,8 +569,16 @@ def revertir_consumos(
 
     for mov in movimientos:
         devuelto = -mov.cantidad  # consumption is stored negative
-        if devuelto <= 0:
-            continue  # not a consumption; caller deals with outputs
+        if devuelto < 0:
+            continue  # a positive-cantidad output row; caller deals with those
+
+        # devuelto == 0 still needs retagging even though there's nothing to
+        # restore -- a shortage that was once fully clamped to zero recorded a
+        # real (if empty) consumption row. Skipping it here (as `<= 0` used to)
+        # left it permanently un-retagged: a later reprocess creates a fresh
+        # movement under the same referencia_origen without ever superseding
+        # this one, so the stale "0" sits in activity feeds forever alongside
+        # the corrected entry.
 
         if mov.tipo_stock == "materia_prima":
             saldo = get_saldo_materia_prima(db, mov.referencia_producto_id) + devuelto

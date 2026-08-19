@@ -172,6 +172,7 @@ def _aplicar_stock_merma(db: Session, merma: MermaRegistro, user_id: int) -> Non
             deducir_materia_prima(
                 db, merma.ingrediente_id, merma.cantidad,
                 ing.unidad_uso, ref, user_id, fecha=merma.fecha,
+                tipo_movimiento="merma",
             )
     elif merma.receta_id:
         prod_cong = db.query(ProductoCongelado).filter(
@@ -179,7 +180,8 @@ def _aplicar_stock_merma(db: Session, merma: MermaRegistro, user_id: int) -> Non
         ).first()
         if prod_cong:
             deducir_congelado_fifo(
-                db, prod_cong.id, merma.cantidad, ref, user_id, fecha=merma.fecha
+                db, prod_cong.id, merma.cantidad, ref, user_id, fecha=merma.fecha,
+                tipo_movimiento="merma",
             )
 
 
