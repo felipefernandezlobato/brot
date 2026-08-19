@@ -91,7 +91,7 @@ function formatCantidad(n: number): string {
   return Number.isInteger(n) ? String(n) : (Math.round(n * 100) / 100).toString();
 }
 
-const NOTAS_AUTOMATICAS = ["Produccion:", "Ajuste por reversion", "Reversion de"];
+const NOTAS_AUTOMATICAS = ["Produccion:", "Ajuste por reversion", "Reversion de", "Stock insuficiente"];
 
 /** Historial pivot table row order: terminado on top, masa at the bottom —
  * mirrors the production chain direction (masa -> semi -> crudo -> terminado)
