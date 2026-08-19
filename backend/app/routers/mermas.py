@@ -176,7 +176,8 @@ def _aplicar_stock_merma(db: Session, merma: MermaRegistro, user_id: int) -> Non
             )
     elif merma.receta_id:
         prod_cong = db.query(ProductoCongelado).filter(
-            ProductoCongelado.receta_id == merma.receta_id
+            ProductoCongelado.receta_id == merma.receta_id,
+            ProductoCongelado.is_active.is_(True),
         ).first()
         if prod_cong:
             deducir_congelado_fifo(

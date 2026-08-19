@@ -159,7 +159,10 @@ def resolver_producto_congelado(db: Session, reg: RegistroProduccion) -> Optiona
     if reg.receta_id:
         prod = (
             db.query(ProductoCongelado)
-            .filter(ProductoCongelado.receta_id == reg.receta_id)
+            .filter(
+                ProductoCongelado.receta_id == reg.receta_id,
+                ProductoCongelado.is_active.is_(True),
+            )
             .first()
         )
         if prod:

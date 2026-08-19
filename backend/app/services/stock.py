@@ -291,7 +291,7 @@ def _tiene_stock_propio(db: Session, receta_id: int) -> bool:
     """
     return (
         db.query(ProductoCongelado)
-        .filter(ProductoCongelado.receta_id == receta_id)
+        .filter(ProductoCongelado.receta_id == receta_id, ProductoCongelado.is_active.is_(True))
         .first()
         is not None
     )
@@ -422,7 +422,10 @@ def producir_producto(
                 elif linea.subreceta_id and _tiene_stock_propio(db, linea.subreceta_id):
                     sub_prod = (
                         db.query(ProductoCongelado)
-                        .filter(ProductoCongelado.receta_id == linea.subreceta_id)
+                        .filter(
+                            ProductoCongelado.receta_id == linea.subreceta_id,
+                            ProductoCongelado.is_active.is_(True),
+                        )
                         .first()
                     )
                     if sub_prod and not _es_ancestro_congelado(db, prod.id, sub_prod.id):
