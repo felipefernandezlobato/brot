@@ -263,10 +263,27 @@ def reconciliacion_stock(
         conteo_fisico = snapshot_fin.cantidad if snapshot_fin else 0
         fecha_conteo = str(snapshot_fin.fecha_registro) if snapshot_fin else None
 
-        # Stock snapshot at start of period (latest MANUAL count on or before fecha_desde)
+        # Baseline: latest MANUAL count on or before fecha_desde. When none exists
+        # (e.g. counting only started mid-window), fall back to the EARLIEST manual
+        # count inside the window and start the movement sums from ITS date instead
+        # -- otherwise every ingredient with no pre-window baseline would compare a
+        # real physical count against a fake "0 + a week of consumption" total and
+        # look like a huge discrepancy that was never real.
         snapshot_inicio = next((c for c in conteos_manuales if c.fecha_registro <= fecha_desde), None)
-        conteo_inicio = snapshot_inicio.cantidad if snapshot_inicio else 0
-        fecha_inicio = str(snapshot_inicio.fecha_registro) if snapshot_inicio else None
+        if snapshot_inicio:
+            conteo_inicio = snapshot_inicio.cantidad
+            fecha_inicio = str(snapshot_inicio.fecha_registro)
+            ventana_desde = fecha_desde
+        else:
+            fallback = next(
+                (c for c in reversed(conteos_manuales) if fecha_desde < c.fecha_registro <= fecha_hasta),
+                None,
+            )
+            conteo_inicio = fallback.cantidad if fallback else 0
+            fecha_inicio = str(fallback.fecha_registro) if fallback else None
+            # Sum movements strictly AFTER the fallback count's own date -- that
+            # count already reflects everything up to and including that day.
+            ventana_desde = (fallback.fecha_registro + timedelta(days=1)) if fallback else fecha_desde
 
         def _sum_movimientos(tipo_mov: str) -> float:
             val = (
@@ -275,7 +292,7 @@ def reconciliacion_stock(
                     MovimientoStock.tipo_stock == "materia_prima",
                     MovimientoStock.referencia_producto_id == ing.id,
                     MovimientoStock.tipo_movimiento == tipo_mov,
-                    MovimientoStock.fecha >= fecha_desde,
+                    MovimientoStock.fecha >= ventana_desde,
                     MovimientoStock.fecha <= fecha_hasta,
                 )
                 .scalar()
