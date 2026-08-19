@@ -1147,6 +1147,8 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                         const vacio = calc === null && val === undefined;
                         const discrepa = calc !== null && val !== undefined && Math.abs(calc - val) > DISCREPANCIA_TOLERANCIA;
                         const principal = calc !== null ? calc : val;
+                        const negativo = !vacio && principal !== undefined && principal < 0;
+                        const valNegativo = val !== undefined && val < 0;
                         return (
                           <td
                             key={d}
@@ -1154,6 +1156,8 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                             className={`text-center px-2 py-1.5 tabular-nums ${
                               vacio
                                 ? "text-cream-dark"
+                                : negativo
+                                ? "text-red-600 font-bold"
                                 : discrepa
                                 ? "text-red-600 font-semibold bg-red-50"
                                 : principal === 0
@@ -1164,8 +1168,8 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                             {vacio
                               ? "--"
                               : calc !== null
-                              ? <>{formatCantidad(calc)}{val !== undefined && <span className="text-warm-gray font-normal"> ({formatCantidad(val)})</span>}</>
-                              : <span className="text-warm-gray font-normal">({formatCantidad(val!)})</span>}
+                              ? <>{formatCantidad(calc)}{val !== undefined && <span className={valNegativo ? "text-red-600 font-bold" : "text-warm-gray font-normal"}> ({formatCantidad(val)})</span>}</>
+                              : <span className={valNegativo ? "text-red-600 font-bold" : "text-warm-gray font-normal"}>({formatCantidad(val!)})</span>}
                           </td>
                         );
                       })}
