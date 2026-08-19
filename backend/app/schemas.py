@@ -635,6 +635,8 @@ class MermaRegistroOut(BaseModel):
     ingrediente_id: Optional[int] = None
     receta_id: Optional[int] = None
     nombre_libre: Optional[str] = None
+    item_nombre: str
+    item_categoria: str
     cantidad: float
     unidad: str
     motivo: str

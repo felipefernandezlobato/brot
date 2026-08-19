@@ -1,12 +1,13 @@
-from datetime import date
+from collections import defaultdict
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Ingrediente, MermaRegistro, ProductoCongelado, User
+from app.models import Ingrediente, MermaRegistro, ProductoCongelado, Receta, User
 from app.permissions import require_permission
 from app.schemas import MermaRegistroCreate, MermaRegistroOut, MermaRegistroUpdate
 from app.services.costes import costo_por_unidad_uso
@@ -29,13 +30,69 @@ def _apply_date_filters(q, fecha_desde: Optional[date], fecha_hasta: Optional[da
     return q
 
 
+def _resolver_item(merma: MermaRegistro) -> tuple[str, str]:
+    """(nombre, categoria) of whatever this waste record refers to.
+
+    Relies on ingrediente_rel/receta_rel + their categoria_rel being eager-loaded
+    by the caller -- this is called once per row in a list, so a lazy load here
+    would mean N+1 queries.
+    """
+    if merma.ingrediente_id:
+        ing = merma.ingrediente_rel
+        nombre = ing.nombre if ing else f"Ingrediente #{merma.ingrediente_id}"
+        categoria = ing.categoria_rel.nombre if ing and ing.categoria_rel else "Sin categoria"
+        return nombre, categoria
+    if merma.receta_id:
+        rec = merma.receta_rel
+        nombre = rec.nombre if rec else f"Producto #{merma.receta_id}"
+        categoria = rec.categoria_rel.nombre if rec and rec.categoria_rel else "Sin categoria"
+        return nombre, categoria
+    return merma.nombre_libre or "Sin nombre", "Otro"
+
+
+def _merma_to_out(merma: MermaRegistro) -> dict:
+    nombre, categoria = _resolver_item(merma)
+    return {
+        "id": merma.id,
+        "ingrediente_id": merma.ingrediente_id,
+        "receta_id": merma.receta_id,
+        "nombre_libre": merma.nombre_libre,
+        "item_nombre": nombre,
+        "item_categoria": categoria,
+        "cantidad": merma.cantidad,
+        "unidad": merma.unidad,
+        "motivo": merma.motivo,
+        "notas": merma.notas,
+        "fecha": merma.fecha,
+        "ubicacion": merma.ubicacion,
+        "coste_unitario": merma.coste_unitario,
+        "coste_total": merma.coste_total,
+        "registered_by": merma.registered_by,
+        "registered_at": merma.registered_at,
+    }
+
+
+def _with_item_joins(q):
+    return q.options(
+        joinedload(MermaRegistro.ingrediente_rel).joinedload(Ingrediente.categoria_rel),
+        joinedload(MermaRegistro.receta_rel).joinedload(Receta.categoria_rel),
+    )
+
+
 # ── Analysis endpoint must be declared before /{id} ──────────────────────────
+
+
+def _inicio_periodo(fecha: date, agrupacion: str) -> date:
+    if agrupacion == "mes":
+        return fecha.replace(day=1)
+    return fecha - timedelta(days=fecha.weekday())  # Monday of that week
 
 
 @router.get("/analisis")
 def analisis_mermas(
     fecha_desde: Optional[date] = Query(None),
     fecha_hasta: Optional[date] = Query(None),
+    agrupacion: str = Query("semana", pattern="^(semana|mes)$"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -44,9 +101,12 @@ def analisis_mermas(
       - coste_total_global: sum of all waste costs
       - total_registros: count of waste records
       - por_motivo: list of {motivo, count, coste_total}
-      - top_items: top 10 items by waste cost (ingrediente_id or nombre_libre)
+      - por_categoria: list of {categoria, count, coste_total}
+      - evolucion: list of {periodo, count, coste_total}, bucketed by `agrupacion`,
+        oldest first (for a time-series chart)
+      - top_items: top 10 items by waste cost (ingrediente_id, receta_id or nombre_libre)
     """
-    q = db.query(MermaRegistro)
+    q = _with_item_joins(db.query(MermaRegistro))
     q = _apply_date_filters(q, fecha_desde, fecha_hasta)
     registros = q.all()
 
@@ -61,33 +121,42 @@ def analisis_mermas(
         entry["coste_total"] += r.coste_total
     por_motivo = sorted(motivo_map.values(), key=lambda x: x["coste_total"], reverse=True)
 
-    # Top 10 wasted items by cost
+    # Breakdown by item category (ingrediente/receta's own categoria; "Otro" for texto libre)
+    categoria_map: dict[str, dict] = defaultdict(lambda: {"categoria": "", "count": 0, "coste_total": 0.0})
     item_map: dict[str, dict] = {}
+    periodo_map: dict[date, dict] = {}
     for r in registros:
-        if r.ingrediente_id:
-            key = f"ingrediente:{r.ingrediente_id}"
-            ing = db.get(Ingrediente, r.ingrediente_id)
-            label = ing.nombre if ing else f"Ingrediente #{r.ingrediente_id}"
-        elif r.nombre_libre:
-            key = f"libre:{r.nombre_libre}"
-            label = r.nombre_libre
-        elif r.receta_id:
-            key = f"receta:{r.receta_id}"
-            label = f"Receta #{r.receta_id}"
-        else:
-            key = "desconocido"
-            label = "Desconocido"
+        nombre, categoria = _resolver_item(r)
 
-        entry = item_map.setdefault(key, {"nombre": label, "coste_total": 0.0, "count": 0})
-        entry["coste_total"] += r.coste_total
-        entry["count"] += 1
+        entry_cat = categoria_map[categoria]
+        entry_cat["categoria"] = categoria
+        entry_cat["count"] += 1
+        entry_cat["coste_total"] += r.coste_total
 
+        item_key = f"ingrediente:{r.ingrediente_id}" if r.ingrediente_id \
+            else f"receta:{r.receta_id}" if r.receta_id else f"libre:{nombre}"
+        entry_item = item_map.setdefault(item_key, {"nombre": nombre, "coste_total": 0.0, "count": 0})
+        entry_item["coste_total"] += r.coste_total
+        entry_item["count"] += 1
+
+        periodo = _inicio_periodo(r.fecha, agrupacion)
+        entry_periodo = periodo_map.setdefault(periodo, {"periodo": periodo, "count": 0, "coste_total": 0.0})
+        entry_periodo["count"] += 1
+        entry_periodo["coste_total"] += r.coste_total
+
+    por_categoria = sorted(categoria_map.values(), key=lambda x: x["coste_total"], reverse=True)
     top_items = sorted(item_map.values(), key=lambda x: x["coste_total"], reverse=True)[:10]
+    evolucion = [
+        {"periodo": str(p["periodo"]), "count": p["count"], "coste_total": round(p["coste_total"], 4)}
+        for p in sorted(periodo_map.values(), key=lambda x: x["periodo"])
+    ]
 
     return {
         "coste_total_global": round(coste_total_global, 4),
         "total_registros": total_registros,
         "por_motivo": por_motivo,
+        "por_categoria": por_categoria,
+        "evolucion": evolucion,
         "top_items": top_items,
     }
 
@@ -103,11 +172,12 @@ def list_mermas(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    q = db.query(MermaRegistro)
+    q = _with_item_joins(db.query(MermaRegistro))
     q = _apply_date_filters(q, fecha_desde, fecha_hasta)
     if motivo:
         q = q.filter(MermaRegistro.motivo == motivo)
-    return q.order_by(MermaRegistro.fecha.desc(), MermaRegistro.registered_at.desc()).all()
+    registros = q.order_by(MermaRegistro.fecha.desc(), MermaRegistro.registered_at.desc()).all()
+    return [_merma_to_out(m) for m in registros]
 
 
 @router.get("/{merma_id}", response_model=MermaRegistroOut)
@@ -116,10 +186,10 @@ def get_merma(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    merma = db.get(MermaRegistro, merma_id)
+    merma = _with_item_joins(db.query(MermaRegistro)).filter(MermaRegistro.id == merma_id).first()
     if not merma:
         raise HTTPException(status_code=404, detail="Merma no encontrada")
-    return merma
+    return _merma_to_out(merma)
 
 
 @router.post("", response_model=MermaRegistroOut, status_code=201)
@@ -155,8 +225,8 @@ def create_merma(
     _aplicar_stock_merma(db, merma, user.id)
 
     db.commit()
-    db.refresh(merma)
-    return merma
+    merma = _with_item_joins(db.query(MermaRegistro)).filter(MermaRegistro.id == merma.id).first()
+    return _merma_to_out(merma)
 
 
 def _ref_merma(merma: MermaRegistro) -> str:
@@ -223,8 +293,8 @@ def update_merma(
         _aplicar_stock_merma(db, merma, user.id)
 
     db.commit()
-    db.refresh(merma)
-    return merma
+    merma = _with_item_joins(db.query(MermaRegistro)).filter(MermaRegistro.id == merma.id).first()
+    return _merma_to_out(merma)
 
 
 @router.delete("/{merma_id}")

@@ -13,6 +13,8 @@ interface Merma {
   ingrediente_id: number | null;
   receta_id: number | null;
   nombre_libre: string | null;
+  item_nombre: string;
+  item_categoria: string;
   cantidad: number;
   unidad: string;
   motivo: Motivo;
@@ -55,10 +57,6 @@ function getDefaultDates() {
     desde: from.toISOString().slice(0, 10),
     hasta: to.toISOString().slice(0, 10),
   };
-}
-
-function itemName(m: Merma): string {
-  return m.nombre_libre ?? "Ingrediente";
 }
 
 export default function MermasPage() {
@@ -227,7 +225,8 @@ export default function MermasPage() {
                       }`}
                     >
                       <td className="px-4 py-3 font-medium text-text">
-                        {itemName(m)}
+                        {m.item_nombre}
+                        <p className="text-xs text-warm-gray font-normal">{m.item_categoria}</p>
                         {m.notas && (
                           <p className="text-xs text-warm-gray font-normal truncate max-w-[200px]">
                             {m.notas}
@@ -281,8 +280,9 @@ export default function MermasPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-medium text-text truncate">
-                        {itemName(m)}
+                        {m.item_nombre}
                       </p>
+                      <p className="text-xs text-warm-gray truncate">{m.item_categoria}</p>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <span
                           className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${

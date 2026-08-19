@@ -5,11 +5,33 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { formatARS } from "@/lib/format";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 
 type Motivo = "caducado" | "dañado" | "produccion" | "otro";
+type Agrupacion = "semana" | "mes";
 
 interface PorMotivo {
   motivo: Motivo;
+  count: number;
+  coste_total: number;
+}
+
+interface PorCategoria {
+  categoria: string;
+  count: number;
+  coste_total: number;
+}
+
+interface PuntoEvolucion {
+  periodo: string;
   count: number;
   coste_total: number;
 }
@@ -24,6 +46,8 @@ interface Analisis {
   coste_total_global: number;
   total_registros: number;
   por_motivo: PorMotivo[];
+  por_categoria: PorCategoria[];
+  evolucion: PuntoEvolucion[];
   top_items: TopItem[];
 }
 
@@ -67,17 +91,19 @@ export default function MermasAnalisisPage() {
   const [loading, setLoading] = useState(true);
   const [fechaDesde, setFechaDesde] = useState(defaults.desde);
   const [fechaHasta, setFechaHasta] = useState(defaults.hasta);
+  const [agrupacion, setAgrupacion] = useState<Agrupacion>("semana");
 
   const fetchAnalisis = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
     if (fechaDesde) params.set("fecha_desde", fechaDesde);
     if (fechaHasta) params.set("fecha_hasta", fechaHasta);
+    params.set("agrupacion", agrupacion);
     apiFetch<Analisis>(`/api/mermas/analisis?${params}`)
       .then(setAnalisis)
       .catch(() => toast("Error al cargar análisis", "error"))
       .finally(() => setLoading(false));
-  }, [fechaDesde, fechaHasta]);
+  }, [fechaDesde, fechaHasta, agrupacion]);
 
   useEffect(() => {
     fetchAnalisis();
@@ -155,6 +181,63 @@ export default function MermasAnalisisPage() {
             </div>
           </div>
 
+          {/* Evolucion — coste total por semana/mes */}
+          <div className="bg-white rounded-xl border border-cream-dark p-5">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h2 className="font-medium text-text">Evolución</h2>
+              <div className="flex gap-1 bg-cream rounded-lg p-1">
+                {(["semana", "mes"] as Agrupacion[]).map((a) => (
+                  <button
+                    key={a}
+                    onClick={() => setAgrupacion(a)}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors min-h-[32px] ${
+                      agrupacion === a
+                        ? "bg-brot text-white"
+                        : "text-warm-gray hover:text-brot"
+                    }`}
+                  >
+                    {a === "semana" ? "Semana" : "Mes"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {analisis.evolucion.length === 0 ? (
+              <p className="text-warm-gray text-sm">Sin datos</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={analisis.evolucion}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E8DFD3" vertical={false} />
+                  <XAxis
+                    dataKey="periodo"
+                    tick={{ fontSize: 11, fill: "#6B5E52" }}
+                    tickFormatter={(v: string) => {
+                      const d = new Date(v + "T00:00:00");
+                      return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+                    }}
+                  />
+                  <YAxis tick={{ fontSize: 11, fill: "#6B5E52" }} width={70} tickFormatter={(v) => formatARS(v)} />
+                  <Tooltip
+                    labelFormatter={(v) => {
+                      const d = new Date(String(v) + "T00:00:00");
+                      const prefijo = agrupacion === "semana" ? "Semana del " : "";
+                      return prefijo + d.toLocaleDateString("es-AR", agrupacion === "mes" ? { month: "long", year: "numeric" } : { day: "2-digit", month: "2-digit", year: "numeric" });
+                    }}
+                    formatter={(value, _name, item: any) => [
+                      `${formatARS(Number(value))} (${item?.payload?.count ?? 0} reg.)`,
+                      "Coste",
+                    ]}
+                    contentStyle={{
+                      borderRadius: "8px",
+                      border: "1px solid #E8DFD3",
+                      fontSize: "13px",
+                    }}
+                  />
+                  <Bar dataKey="coste_total" fill="#004225" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
           {/* By motivo — horizontal bar chart */}
           <div className="bg-white rounded-xl border border-cream-dark p-5">
             <h2 className="font-medium text-text mb-4">Por motivo</h2>
@@ -230,6 +313,41 @@ export default function MermasAnalisisPage() {
                   </div>
                 </div>
               )}
+          </div>
+
+          {/* By category — horizontal bar chart, one hue (ranked magnitude, not a
+              fixed enum like motivo, so no per-category color assignment) */}
+          <div className="bg-white rounded-xl border border-cream-dark p-5">
+            <h2 className="font-medium text-text mb-4">Por categoría</h2>
+            {analisis.por_categoria.length === 0 ? (
+              <p className="text-warm-gray text-sm">Sin datos</p>
+            ) : (
+              <div className="space-y-4">
+                {(() => {
+                  const maxCosteCategoria = Math.max(...analisis.por_categoria.map((c) => c.coste_total));
+                  return analisis.por_categoria.map((pc) => {
+                    const pct = maxCosteCategoria > 0 ? Math.round((pc.coste_total / maxCosteCategoria) * 100) : 0;
+                    return (
+                      <div key={pc.categoria}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-sm font-medium text-text">{pc.categoria}</span>
+                          <div className="text-right">
+                            <span className="text-sm font-medium text-text">{formatARS(pc.coste_total)}</span>
+                            <span className="text-xs text-warm-gray ml-2">{pc.count} reg.</span>
+                          </div>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-cream-dark overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-brot transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            )}
           </div>
 
           {/* Top items */}
