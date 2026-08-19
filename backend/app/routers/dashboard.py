@@ -207,6 +207,20 @@ def flujo_completo(
     }
 
 
+# InventarioRegistro rows written automatically (production/merma consumption,
+# reversal give-backs, pedido receipt/deletion corrections) all carry one of
+# these notas prefixes -- same list as esConteoManual() in stock/page.tsx.
+# Comparing a physical count against one of these would flag a "discrepancy"
+# between two numbers that came from the same event in the first place.
+NOTAS_AUTOMATICAS = ["Consumo automatico:", "Reversion de", "Pedido #"]
+
+
+def _es_conteo_manual(notas: Optional[str]) -> bool:
+    if not notas:
+        return True
+    return not any(notas.startswith(p) for p in NOTAS_AUTOMATICAS)
+
+
 @router.get("/reconciliacion")
 def reconciliacion_stock(
     fecha_desde: Optional[date] = Query(None),
@@ -236,29 +250,21 @@ def reconciliacion_stock(
     results = []
 
     for ing in ingredientes:
-        # Stock snapshot at end of period (latest count on or before fecha_hasta)
-        snapshot_fin = (
+        conteos = (
             db.query(InventarioRegistro)
-            .filter(
-                InventarioRegistro.ingrediente_id == ing.id,
-                InventarioRegistro.fecha_registro <= fecha_hasta,
-            )
+            .filter(InventarioRegistro.ingrediente_id == ing.id)
             .order_by(InventarioRegistro.id.desc())
-            .first()
+            .all()
         )
+        conteos_manuales = [c for c in conteos if _es_conteo_manual(c.notas)]
+
+        # Stock snapshot at end of period (latest MANUAL count on or before fecha_hasta)
+        snapshot_fin = next((c for c in conteos_manuales if c.fecha_registro <= fecha_hasta), None)
         conteo_fisico = snapshot_fin.cantidad if snapshot_fin else 0
         fecha_conteo = str(snapshot_fin.fecha_registro) if snapshot_fin else None
 
-        # Stock snapshot at start of period (latest count on or before fecha_desde)
-        snapshot_inicio = (
-            db.query(InventarioRegistro)
-            .filter(
-                InventarioRegistro.ingrediente_id == ing.id,
-                InventarioRegistro.fecha_registro <= fecha_desde,
-            )
-            .order_by(InventarioRegistro.id.desc())
-            .first()
-        )
+        # Stock snapshot at start of period (latest MANUAL count on or before fecha_desde)
+        snapshot_inicio = next((c for c in conteos_manuales if c.fecha_registro <= fecha_desde), None)
         conteo_inicio = snapshot_inicio.cantidad if snapshot_inicio else 0
         fecha_inicio = str(snapshot_inicio.fecha_registro) if snapshot_inicio else None
 
