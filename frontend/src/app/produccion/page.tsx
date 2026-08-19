@@ -112,6 +112,7 @@ export default function ProduccionHoy() {
   const [recetas, setRecetas] = useState<RecetaDropdown[]>([]);
   const [productosCongelados, setProductosCongelados] = useState<{id:number;nombre:string;nivel:string;necesita_bastones?:boolean}[]>([]);
   const [procesoPorProducto, setProcesoPorProducto] = useState<Map<number, string>>(new Map());
+  const [otrasTareas, setOtrasTareas] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [editando, setEditando] = useState<Set<number>>(new Set());
   const [extraDrafts, setExtraDrafts] = useState<Record<number, Draft>>({});
@@ -128,17 +129,24 @@ export default function ProduccionHoy() {
         apiFetch<DiaData>(`/api/produccion/dia?fecha=${fecha}`),
         apiFetch<RecetaDropdown[]>("/api/produccion/productos-dropdown"),
         apiFetch<{id:number;nombre:string;nivel:string;producto_padre_id:number|null;cantidad_por_padre:number|null}[]>("/api/congelados/productos"),
-        apiFetch<{titulo:string;producto_congelado_id:number|null;is_active:boolean}[]>("/api/produccion/tareas"),
+        apiFetch<{titulo:string;tipo:string;producto_congelado_id:number|null;is_active:boolean}[]>("/api/produccion/tareas"),
       ]);
       setData(d);
       setRecetas(recs);
       const procesoMap = new Map<number, string>();
+      const otras = new Set<string>();
       for (const t of tareas) {
-        if (t.is_active && t.producto_congelado_id && !procesoMap.has(t.producto_congelado_id)) {
+        if (!t.is_active) continue;
+        if (t.producto_congelado_id && !procesoMap.has(t.producto_congelado_id)) {
           procesoMap.set(t.producto_congelado_id, t.titulo);
+        } else if (!t.producto_congelado_id && t.tipo !== "produccion") {
+          // Cleaning/admin/delivery tasks aren't tied to a product — offer them
+          // as extras too, so one can be logged on a day it isn't scheduled.
+          otras.add(t.titulo);
         }
       }
       setProcesoPorProducto(procesoMap);
+      setOtrasTareas(Array.from(otras).sort());
       // Restore any unsaved typing for this day — nothing is lost just because the
       // tab closed before someone hit Guardar.
       const saved = sessionStorage.getItem(`brot_produccion_dia_${fecha}`);
@@ -382,11 +390,22 @@ export default function ProduccionHoy() {
     return partes.length ? partes.join(" · ") : "completada";
   }
 
+  function esExtraProduccion(extra: ExtraDia): boolean {
+    return extra.receta_id !== null || extra.producto_congelado_id !== null;
+  }
+
   async function guardarExtra(extra: ExtraDia) {
     const d = extraDraftOf(extra);
     const cantidad = num(d.cantidad);
-    if (cantidad === null || cantidad <= 0) {
-      toast("Ingresa la cantidad producida", "error");
+    const duracion = d.duracion ? parseInt(d.duracion) : null;
+    const esProduccion = esExtraProduccion(extra);
+    if (esProduccion) {
+      if (cantidad === null || cantidad <= 0) {
+        toast("Ingresa la cantidad producida", "error");
+        return;
+      }
+    } else if (!duracion || duracion <= 0) {
+      toast("Ingresa la duracion", "error");
       return;
     }
     setSavingExtra(extra.registro_id);
@@ -394,8 +413,8 @@ export default function ProduccionHoy() {
       await apiFetch(`/api/produccion/registro/${extra.registro_id}`, {
         method: "PUT",
         body: JSON.stringify({
-          cantidad_real: cantidad,
-          duracion_real: d.duracion ? parseInt(d.duracion) : null,
+          cantidad_real: esProduccion ? cantidad : null,
+          duracion_real: duracion,
           notas: d.notas || null,
           bastones_consumidos: num(d.bastones),
         }),
@@ -411,23 +430,42 @@ export default function ProduccionHoy() {
   }
 
   async function submitExtra() {
-    if (!extraProductoId || !extraCantidad) return;
+    if (!extraProductoId) return;
+    const esTarea = extraProductoId.startsWith("tarea:");
     try {
-      const body: Record<string, unknown> = {
-        producto_id: parseInt(extraProductoId),
-        cantidad_producida: num(extraCantidad),
-        fecha,
-        duracion_real: extraDuracion ? parseInt(extraDuracion) : null,
-        notas: extraNotas || null,
-      };
-      const bast = num(extraBastones);
-      if (bast !== null && bast > 0) {
-        body.bastones_consumidos = bast;
+      if (esTarea) {
+        const duracion = extraDuracion ? parseInt(extraDuracion) : null;
+        if (!duracion || duracion <= 0) {
+          toast("Ingresa la duracion", "error");
+          return;
+        }
+        await apiFetch("/api/produccion/registro/extra", {
+          method: "POST",
+          body: JSON.stringify({
+            fecha,
+            titulo: extraProductoId.slice("tarea:".length),
+            duracion_real: duracion,
+            notas: extraNotas || null,
+          }),
+        });
+      } else {
+        if (!extraCantidad) return;
+        const body: Record<string, unknown> = {
+          producto_id: parseInt(extraProductoId),
+          cantidad_producida: num(extraCantidad),
+          fecha,
+          duracion_real: extraDuracion ? parseInt(extraDuracion) : null,
+          notas: extraNotas || null,
+        };
+        const bast = num(extraBastones);
+        if (bast !== null && bast > 0) {
+          body.bastones_consumidos = bast;
+        }
+        await apiFetch("/api/produccion/producir", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
       }
-      await apiFetch("/api/produccion/producir", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
       setShowExtraForm(false);
       setExtraProductoId("");
       setExtraBastones("");
@@ -790,7 +828,10 @@ export default function ProduccionHoy() {
               const enEdicion = extraEditando.has(extra.registro_id);
               const guardado = extra.completada && !enEdicion;
               const isSaving = savingExtra === extra.registro_id;
-              const habilitado = num(d.cantidad) !== null && (num(d.cantidad) as number) > 0;
+              const esProduccion = esExtraProduccion(extra);
+              const habilitado = esProduccion
+                ? num(d.cantidad) !== null && (num(d.cantidad) as number) > 0
+                : num(d.duracion) !== null && (num(d.duracion) as number) > 0;
 
               return (
                 <div
@@ -875,18 +916,20 @@ export default function ProduccionHoy() {
                           <span className="text-xs text-blue-500">bast.</span>
                         </div>
                       )}
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          placeholder="0"
-                          value={d.cantidad}
-                          onChange={(e) => setExtraDraft(extra, { cantidad: e.target.value })}
-                          className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
-                          style={{ minHeight: 36 }}
-                        />
-                        <span className="text-xs text-gray-400">{extra.unidad_cantidad}</span>
-                      </div>
+                      {esProduccion && (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            placeholder="0"
+                            value={d.cantidad}
+                            onChange={(e) => setExtraDraft(extra, { cantidad: e.target.value })}
+                            className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                            style={{ minHeight: 36 }}
+                          />
+                          <span className="text-xs text-gray-400">{extra.unidad_cantidad}</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1">
                         <input
                           type="number"
@@ -954,7 +997,7 @@ export default function ProduccionHoy() {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
                 style={{ minHeight: 44 }}
               >
-                <option value="">Seleccionar producto...</option>
+                <option value="">Seleccionar...</option>
                 {["masa","semi","crudo","terminado"].map(nivel => {
                   const items = productosCongelados.filter(p => p.nivel === nivel);
                   if (!items.length) return null;
@@ -972,6 +1015,13 @@ export default function ProduccionHoy() {
                     </optgroup>
                   );
                 })}
+                {otrasTareas.length > 0 && (
+                  <optgroup label="Otras tareas">
+                    {otrasTareas.map(titulo => (
+                      <option key={titulo} value={`tarea:${titulo}`}>{titulo}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
               {extraProductoId && productosCongelados.find(p => p.id === parseInt(extraProductoId))?.necesita_bastones && (
                 <input
@@ -984,16 +1034,18 @@ export default function ProduccionHoy() {
                   style={{ minHeight: 44 }}
                 />
               )}
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  placeholder="Cantidad"
-                  value={extraCantidad}
-                  onChange={(e) => setExtraCantidad(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
-                  style={{ minHeight: 44 }}
-                />
+              <div className={extraProductoId.startsWith("tarea:") ? "" : "grid grid-cols-2 gap-2"}>
+                {!extraProductoId.startsWith("tarea:") && (
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="Cantidad"
+                    value={extraCantidad}
+                    onChange={(e) => setExtraCantidad(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                    style={{ minHeight: 44 }}
+                  />
+                )}
                 <input
                   type="number"
                   inputMode="numeric"
@@ -1014,7 +1066,10 @@ export default function ProduccionHoy() {
               <div className="flex gap-2">
                 <button
                   onClick={submitExtra}
-                  disabled={!extraProductoId || !extraCantidad}
+                  disabled={
+                    !extraProductoId ||
+                    (extraProductoId.startsWith("tarea:") ? !extraDuracion : !extraCantidad)
+                  }
                   className="flex-1 bg-[#004225] text-white py-2.5 rounded-lg text-sm font-medium hover:bg-[#003319] disabled:opacity-50 transition-colors"
                   style={{ touchAction: "manipulation", minHeight: 44 }}
                 >

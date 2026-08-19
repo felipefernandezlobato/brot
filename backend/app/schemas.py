@@ -493,7 +493,8 @@ class RegistroProduccionCreate(BaseModel):
 
 class RegistroExtraCreate(BaseModel):
     fecha: date
-    receta_id: int
+    receta_id: Optional[int] = None
+    titulo: Optional[str] = None
     cantidad_real: Optional[float] = None
     duracion_real: Optional[int] = None
     notas: Optional[str] = None

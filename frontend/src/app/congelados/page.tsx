@@ -1165,7 +1165,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                               ? "--"
                               : calc !== null
                               ? <>{formatCantidad(calc)}{val !== undefined && <span className="text-warm-gray font-normal"> ({formatCantidad(val)})</span>}</>
-                              : formatCantidad(val!)}
+                              : <span className="text-warm-gray font-normal">({formatCantidad(val!)})</span>}
                           </td>
                         );
                       })}

@@ -326,11 +326,23 @@ def create_extra(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    receta = db.query(Receta).filter(Receta.id == data.receta_id).first()
-    if not receta:
-        raise HTTPException(status_code=404, detail="Receta no encontrada")
-    if data.cantidad_real is None or data.cantidad_real <= 0:
-        raise HTTPException(status_code=422, detail="Ingresa la cantidad producida.")
+    """Two shapes share this endpoint: a production extra (receta_id set,
+    needs a cantidad since it moves stock) and a non-production extra like
+    Limpieza or LLEVAR PEDIDO done on a day it isn't scheduled (titulo set,
+    needs a duracion instead since there's nothing to produce)."""
+    if data.receta_id is not None:
+        receta = db.query(Receta).filter(Receta.id == data.receta_id).first()
+        if not receta:
+            raise HTTPException(status_code=404, detail="Receta no encontrada")
+        if data.cantidad_real is None or data.cantidad_real <= 0:
+            raise HTTPException(status_code=422, detail="Ingresa la cantidad producida.")
+        titulo_extra = receta.nombre
+    elif data.titulo:
+        if data.duracion_real is None or data.duracion_real <= 0:
+            raise HTTPException(status_code=422, detail="Ingresa la duracion.")
+        titulo_extra = data.titulo
+    else:
+        raise HTTPException(status_code=422, detail="Falta la receta o el titulo de la tarea.")
 
     reg = RegistroProduccion(
         tarea_id=None,
@@ -340,7 +352,7 @@ def create_extra(
         duracion_real=data.duracion_real,
         notas=data.notas,
         receta_id=data.receta_id,
-        titulo_extra=receta.nombre,
+        titulo_extra=titulo_extra,
         bastones_consumidos=data.bastones_consumidos,
         registrado_por=user.id,
     )
@@ -371,8 +383,13 @@ def update_registro(
     reg = db.query(RegistroProduccion).filter(RegistroProduccion.id == registro_id).first()
     if not reg:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    if data.cantidad_real is None or data.cantidad_real <= 0:
-        raise HTTPException(status_code=422, detail="Ingresa la cantidad producida.")
+
+    es_produccion = reg.receta_id is not None or reg.producto_congelado_id is not None
+    if es_produccion:
+        if data.cantidad_real is None or data.cantidad_real <= 0:
+            raise HTTPException(status_code=422, detail="Ingresa la cantidad producida.")
+    elif data.duracion_real is None or data.duracion_real <= 0:
+        raise HTTPException(status_code=422, detail="Ingresa la duracion.")
 
     revertir_efectos(db, reg, user.id)
     reg.cantidad_real = data.cantidad_real

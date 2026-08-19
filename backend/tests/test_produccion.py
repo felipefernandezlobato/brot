@@ -255,6 +255,71 @@ def test_registro_extra_appears_in_dia_view(client, db):
     assert any(e["titulo"] == "Receta Suelta" for e in dia["extras"])
 
 
+def test_registro_extra_tarea_requires_duracion(client, db):
+    """A non-production extra (Limpieza, LLEVAR PEDIDO...) has no cantidad to
+    produce, so duracion is what's required instead of cantidad_real."""
+    token, _ = _setup(client, db)
+    res = client.post(
+        "/api/produccion/registro/extra",
+        json={"fecha": HOY.isoformat(), "titulo": "Limpieza"},
+        headers=_headers(token),
+    )
+    assert res.status_code == 422
+
+
+def test_registro_extra_tarea_sin_producto(client, db):
+    token, _ = _setup(client, db)
+    res = client.post(
+        "/api/produccion/registro/extra",
+        json={"fecha": HOY.isoformat(), "titulo": "Limpieza", "duracion_real": 30},
+        headers=_headers(token),
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["titulo_extra"] == "Limpieza"
+    assert data["cantidad_real"] is None
+    assert data["duracion_real"] == 30
+
+    dia = client.get(f"/api/produccion/dia?fecha={HOY.isoformat()}", headers=_headers(token)).json()
+    extra = next(e for e in dia["extras"] if e["titulo"] == "Limpieza")
+    assert extra["cantidad_real"] is None
+
+
+def test_registro_extra_neither_receta_nor_titulo_rejected(client, db):
+    token, _ = _setup(client, db)
+    res = client.post(
+        "/api/produccion/registro/extra",
+        json={"fecha": HOY.isoformat(), "duracion_real": 30},
+        headers=_headers(token),
+    )
+    assert res.status_code == 422
+
+
+def test_update_registro_extra_tarea_requires_duracion(client, db):
+    token, _ = _setup(client, db)
+    created = client.post(
+        "/api/produccion/registro/extra",
+        json={"fecha": HOY.isoformat(), "titulo": "Limpieza", "duracion_real": 30},
+        headers=_headers(token),
+    ).json()
+
+    res = client.put(
+        f"/api/produccion/registro/{created['id']}",
+        json={"duracion_real": None},
+        headers=_headers(token),
+    )
+    assert res.status_code == 422
+
+    res2 = client.put(
+        f"/api/produccion/registro/{created['id']}",
+        json={"duracion_real": 45, "notas": "se extendio"},
+        headers=_headers(token),
+    )
+    assert res2.status_code == 200
+    assert res2.json()["duracion_real"] == 45
+    assert res2.json()["cantidad_real"] is None
+
+
 def test_update_registro_extra_recomputes_stock(client, db):
     """PUT /registro/{id} corrects an extra in place — revert old effects, apply new ones."""
     token, _ = _setup(client, db)

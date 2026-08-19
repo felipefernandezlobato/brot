@@ -1051,7 +1051,7 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                               ? "--"
                               : calc !== null
                               ? <>{formatCantidad(calc)}{val !== undefined && <span className="text-warm-gray font-normal"> ({formatCantidad(val)})</span>}</>
-                              : formatCantidad(val!)}
+                              : <span className="text-warm-gray font-normal">({formatCantidad(val!)})</span>}
                           </td>
                         );
                       })}
