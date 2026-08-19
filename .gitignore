@@ -59,3 +59,5 @@ htmlcov/
 *.pid
 *.seed
 .playwright-mcp/
+.vercel
+.env*
