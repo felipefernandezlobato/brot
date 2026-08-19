@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { formatARS, formatDateTime } from "@/lib/format";
+import DateRangeShortcuts from "@/components/DateRangeShortcuts";
 
 type Motivo = "caducado" | "dañado" | "produccion" | "otro";
 
@@ -128,30 +129,14 @@ export default function MermasPage() {
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4 space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-warm-gray mb-1">
-              Desde
-            </label>
-            <input
-              type="date"
-              value={fechaDesde}
-              onChange={(e) => setFechaDesde(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-warm-gray mb-1">
-              Hasta
-            </label>
-            <input
-              type="date"
-              value={fechaHasta}
-              onChange={(e) => setFechaHasta(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] text-sm"
-            />
-          </div>
-        </div>
+        <DateRangeShortcuts
+          fechaDesde={fechaDesde}
+          fechaHasta={fechaHasta}
+          onChange={(desde, hasta) => {
+            setFechaDesde(desde);
+            setFechaHasta(hasta);
+          }}
+        />
 
         {/* Motivo filter chips */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { formatARS } from "@/lib/format";
+import DateRangeShortcuts from "@/components/DateRangeShortcuts";
 import {
   BarChart,
   Bar,
@@ -131,30 +132,14 @@ export default function MermasAnalisisPage() {
 
       {/* Date range filter */}
       <div className="bg-white rounded-xl border border-cream-dark p-4 mb-6">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-warm-gray mb-1">
-              Desde
-            </label>
-            <input
-              type="date"
-              value={fechaDesde}
-              onChange={(e) => setFechaDesde(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-warm-gray mb-1">
-              Hasta
-            </label>
-            <input
-              type="date"
-              value={fechaHasta}
-              onChange={(e) => setFechaHasta(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] text-sm"
-            />
-          </div>
-        </div>
+        <DateRangeShortcuts
+          fechaDesde={fechaDesde}
+          fechaHasta={fechaHasta}
+          onChange={(desde, hasta) => {
+            setFechaDesde(desde);
+            setFechaHasta(hasta);
+          }}
+        />
       </div>
 
       {loading ? (
