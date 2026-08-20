@@ -560,6 +560,7 @@ class ProductoCongeladoOut(BaseModel):
     nivel: str = "terminado"
     producto_padre_id: Optional[int] = None
     cantidad_por_padre: Optional[float] = None
+    costo_unitario: float = 0
 
 
 class StockCongeladoCreate(BaseModel):
@@ -604,6 +605,7 @@ class StockCongeladoOut(BaseModel):
 class MermaRegistroCreate(BaseModel):
     ingrediente_id: Optional[int] = None
     receta_id: Optional[int] = None
+    producto_congelado_id: Optional[int] = None
     nombre_libre: Optional[str] = None
     cantidad: float
     unidad: str
@@ -619,6 +621,7 @@ class MermaRegistroCreate(BaseModel):
 class MermaRegistroUpdate(BaseModel):
     ingrediente_id: Optional[int] = None
     receta_id: Optional[int] = None
+    producto_congelado_id: Optional[int] = None
     nombre_libre: Optional[str] = None
     cantidad: Optional[float] = None
     unidad: Optional[str] = None
@@ -634,6 +637,7 @@ class MermaRegistroOut(BaseModel):
     id: int
     ingrediente_id: Optional[int] = None
     receta_id: Optional[int] = None
+    producto_congelado_id: Optional[int] = None
     nombre_libre: Optional[str] = None
     item_nombre: str
     item_categoria: str

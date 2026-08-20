@@ -13,6 +13,7 @@ interface Merma {
   id: number;
   ingrediente_id: number | null;
   receta_id: number | null;
+  producto_congelado_id: number | null;
   nombre_libre: string | null;
   item_nombre: string;
   item_categoria: string;

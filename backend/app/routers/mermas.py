@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models import Ingrediente, MermaRegistro, ProductoCongelado, Receta, User
 from app.permissions import require_permission
 from app.schemas import MermaRegistroCreate, MermaRegistroOut, MermaRegistroUpdate
-from app.services.costes import costo_por_unidad_uso
+from app.services.costes import costo_por_unidad_congelado, costo_por_unidad_uso
 from app.services.stock import (
     deducir_congelado_fifo,
     deducir_materia_prima,
@@ -33,14 +33,19 @@ def _apply_date_filters(q, fecha_desde: Optional[date], fecha_hasta: Optional[da
 def _resolver_item(merma: MermaRegistro) -> tuple[str, str]:
     """(nombre, categoria) of whatever this waste record refers to.
 
-    Relies on ingrediente_rel/receta_rel + their categoria_rel being eager-loaded
-    by the caller -- this is called once per row in a list, so a lazy load here
-    would mean N+1 queries.
+    Relies on ingrediente_rel/receta_rel/producto_congelado_rel + their
+    categoria_rel being eager-loaded by the caller -- this is called once per
+    row in a list, so a lazy load here would mean N+1 queries.
     """
     if merma.ingrediente_id:
         ing = merma.ingrediente_rel
         nombre = ing.nombre if ing else f"Ingrediente #{merma.ingrediente_id}"
         categoria = ing.categoria_rel.nombre if ing and ing.categoria_rel else "Sin categoria"
+        return nombre, categoria
+    if merma.producto_congelado_id:
+        prod = merma.producto_congelado_rel
+        nombre = prod.nombre if prod else f"Producto #{merma.producto_congelado_id}"
+        categoria = prod.categoria if prod else "Sin categoria"
         return nombre, categoria
     if merma.receta_id:
         rec = merma.receta_rel
@@ -56,6 +61,7 @@ def _merma_to_out(merma: MermaRegistro) -> dict:
         "id": merma.id,
         "ingrediente_id": merma.ingrediente_id,
         "receta_id": merma.receta_id,
+        "producto_congelado_id": merma.producto_congelado_id,
         "nombre_libre": merma.nombre_libre,
         "item_nombre": nombre,
         "item_categoria": categoria,
@@ -76,6 +82,7 @@ def _with_item_joins(q):
     return q.options(
         joinedload(MermaRegistro.ingrediente_rel).joinedload(Ingrediente.categoria_rel),
         joinedload(MermaRegistro.receta_rel).joinedload(Receta.categoria_rel),
+        joinedload(MermaRegistro.producto_congelado_rel),
     )
 
 
@@ -134,6 +141,7 @@ def analisis_mermas(
         entry_cat["coste_total"] += r.coste_total
 
         item_key = f"ingrediente:{r.ingrediente_id}" if r.ingrediente_id \
+            else f"producto_congelado:{r.producto_congelado_id}" if r.producto_congelado_id \
             else f"receta:{r.receta_id}" if r.receta_id else f"libre:{nombre}"
         entry_item = item_map.setdefault(item_key, {"nombre": nombre, "coste_total": 0.0, "count": 0})
         entry_item["coste_total"] += r.coste_total
@@ -206,12 +214,19 @@ def create_merma(
 
     dump = data.model_dump()
 
-    # Auto-calculate costs when an ingredient is linked
+    # Auto-calculate costs when an ingredient or frozen-stock item is linked
     if data.ingrediente_id:
         ing = db.get(Ingrediente, data.ingrediente_id)
         if not ing:
             raise HTTPException(status_code=404, detail="Ingrediente no encontrado")
         cpu = costo_por_unidad_uso(ing)
+        dump["coste_unitario"] = cpu
+        dump["coste_total"] = round(cpu * data.cantidad, 4)
+    elif data.producto_congelado_id:
+        prod = db.get(ProductoCongelado, data.producto_congelado_id)
+        if not prod:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+        cpu = costo_por_unidad_congelado(db, data.producto_congelado_id)
         dump["coste_unitario"] = cpu
         dump["coste_total"] = round(cpu * data.cantidad, 4)
 
@@ -244,7 +259,15 @@ def _aplicar_stock_merma(db: Session, merma: MermaRegistro, user_id: int) -> Non
                 ing.unidad_uso, ref, user_id, fecha=merma.fecha,
                 tipo_movimiento="merma",
             )
+    elif merma.producto_congelado_id:
+        deducir_congelado_fifo(
+            db, merma.producto_congelado_id, merma.cantidad, ref, user_id, fecha=merma.fecha,
+            tipo_movimiento="merma",
+        )
     elif merma.receta_id:
+        # Legacy path: pre-existing rows recorded before producto_congelado_id
+        # existed. New creates always resolve a specific product up front
+        # instead of guessing one from a shared receta_id.
         prod_cong = db.query(ProductoCongelado).filter(
             ProductoCongelado.receta_id == merma.receta_id,
             ProductoCongelado.is_active.is_(True),
@@ -276,7 +299,7 @@ def update_merma(
         )
 
     # Anything that changes what was consumed means the old deduction is wrong.
-    afecta_stock = {"cantidad", "ingrediente_id", "receta_id", "fecha"} & updates.keys()
+    afecta_stock = {"cantidad", "ingrediente_id", "receta_id", "producto_congelado_id", "fecha"} & updates.keys()
     if afecta_stock:
         revertir_consumos(db, _ref_merma(merma), user.id, fecha=merma.fecha)
 

@@ -15,11 +15,12 @@ interface Ingrediente {
   costo_por_unidad_uso: number;
 }
 
-interface Receta {
+interface ProductoCongelado {
   id: number;
   nombre: string;
-  costo_por_porcion: number;
-  precio_venta: number | null;
+  categoria: string;
+  unidad: string;
+  costo_unitario: number;
 }
 
 const MOTIVOS: { value: Motivo; label: string }[] = [
@@ -34,7 +35,7 @@ const UNIDADES = ["g", "kg", "ml", "litro", "unidad"];
 interface FormData {
   modo: "ingrediente" | "producto" | "libre";
   ingrediente_id: string;
-  receta_id: string;
+  producto_congelado_id: string;
   nombre_libre: string;
   cantidad: string;
   unidad: string;
@@ -45,7 +46,7 @@ interface FormData {
 const EMPTY_FORM: FormData = {
   modo: "producto",
   ingrediente_id: "",
-  receta_id: "",
+  producto_congelado_id: "",
   nombre_libre: "",
   cantidad: "",
   unidad: "unidad",
@@ -58,7 +59,7 @@ export default function NuevaMermaPage() {
   const { toast } = useToast();
 
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]);
-  const [recetas, setRecetas] = useState<Receta[]>([]);
+  const [productos, setProductos] = useState<ProductoCongelado[]>([]);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
@@ -66,16 +67,11 @@ export default function NuevaMermaPage() {
   useEffect(() => {
     Promise.all([
       apiFetch<Ingrediente[]>("/api/ingredientes"),
-      apiFetch<Record<string, unknown>[]>("/api/recetas"),
+      apiFetch<ProductoCongelado[]>("/api/congelados/productos"),
     ])
-      .then(([ings, recs]) => {
+      .then(([ings, prods]) => {
         setIngredientes(ings);
-        setRecetas(recs.filter((r) => !(r.es_subreceta as boolean)).map((r) => ({
-          id: r.id as number,
-          nombre: r.nombre as string,
-          costo_por_porcion: r.costo_por_porcion as number,
-          precio_venta: r.precio_venta as number | null,
-        })));
+        setProductos(prods);
       })
       .catch(() => toast("Error al cargar datos", "error"));
   }, []);
@@ -88,8 +84,16 @@ export default function NuevaMermaPage() {
   const selectedIngredient = ingredientes.find(
     (i) => String(i.id) === form.ingrediente_id
   );
-  const selectedReceta = recetas.find(
-    (r) => String(r.id) === form.receta_id
+  const selectedProducto = productos.find(
+    (p) => String(p.id) === form.producto_congelado_id
+  );
+
+  const productosPorCategoria = productos.reduce<Record<string, ProductoCongelado[]>>(
+    (acc, p) => {
+      (acc[p.categoria] ||= []).push(p);
+      return acc;
+    },
+    {}
   );
 
   const costPreview = (() => {
@@ -98,8 +102,8 @@ export default function NuevaMermaPage() {
     if (form.modo === "ingrediente" && selectedIngredient) {
       return selectedIngredient.costo_por_unidad_uso * qty;
     }
-    if (form.modo === "producto" && selectedReceta) {
-      return selectedReceta.costo_por_porcion * qty;
+    if (form.modo === "producto" && selectedProducto) {
+      return selectedProducto.costo_unitario * qty;
     }
     return null;
   })();
@@ -109,8 +113,8 @@ export default function NuevaMermaPage() {
     if (form.modo === "ingrediente" && !form.ingrediente_id) {
       errs.ingrediente_id = "Seleccione un ingrediente";
     }
-    if (form.modo === "producto" && !form.receta_id) {
-      errs.receta_id = "Seleccione un producto";
+    if (form.modo === "producto" && !form.producto_congelado_id) {
+      errs.producto_congelado_id = "Seleccione un producto";
     }
     if (form.modo === "libre" && !form.nombre_libre.trim()) {
       errs.nombre_libre = "Ingrese el nombre del item";
@@ -133,9 +137,9 @@ export default function NuevaMermaPage() {
       if (form.modo === "ingrediente" && selectedIngredient) {
         unidad = selectedIngredient.unidad_uso;
         costeUnitario = selectedIngredient.costo_por_unidad_uso;
-      } else if (form.modo === "producto" && selectedReceta) {
-        unidad = "unidad";
-        costeUnitario = selectedReceta.costo_por_porcion;
+      } else if (form.modo === "producto" && selectedProducto) {
+        unidad = selectedProducto.unidad;
+        costeUnitario = selectedProducto.costo_unitario;
       }
       const body: Record<string, unknown> = {
         cantidad,
@@ -149,7 +153,7 @@ export default function NuevaMermaPage() {
       if (form.modo === "ingrediente") {
         body.ingrediente_id = Number(form.ingrediente_id);
       } else if (form.modo === "producto") {
-        body.receta_id = Number(form.receta_id);
+        body.producto_congelado_id = Number(form.producto_congelado_id);
       } else {
         body.nombre_libre = form.nombre_libre.trim();
       }
@@ -235,23 +239,27 @@ export default function NuevaMermaPage() {
                 Producto
               </label>
               <select
-                value={form.receta_id}
-                onChange={(e) => setField("receta_id", e.target.value)}
+                value={form.producto_congelado_id}
+                onChange={(e) => setField("producto_congelado_id", e.target.value)}
                 className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
-                  errors.receta_id ? "border-red-400" : "border-cream-dark"
+                  errors.producto_congelado_id ? "border-red-400" : "border-cream-dark"
                 }`}
               >
                 <option value="">Seleccionar producto...</option>
-                {recetas.map((r) => (
-                  <option key={r.id} value={r.id}>{r.nombre}</option>
+                {Object.entries(productosPorCategoria).map(([categoria, prods]) => (
+                  <optgroup key={categoria} label={categoria}>
+                    {prods.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
-              {errors.receta_id && (
-                <p className="text-xs text-red-500 mt-1">{errors.receta_id}</p>
+              {errors.producto_congelado_id && (
+                <p className="text-xs text-red-500 mt-1">{errors.producto_congelado_id}</p>
               )}
-              {selectedReceta && (
+              {selectedProducto && (
                 <p className="text-xs text-warm-gray mt-1">
-                  Costo: {formatARS(selectedReceta.costo_por_porcion)}/unidad
+                  Unidad: {selectedProducto.unidad} · Costo: {formatARS(selectedProducto.costo_unitario)}/{selectedProducto.unidad}
                 </p>
               )}
             </div>
@@ -347,6 +355,10 @@ export default function NuevaMermaPage() {
               {form.modo === "ingrediente" && selectedIngredient ? (
                 <div className="px-3 py-2.5 rounded-lg border border-cream-dark bg-cream text-warm-gray text-sm min-h-[44px] flex items-center">
                   {selectedIngredient.unidad_uso}
+                </div>
+              ) : form.modo === "producto" && selectedProducto ? (
+                <div className="px-3 py-2.5 rounded-lg border border-cream-dark bg-cream text-warm-gray text-sm min-h-[44px] flex items-center">
+                  {selectedProducto.unidad}
                 </div>
               ) : (
                 <select

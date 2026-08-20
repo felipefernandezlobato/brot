@@ -420,6 +420,13 @@ class MermaRegistro(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     ingrediente_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ingredientes.id"), nullable=True)
     receta_id: Mapped[Optional[int]] = mapped_column(ForeignKey("recetas.id"), nullable=True)
+    # Direct link to a frozen-stock item at ANY level (masa/semi/crudo/terminado).
+    # Preferred over receta_id going forward: a crudo/semi stage often has no
+    # Receta of its own (e.g. Medialuna Cruda), so it could never be targeted by
+    # a merma before this existed. receta_id is kept for pre-existing rows.
+    producto_congelado_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("productos_congelados.id"), nullable=True
+    )
     nombre_libre: Mapped[Optional[str]] = mapped_column(sa.String(200), nullable=True)
     cantidad: Mapped[float] = mapped_column(sa.Float)
     unidad: Mapped[str] = mapped_column(sa.String(20))
@@ -434,6 +441,9 @@ class MermaRegistro(Base):
 
     ingrediente_rel: Mapped[Optional["Ingrediente"]] = relationship(foreign_keys=[ingrediente_id])
     receta_rel: Mapped[Optional["Receta"]] = relationship(foreign_keys=[receta_id])
+    producto_congelado_rel: Mapped[Optional["ProductoCongelado"]] = relationship(
+        foreign_keys=[producto_congelado_id]
+    )
 
 
 # ============================================================

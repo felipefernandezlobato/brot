@@ -54,11 +54,29 @@ def list_productos_congelados(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return (
+    from app.services.costes import costo_por_unidad_congelado
+
+    productos = (
         db.query(ProductoCongelado)
         .order_by(ProductoCongelado.position, ProductoCongelado.nombre)
         .all()
     )
+    return [
+        {
+            "id": p.id,
+            "nombre": p.nombre,
+            "categoria": p.categoria,
+            "unidad": p.unidad,
+            "is_active": p.is_active,
+            "position": p.position,
+            "receta_id": p.receta_id,
+            "nivel": p.nivel,
+            "producto_padre_id": p.producto_padre_id,
+            "cantidad_por_padre": p.cantidad_por_padre,
+            "costo_unitario": round(costo_por_unidad_congelado(db, p.id), 4),
+        }
+        for p in productos
+    ]
 
 
 @router.post("/productos", response_model=ProductoCongeladoOut, status_code=201)
