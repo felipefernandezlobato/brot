@@ -137,6 +137,8 @@ def delete_ingrediente(
         raise HTTPException(status_code=404, detail="Ingrediente no encontrado")
     if db.query(LineaReceta).filter(LineaReceta.ingrediente_id == ing_id).count() > 0:
         raise HTTPException(status_code=409, detail="Ingrediente usado en recetas")
+    db.query(InventarioRegistro).filter(InventarioRegistro.ingrediente_id == ing_id).delete()
+    db.query(PrecioProveedor).filter(PrecioProveedor.ingrediente_id == ing_id).delete()
     db.delete(ing)
     db.commit()
     return {"ok": True}
