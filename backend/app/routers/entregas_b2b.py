@@ -307,11 +307,17 @@ def create_entrega_b2b(
         )
         db.add(linea)
         if data.estado == "entregado":
-            deducir_congelado_por_catalogo(
+            mov = deducir_congelado_por_catalogo(
                 db, l.producto_id, l.cantidad,
                 ref, "entrega_b2b", user.id,
                 fecha=data.fecha_entrega,
             )
+            if mov is None:
+                cat = db.query(ProductoCatalogo).filter(ProductoCatalogo.id == l.producto_id).first()
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"No se pudo resolver el stock congelado para '{cat.nombre if cat else l.producto_id}'",
+                )
     db.commit()
     db.refresh(entrega, ["lineas"])
     return _entrega_out(entrega)
@@ -415,10 +421,16 @@ def _revertir_entrega(db: Session, entrega: EntregaB2B, user_id: int) -> int:
 def _aplicar_entrega(db: Session, entrega: EntregaB2B, user_id: int) -> None:
     ref = _ref_entrega(db, entrega)
     for l in entrega.lineas:
-        deducir_congelado_por_catalogo(
+        mov = deducir_congelado_por_catalogo(
             db, l.producto_id, l.cantidad, ref, "entrega_b2b", user_id,
             fecha=entrega.fecha_entrega,
         )
+        if mov is None:
+            cat = db.query(ProductoCatalogo).filter(ProductoCatalogo.id == l.producto_id).first()
+            raise HTTPException(
+                status_code=422,
+                detail=f"No se pudo resolver el stock congelado para '{cat.nombre if cat else l.producto_id}'",
+            )
 
 
 @router.put("/{entrega_id}/estado")

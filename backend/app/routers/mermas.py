@@ -256,7 +256,7 @@ def _aplicar_stock_merma(db: Session, merma: MermaRegistro, user_id: int) -> Non
         if ing:
             deducir_materia_prima(
                 db, merma.ingrediente_id, merma.cantidad,
-                ing.unidad_uso, ref, user_id, fecha=merma.fecha,
+                merma.unidad, ref, user_id, fecha=merma.fecha,
                 tipo_movimiento="merma",
             )
     elif merma.producto_congelado_id:

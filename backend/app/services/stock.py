@@ -487,7 +487,10 @@ def _unico_terminado_descendiente(db: Session, producto: "ProductoCongelado") ->
     while nivel_actual:
         siguiente = []
         for p in nivel_actual:
-            hijos = db.query(ProductoCongelado).filter(ProductoCongelado.producto_padre_id == p.id).all()
+            hijos = db.query(ProductoCongelado).filter(
+                ProductoCongelado.producto_padre_id == p.id,
+                ProductoCongelado.is_active.is_(True),
+            ).all()
             for h in hijos:
                 if h.id in visitados:
                     continue
@@ -515,7 +518,10 @@ def deducir_congelado_por_catalogo(
 
     candidatos = (
         db.query(ProductoCongelado)
-        .filter(ProductoCongelado.receta_id == cat.receta_id)
+        .filter(
+            ProductoCongelado.receta_id == cat.receta_id,
+            ProductoCongelado.is_active.is_(True),
+        )
         .all()
     )
     prod_cong = next((p for p in candidatos if p.nivel == "terminado"), None)
@@ -594,6 +600,7 @@ def revertir_consumos(
             ))
         else:
             _restaurar_lotes(db, mov, devuelto, f)
+            db.flush()  # autoflush=False -- the read below must see the just-restored lots
             saldo = get_saldo_congelado(db, mov.referencia_producto_id)
 
         # Same tipo_movimiento as what it cancels, so reports that bucket by type
