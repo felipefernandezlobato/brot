@@ -365,6 +365,7 @@ def add_stock_congelado(
     db: Session = Depends(get_db),
 ):
     entry = StockCongelado(**data.model_dump(exclude_none=True))
+    entry.cantidad_original = entry.cantidad
     db.add(entry)
     db.commit()
     db.refresh(entry)

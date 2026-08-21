@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 from app.auth import hash_pin
 from app.main import app
-from app.models import MovimientoStock, User
+from app.models import MovimientoStock, StockCongelado, User
 from app.routers.congelados import router
 
 app.include_router(router)
@@ -108,6 +108,9 @@ def test_add_stock_congelado(client, db):
     assert body["cantidad"] == 50
     assert body["lote"] == "LOTE-001"
     assert body["producto_nombre"] == prod["nombre"]
+
+    entry = db.query(StockCongelado).filter(StockCongelado.id == body["id"]).one()
+    assert entry.cantidad_original == 50
 
 
 def test_list_stock_congelado(client, db):

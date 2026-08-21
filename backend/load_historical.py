@@ -199,6 +199,7 @@ def load_congelados(db):
             entry = StockCongelado(
                 producto_congelado_id=prod.id,
                 cantidad=float(qty),
+                cantidad_original=float(qty),
                 fecha_entrada=CONGELADO_DATES[i],
                 is_active=True,
             )

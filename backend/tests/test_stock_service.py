@@ -5,7 +5,7 @@ and the Stock Congelado / Stock Materia Prima pivot tables' calculated column.
 from datetime import date
 
 from app.models import Categoria, Ingrediente, InventarioRegistro, MovimientoStock, ProductoCongelado, StockCongelado
-from app.services.stock import historial_movimientos_acumulado
+from app.services.stock import deducir_congelado_fifo, historial_movimientos_acumulado
 
 
 def _mov(db, producto_id, cantidad, fecha, tipo_stock="congelado"):
@@ -187,6 +187,69 @@ def test_congelado_suma_lotes_del_mismo_dia_como_una_sola_ancla(db):
     assert result[prod_id] == [
         {"fecha": "2026-08-01", "cantidad": 50.0},
         {"fecha": "2026-08-21", "cantidad": 31.0},  # (10+20) + 1.0
+    ]
+
+
+def test_congelado_ancla_usa_cantidad_original_no_la_mutada_por_fifo(db):
+    """cantidad se muta in-place por cada consumo FIFO (deducir_congelado_fifo
+    resta directo del lote) -- si el ancla leyera ese valor actual en vez de
+    cantidad_original (fijo al crear el lote y nunca mas tocado), un conteo
+    viejo se veria cada vez mas chico a medida que se sigue vendiendo, aunque
+    lo contado ese dia haya sido siempre el mismo numero."""
+    prod_id = _producto_congelado(db)
+    db.add(StockCongelado(
+        producto_congelado_id=prod_id, cantidad=50.0, cantidad_original=50.0,
+        fecha_entrada=date(2026, 8, 1),
+    ))
+    db.commit()
+
+    deducir_congelado_fifo(db, prod_id, 20.0, "entrega_b2b:1:Cliente", fecha=date(2026, 8, 5))
+    db.commit()
+
+    result = historial_movimientos_acumulado(db, "congelado", ids=[prod_id])
+
+    assert result[prod_id] == [{"fecha": "2026-08-05", "cantidad": 30.0}]
+
+
+def test_congelado_ancla_no_duplica_con_multiples_consumos_posteriores(db):
+    """A diferencia del intento revertido (que reconstruia sumando TODO lo
+    consumido del lote y por eso duplicaba cada consumo posterior contra el
+    propio ledger), anclar a cantidad_original -- fijo -- deja que cada
+    consumo posterior se aplique una sola vez via el ledger normal."""
+    prod_id = _producto_congelado(db)
+    db.add(StockCongelado(
+        producto_congelado_id=prod_id, cantidad=141.0, cantidad_original=141.0,
+        fecha_entrada=date(2026, 8, 13),
+    ))
+    db.commit()
+
+    deducir_congelado_fifo(db, prod_id, 2.0, "entrega_b2b:1:Cliente", fecha=date(2026, 8, 15))
+    db.commit()
+    deducir_congelado_fifo(db, prod_id, 5.0, "merma:1", fecha=date(2026, 8, 18))
+    db.commit()
+
+    result = historial_movimientos_acumulado(db, "congelado", ids=[prod_id])
+
+    assert result[prod_id] == [
+        {"fecha": "2026-08-15", "cantidad": 139.0},
+        {"fecha": "2026-08-18", "cantidad": 134.0},
+    ]
+
+
+def test_congelado_lote_sin_cantidad_original_usa_cantidad_como_fallback(db):
+    """Filas viejas de antes de que existiera la columna (o de tests que no
+    la setean) siguen funcionando -- cae de nuevo a `cantidad`."""
+    prod_id = _producto_congelado(db)
+    db.add(StockCongelado(producto_congelado_id=prod_id, cantidad=30.0, fecha_entrada=date(2026, 8, 20)))
+    _mov(db, prod_id, 50.0, date(2026, 8, 1))
+    _mov(db, prod_id, 5.0, date(2026, 8, 21))
+    db.commit()
+
+    result = historial_movimientos_acumulado(db, "congelado", ids=[prod_id])
+
+    assert result[prod_id] == [
+        {"fecha": "2026-08-01", "cantidad": 50.0},
+        {"fecha": "2026-08-21", "cantidad": 35.0},
     ]
 
 

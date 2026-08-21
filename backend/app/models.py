@@ -375,6 +375,12 @@ class StockCongelado(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     producto_congelado_id: Mapped[int] = mapped_column(ForeignKey("productos_congelados.id"))
     cantidad: Mapped[float] = mapped_column(sa.Float)
+    # Set once at creation, never touched again by deducir_congelado_fifo/
+    # _restaurar_lotes (which only mutate `cantidad`) -- the historial pivot's
+    # manual-count anchor reads this instead of `cantidad` so an old lot's
+    # anchor doesn't drift down as FIFO consumes it. Nullable only for rows
+    # from before this column existed; migration 4dac5d6d7328 backfills those.
+    cantidad_original: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
     fecha_entrada: Mapped[date] = mapped_column(sa.Date, default=date.today)
     fecha_vencimiento: Mapped[Optional[date]] = mapped_column(sa.Date, nullable=True)
     lote: Mapped[Optional[str]] = mapped_column(sa.String(100), nullable=True)

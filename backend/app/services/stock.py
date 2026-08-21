@@ -111,19 +111,18 @@ def _conteos_manuales_por_fecha(db: Session, tipo_stock: str, ids: list[int]) ->
     congelado: StockCongelado rows are physical lots, several of which can
     legitimately be counted the same day, so same-day entries are summed --
     the same convention the historial pivot table's own aggregation uses.
-
-    NOTE: `cantidad` on a congelado lot can be mutated in place by a later
-    FIFO draw, which can make an old lot's anchor read low once any of it
-    has been consumed (see Barra Negra Cocinado, 2026-08-21). A same-lot
-    "current remaining + still-live ConsumoFifoDetalle draws" reconstruction
-    was tried and reverted the same day: `historial_movimientos_acumulado`'s
-    per-movement loop ALSO re-applies every one of those same draws via the
-    ledger (day_map), so any lot with more than one subsequent draw (edits,
-    partial reversals, multi-date consumption) got double-subtracted and
-    came out badly wrong for most of the catalog. Reconstructing this
-    correctly needs to account for exactly which draws the loop will
-    already re-apply itself -- not attempted again without a much more
-    careful design.
+    Uses `cantidad_original`, not `cantidad` -- the latter is mutated in
+    place by every later FIFO draw (deducir_congelado_fifo), so it stops
+    representing what was actually counted the moment any of it gets
+    consumed (see Barra Negra Cocinado, 2026-08-21). `cantidad_original` is
+    written once at lot creation and never touched again, so reading it
+    here can't re-introduce the double-subtraction bug from computing a
+    "reconstructed" value live: `historial_movimientos_acumulado`'s
+    per-movement loop separately re-applies every draw via the ledger
+    (day_map) regardless, so anchoring to anything that ALSO folds those
+    same draws in would double-count them the moment a lot has more than
+    one subsequent draw (edits, partial reversals, multi-date consumption --
+    tried and reverted the same day it broke most of the catalog).
     """
     if not ids:
         return {}
@@ -146,7 +145,8 @@ def _conteos_manuales_por_fecha(db: Session, tipo_stock: str, ids: list[int]) ->
                 continue
             dia = out.setdefault(r.producto_congelado_id, {})
             key = str(r.fecha_entrada)
-            dia[key] = dia.get(key, 0.0) + r.cantidad
+            valor = r.cantidad_original if r.cantidad_original is not None else r.cantidad
+            dia[key] = dia.get(key, 0.0) + valor
     return out
 
 
@@ -290,6 +290,7 @@ def crear_lote_ajuste(
     lote = StockCongelado(
         producto_congelado_id=producto_congelado_id,
         cantidad=cantidad,
+        cantidad_original=cantidad,
         fecha_entrada=fecha,
         is_active=True,
         notas=notas,
@@ -549,6 +550,7 @@ def producir_producto(
     entry = StockCongelado(
         producto_congelado_id=prod.id,
         cantidad=cantidad_producida,
+        cantidad_original=cantidad_producida,
         fecha_entrada=fecha,
         is_active=True,
         notas=f"Produccion: {referencia}",
@@ -728,6 +730,7 @@ def _restaurar_lotes(db: Session, mov: MovimientoStock, devuelto: float, fecha: 
         db.add(StockCongelado(
             producto_congelado_id=mov.referencia_producto_id,
             cantidad=devuelto,
+            cantidad_original=devuelto,
             fecha_entrada=fecha,
             is_active=True,
             notas=f"Reversion de {mov.referencia_origen} (lote reconstruido)",
