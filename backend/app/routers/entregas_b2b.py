@@ -15,6 +15,7 @@ from app.models import (
     MovimientoStock,
     PedidoCliente,
     ProductoCatalogo,
+    ProductoCongelado,
     User,
 )
 from app.services.stock import deducir_congelado_por_catalogo, revertir_consumos
@@ -475,3 +476,71 @@ def delete_entrega_b2b(
     db.delete(entrega)
     db.commit()
     return {"ok": True, "movimientos_revertidos": revertidos}
+
+
+@router.post("/corregir-recetas-faltantes")
+def corregir_recetas_faltantes(
+    user: User = require_permission("entregas_b2b", "edit"),
+    db: Session = Depends(get_db),
+):
+    """One-off fix for terminados/catalogo missing a receta_id link.
+
+    Barra Blanca Cocinado (id=18), Barra Negra Cocinado (id=19) and the
+    catalog entry "Sacramento" (id=10) had no receta_id set, so
+    deducir_congelado_por_catalogo() could never resolve them -- before
+    2026-08-20's fix (58b8ca0) that failed silently, so entregas #27
+    (Sacramento, 15/08) and #30 (Barra Negra, 19/08) were marked
+    "entregado" with that line's stock never deducted. This links the
+    recetas and backfills exactly those two missing deductions via the
+    real deducir_congelado_por_catalogo() path, dated to each entrega's
+    own fecha_entrega. Idempotent: skips any link/deduction already applied.
+    "Pan lomo" (entrega #27, same bug) is deliberately left alone -- no
+    receta exists for it at all, nothing to link to yet.
+    """
+    resultado = {"links": [], "backfill": []}
+
+    barra_blanca = db.query(ProductoCongelado).filter(ProductoCongelado.id == 18).first()
+    if barra_blanca and barra_blanca.receta_id is None:
+        barra_blanca.receta_id = 8
+        resultado["links"].append("Barra Blanca Cocinado -> receta 8")
+
+    barra_negra = db.query(ProductoCongelado).filter(ProductoCongelado.id == 19).first()
+    if barra_negra and barra_negra.receta_id is None:
+        barra_negra.receta_id = 9
+        resultado["links"].append("Barra Negra Cocinado -> receta 9")
+
+    sacramento_cat = db.query(ProductoCatalogo).filter(ProductoCatalogo.id == 10).first()
+    if sacramento_cat and sacramento_cat.receta_id is None:
+        sacramento_cat.receta_id = 24
+        resultado["links"].append("Catalogo Sacramento -> receta 24")
+
+    db.flush()
+
+    backfills = [
+        ("entrega_b2b:30:Olula", 19, 19, 12.0, date(2026, 8, 19)),
+        ("entrega_b2b:27:Olula", 10, 10, 10.0, date(2026, 8, 15)),
+    ]
+    for ref, producto_congelado_id, producto_catalogo_id, cantidad, fecha in backfills:
+        ya_existe = (
+            db.query(MovimientoStock)
+            .filter(
+                MovimientoStock.referencia_origen == ref,
+                MovimientoStock.tipo_stock == "congelado",
+                MovimientoStock.referencia_producto_id == producto_congelado_id,
+            )
+            .first()
+        )
+        if ya_existe:
+            continue
+        mov = deducir_congelado_por_catalogo(
+            db, producto_catalogo_id, cantidad, ref, "entrega_b2b", user.id, fecha=fecha,
+        )
+        if mov is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"No se pudo resolver el stock congelado para catalogo #{producto_catalogo_id} (ref {ref})",
+            )
+        resultado["backfill"].append({"referencia": ref, "movimiento_id": mov.id, "cantidad": mov.cantidad})
+
+    db.commit()
+    return resultado
