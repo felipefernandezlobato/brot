@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import HistorialPrecio, Ingrediente, InventarioRegistro, LineaPedido, Pedido, Proveedor, User
+from app.models import HistorialPrecio, Ingrediente, InventarioRegistro, LineaPedido, MovimientoStock, Pedido, Proveedor, User
 from app.services.stock import get_saldo_materia_prima, registrar_movimiento
 from app.permissions import require_permission
 from app.schemas import (
@@ -170,6 +170,52 @@ def delete_pedido(
     db.delete(p)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/{pedido_id}/corregir-doble-reversion")
+def corregir_doble_reversion(
+    pedido_id: int,
+    user: User = require_permission("pedidos_proveedores", "edit"),
+    db: Session = Depends(get_db),
+):
+    """One-off correction for the delete_pedido double-reversal bug (fixed
+    2026-08-21): deleting a received pedido used to both delete its
+    original recepcion movement AND append a compensating -cantidad
+    correccion, reversing the receipt twice on the ledger sum. This finds
+    any stray `pedido_borrado:{pedido_id}` movement left by that bug and
+    appends a matching movement to cancel it out -- never mutating or
+    deleting the original, same append-only discipline as every other
+    reversal here. Idempotent: refuses to run twice for the same pedido_id.
+    """
+    ref = f"pedido_borrado:{pedido_id}"
+    movimientos = db.query(MovimientoStock).filter(MovimientoStock.referencia_origen == ref).all()
+    if not movimientos:
+        raise HTTPException(status_code=404, detail="No hay movimientos de este bug para este pedido")
+
+    ya_corregido = db.query(MovimientoStock).filter(MovimientoStock.referencia_origen == f"{ref}:fix").first()
+    if ya_corregido:
+        raise HTTPException(status_code=409, detail="Esta correccion ya fue aplicada")
+
+    corregidos = []
+    for mov in movimientos:
+        ledger_actual = sum(
+            m.cantidad for m in db.query(MovimientoStock)
+            .filter(
+                MovimientoStock.tipo_stock == mov.tipo_stock,
+                MovimientoStock.referencia_producto_id == mov.referencia_producto_id,
+            )
+            .all()
+        )
+        nuevo_saldo = ledger_actual - mov.cantidad
+        c = registrar_movimiento(
+            db, mov.tipo_stock, mov.referencia_producto_id, -mov.cantidad, mov.unidad, "correccion",
+            f"{ref}:fix", nuevo_saldo, user.id,
+            notas=f"Correccion del bug de doble reversion en delete_pedido (movimiento #{mov.id})",
+        )
+        corregidos.append(c.id)
+
+    db.commit()
+    return {"corregidos": corregidos}
 
 
 # ── Status transitions ─────────────────────────────────────────────────────────
