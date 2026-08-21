@@ -312,3 +312,43 @@ def test_calculado_fecha_desde_conserva_saldo_de_apertura(client, db):
         {"fecha": "2026-08-10", "cantidad": 7.0},   # opening balance carried in
         {"fecha": "2026-08-20", "cantidad": 9.0},
     ]
+
+
+def test_sincronizar_ledger_usa_cantidad_original_no_la_consumida(client, db):
+    """Regression: found in production against Barra Negra Cocinado's
+    2026-08-13 lot. A real entrega had already consumed the lot to 0 by the
+    time this endpoint was called, and it re-anchored the carga_inicial from
+    12 down to 0 to match the (by-then-consumed) `cantidad` -- destroying the
+    original count a real, later, legitimate sale should never have been
+    able to touch. Must use `cantidad_original`, unaffected by that draw."""
+    from app.services.stock import deducir_congelado_fifo
+
+    token = _admin_token(client, db)
+    prod = _create_producto(client, token)
+    fecha = date(2026, 8, 13)
+
+    entry = client.post(
+        "/api/congelados",
+        json={"producto_congelado_id": prod["id"], "cantidad": 12, "fecha_entrada": str(fecha)},
+        headers=_auth(token),
+    ).json()
+    db.add(MovimientoStock(
+        tipo_stock="congelado", referencia_producto_id=prod["id"], cantidad=12.0,
+        unidad="u", tipo_movimiento="carga_inicial", referencia_origen="carga_inicial:historico",
+        saldo_despues=12.0, fecha=fecha,
+    ))
+    db.commit()
+
+    deducir_congelado_fifo(db, prod["id"], 12.0, "entrega_b2b:1:Cliente", fecha=date(2026, 8, 19))
+    db.commit()
+
+    res = client.post(f"/api/congelados/{entry['id']}/sincronizar-ledger", headers=_auth(token))
+    assert res.status_code == 200, res.text
+    assert res.json()["ajustado"] is True
+
+    carga = (
+        db.query(MovimientoStock)
+        .filter(MovimientoStock.tipo_stock == "congelado", MovimientoStock.tipo_movimiento == "carga_inicial")
+        .one()
+    )
+    assert carga.cantidad == 12.0

@@ -435,6 +435,16 @@ def sincronizar_ledger(
     movement on or before this entry's date is a lone carga_inicial dated
     the same day -- see that function's docstring, and
     inventario.py's identical materia_prima version, for the full guard.
+
+    Uses `cantidad_original`, not `cantidad`: unlike materia_prima's
+    InventarioRegistro (an immutable snapshot), a congelado lot's `cantidad`
+    is mutated in place by every later FIFO draw, so once any of it has
+    been consumed it no longer means "the corrected count" -- it means
+    "what's left". Passing that reduced number here would overwrite a
+    perfectly correct carga_inicial with the post-consumption remainder
+    (found in production against Barra Negra Cocinado's 2026-08-13 lot:
+    a real 12-unit entrega had already consumed the lot to 0, and this
+    endpoint had rewritten the carga_inicial from 12 down to 0 to match).
     """
     entry = db.query(StockCongelado).filter(StockCongelado.id == entry_id).first()
     if not entry:
@@ -446,12 +456,13 @@ def sincronizar_ledger(
         )
 
     prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == entry.producto_congelado_id).first()
+    valor = entry.cantidad_original if entry.cantidad_original is not None else entry.cantidad
     mov = ajustar_correccion_conteo(
         db,
         tipo_stock="congelado",
         producto_id=entry.producto_congelado_id,
         registro_id=entry.id,
-        nueva_cantidad=entry.cantidad,
+        nueva_cantidad=valor,
         unidad=prod.unidad if prod else "u",
         fecha=entry.fecha_entrada,
         user_id=user.id,
