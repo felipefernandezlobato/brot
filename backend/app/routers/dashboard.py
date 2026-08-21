@@ -25,7 +25,7 @@ from app.models import (
 )
 from app.services.conversiones import convertir
 from app.services.produccion_registro import movimiento_no_revertido
-from app.services.stock import get_saldos_congelado
+from app.services.stock import es_conteo_manual, get_saldos_congelado
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -207,18 +207,8 @@ def flujo_completo(
     }
 
 
-# InventarioRegistro rows written automatically (production/merma consumption,
-# reversal give-backs, pedido receipt/deletion corrections) all carry one of
-# these notas prefixes -- same list as esConteoManual() in stock/page.tsx.
-# Comparing a physical count against one of these would flag a "discrepancy"
-# between two numbers that came from the same event in the first place.
-NOTAS_AUTOMATICAS = ["Consumo automatico:", "Reversion de", "Pedido #"]
-
-
 def _es_conteo_manual(notas: Optional[str]) -> bool:
-    if not notas:
-        return True
-    return not any(notas.startswith(p) for p in NOTAS_AUTOMATICAS)
+    return es_conteo_manual("materia_prima", notas)
 
 
 @router.get("/reconciliacion")

@@ -18,6 +18,27 @@ from app.models import (
 from app.services.conversiones import convertir
 
 
+NOTAS_AUTOMATICAS_MATERIA_PRIMA = ["Consumo automatico:", "Reversion de", "Pedido #"]
+NOTAS_AUTOMATICAS_CONGELADO = ["Produccion:", "Ajuste por reversion", "Reversion de", "Stock insuficiente"]
+
+
+def es_conteo_manual(tipo_stock: str, notas: Optional[str]) -> bool:
+    """True if a row was entered by a person, not written automatically by
+    production/merma consumption, a reversal give-back, or a pedido receipt --
+    those carry a recognizable `notas` prefix. Comparing a physical count
+    against one of these would flag a "discrepancy" between two numbers that
+    came from the same event in the first place, and editing one directly
+    (instead of the record that generated it) would leave the ledger out of
+    sync with what the edit actually changed.
+    """
+    if not notas:
+        return True
+    prefijos = (
+        NOTAS_AUTOMATICAS_MATERIA_PRIMA if tipo_stock == "materia_prima" else NOTAS_AUTOMATICAS_CONGELADO
+    )
+    return not any(notas.startswith(p) for p in prefijos)
+
+
 def registrar_movimiento(
     db: Session,
     tipo_stock: str,
@@ -641,3 +662,118 @@ def _restaurar_lotes(db: Session, mov: MovimientoStock, devuelto: float, fecha: 
             is_active=True,
             notas=f"Reversion de {mov.referencia_origen} (lote reconstruido)",
         ))
+
+
+def _revertir_correccion_conteo(db: Session, referencia: str, user_id: Optional[int]) -> None:
+    """Undo a previous manual-count correction filed under `referencia`, if any.
+
+    Same retag-and-compensate shape as revertir_consumos, but a count
+    correction can be either sign (a recount can go up or down), so it can't
+    reuse that function directly -- revertir_consumos silently skips any
+    positive-cantidad row, assuming it's production output someone else owns
+    the reversal of.
+
+    Dates the compensating entry at the ORIGINAL correction's own `mov.fecha`,
+    not whatever date the new edit is using -- a reversed pair must share a
+    date to cancel out for any "balance as of X" window between the two, in
+    case the edit that triggered this reversal also moved the row to a
+    different date.
+    """
+    existentes = db.query(MovimientoStock).filter(MovimientoStock.referencia_origen == referencia).all()
+    for mov in existentes:
+        registrar_movimiento(
+            db, mov.tipo_stock, mov.referencia_producto_id, -mov.cantidad, mov.unidad,
+            mov.tipo_movimiento, f"{referencia}:rev", None, user_id,
+            notas=f"Reversion de {referencia}", fecha=mov.fecha,
+        )
+        mov.referencia_origen = f"{referencia}:rev"
+    if existentes:
+        db.flush()
+
+
+def ajustar_correccion_conteo(
+    db: Session,
+    tipo_stock: str,
+    producto_id: int,
+    registro_id: int,
+    nueva_cantidad: float,
+    unidad: str,
+    fecha: date,
+    user_id: Optional[int] = None,
+) -> Optional[MovimientoStock]:
+    """Correct the ledger so its running balance as of `fecha` equals
+    `nueva_cantidad` -- the corrected value of an edited historical manual
+    count.
+
+    Tied 1:1 to the manual-count row being edited via a stable referencia
+    (`correccion_conteo:{tipo_stock}:{registro_id}`), so re-editing that same
+    row later finds and reverses THIS correction first, then sizes the fresh
+    one against the ledger as it stands once that's undone -- never against
+    the row's own previous value. That distinction matters: a plain
+    `nueva - vieja` delta would be correct on the very first edit but wrong
+    on every edit after that, since the prior correction is fully backed out
+    (not superseded) before the new one is computed. Never mutates an
+    existing MovimientoStock row -- only appends, same as every other
+    reversal in this file.
+
+    Also the right tool for a genuinely NEW baseline (an item that's never
+    had a `carga_inicial` run for it): with no correction to revert and no
+    other movements yet, `nueva_cantidad - 0` is exactly what
+    scripts/reconciliar_ledger_*.py would have inserted by hand.
+
+    Only call this from an EDIT of an existing count, never from creating a
+    new one: a fresh count is deliberately left un-ledgered (see
+    es_conteo_manual's docstring) so a genuine discrepancy -- a bug in
+    production/merma deduction -- stays visible instead of silently
+    reconciling itself the moment someone recounts.
+
+    Exception to "never mutate a MovimientoStock row": if the ONLY movement
+    on or before `fecha` is a lone `carga_inicial`, it gets edited in place
+    instead of leaving a correction next to it. A carga_inicial was never a
+    real event -- it's just our best guess at history when the item was set
+    up (see scripts/reconciliar_ledger_*.py) -- so fixing a typo in it isn't
+    erasing evidence of anything real, and the ledger reads as one clean
+    correct number instead of "+220 / -219.78" forever. The instant a real
+    movement (production/merma/entrega/recepcion) exists on or before this
+    date, this can't apply -- rewriting a real event would be exactly the
+    "hand-edit the ledger to make a discrepancy disappear" this file's other
+    reversal functions all exist to avoid.
+    """
+    referencia = f"correccion_conteo:{tipo_stock}:{registro_id}"
+    _revertir_correccion_conteo(db, referencia, user_id)
+
+    # Excludes this row's own correction history (live or already reverted):
+    # a prior edit's leftover rows aren't an independent real event, so they
+    # shouldn't be what stands between a re-edited row and the clean
+    # direct-edit path above -- re-correcting the same mistake a second time
+    # should collapse right back to editing the carga_inicial in place, same
+    # as the first time, as long as nothing ELSE real has happened since.
+    previos = (
+        db.query(MovimientoStock)
+        .filter(
+            MovimientoStock.tipo_stock == tipo_stock,
+            MovimientoStock.referencia_producto_id == producto_id,
+            MovimientoStock.fecha <= fecha,
+            MovimientoStock.referencia_origen != referencia,
+            MovimientoStock.referencia_origen != f"{referencia}:rev",
+        )
+        .all()
+    )
+    if len(previos) == 1 and previos[0].tipo_movimiento == "carga_inicial":
+        base = previos[0]
+        base.cantidad = nueva_cantidad
+        base.unidad = unidad
+        base.saldo_despues = nueva_cantidad
+        base.registrado_por = user_id
+        base.registrado_at = datetime.now(timezone.utc)
+        return base
+
+    ledger_actual = sum(m.cantidad for m in previos)
+    delta = nueva_cantidad - ledger_actual
+    if abs(delta) < 1e-9:
+        return None
+    return registrar_movimiento(
+        db, tipo_stock, producto_id, delta, unidad, "correccion_conteo",
+        referencia, nueva_cantidad, user_id, fecha=fecha,
+        notas=f"Correccion de conteo manual (registro #{registro_id})",
+    )

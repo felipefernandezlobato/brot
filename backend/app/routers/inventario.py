@@ -9,8 +9,9 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import Ingrediente, InventarioRegistro, LineaPedido, Pedido, User
 from app.permissions import require_permission
-from app.schemas import InventarioRegistroCreate, InventarioRegistroOut
-from app.services.stock import historial_movimientos_acumulado
+from app.schemas import InventarioRegistroCreate, InventarioRegistroOut, InventarioRegistroUpdate
+from app.services.conversiones import convertir
+from app.services.stock import ajustar_correccion_conteo, es_conteo_manual, historial_movimientos_acumulado
 
 router = APIRouter(prefix="/api/inventario", tags=["inventario"])
 
@@ -289,6 +290,69 @@ def get_inventario_calculado(
         ingredientes_out.append({"ingrediente_id": iid, "historial": puntos})
 
     return {"ingredientes": ingredientes_out}
+
+
+@router.put("/{registro_id}", response_model=InventarioRegistroOut)
+def update_inventario(
+    registro_id: int,
+    data: InventarioRegistroUpdate,
+    user: User = require_permission("stock", "edit"),
+    db: Session = Depends(get_db),
+):
+    """Correct a past manual stock count -- a mistyped quantity, a kg/g
+    mix-up, a wrong date. The ledger is adjusted to match via a single
+    dated correccion_conteo movement (see ajustar_correccion_conteo).
+
+    A brand new count should go through POST instead: creating one
+    deliberately leaves the ledger untouched, so a real discrepancy (a bug
+    in how production/mermas deduct stock) stays visible instead of
+    silently reconciling itself the moment someone recounts.
+    """
+    reg = db.query(InventarioRegistro).filter(InventarioRegistro.id == registro_id).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    updates = data.model_dump(exclude_unset=True)
+    if "ingrediente_id" in updates and updates["ingrediente_id"] != reg.ingrediente_id:
+        raise HTTPException(
+            status_code=422,
+            detail="No se puede reasignar un conteo a otro ingrediente -- borralo y creá uno nuevo.",
+        )
+
+    afecta_ledger = bool({"cantidad", "unidad", "fecha_registro"} & updates.keys())
+    if afecta_ledger and not es_conteo_manual("materia_prima", reg.notas):
+        raise HTTPException(
+            status_code=409,
+            detail="Este registro fue generado automaticamente (produccion, merma o pedido) -- corregi el origen, no este registro.",
+        )
+
+    ing = db.query(Ingrediente).filter(Ingrediente.id == reg.ingrediente_id).first()
+    if not ing:
+        raise HTTPException(status_code=404, detail="Ingrediente no encontrado")
+
+    try:
+        for k, v in updates.items():
+            setattr(reg, k, v)
+
+        if afecta_ledger:
+            # Normalize to the ingredient's own tracked unit -- every other
+            # writer of this table (POST, deducir_materia_prima) guarantees
+            # this invariant, and get_saldo_materia_prima() reads `cantidad`
+            # raw, ignoring `unidad` entirely, so leaving a submitted unit
+            # other than unidad_uso in place would silently misscale every
+            # future deduction against this ingredient.
+            reg.cantidad = convertir(reg.cantidad, reg.unidad, ing.unidad_uso)
+            reg.unidad = ing.unidad_uso
+            ajustar_correccion_conteo(
+                db, "materia_prima", reg.ingrediente_id, reg.id, reg.cantidad,
+                ing.unidad_uso, reg.fecha_registro, user.id,
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    db.commit()
+    db.refresh(reg)
+    return _to_out(reg)
 
 
 @router.delete("/{registro_id}")

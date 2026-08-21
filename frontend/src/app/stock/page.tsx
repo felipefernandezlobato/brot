@@ -839,14 +839,40 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
     // same-day recount the newest entry comes first, so keep only the FIRST
     // value seen per (fecha, ingrediente) instead of letting the loop
     // overwrite down to the oldest/superseded one.
-    const map = new Map<string, Map<number, number>>();
+    const map = new Map<string, Map<number, RegistroStock>>();
     for (const r of conteosManuales) {
       if (!map.has(r.fecha_registro)) map.set(r.fecha_registro, new Map());
       const dateMap = map.get(r.fecha_registro)!;
-      if (!dateMap.has(r.ingrediente_id)) dateMap.set(r.ingrediente_id, r.cantidad);
+      if (!dateMap.has(r.ingrediente_id)) dateMap.set(r.ingrediente_id, r);
     }
     return map;
   }, [conteosManuales]);
+
+  const [editando, setEditando] = useState<{ id: number; value: string } | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const guardarEdicion = async () => {
+    if (!editando) return;
+    const num = parseFloat(editando.value.replace(",", "."));
+    if (isNaN(num) || num < 0) {
+      toast("Cantidad invalida", "error");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await apiFetch(`/api/inventario/${editando.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ cantidad: num }),
+      });
+      toast("Conteo corregido");
+      setEditando(null);
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Error al corregir el conteo", "error");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const shortDate = (d: string) => {
     const dt = new Date(d + "T00:00:00");
@@ -1028,16 +1054,27 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                         {ing.unidad_uso}
                       </td>
                       {allDates.map((d) => {
-                        const val = pivotData.get(d)?.get(ing.id);
+                        const registro = pivotData.get(d)?.get(ing.id);
+                        const val = registro?.cantidad;
                         const calc = valorCalculadoEnFecha(calculado.get(ing.id), d);
                         const vacio = calc === null && val === undefined;
                         const discrepa = calc !== null && val !== undefined && Math.abs(calc - val) > DISCREPANCIA_TOLERANCIA;
                         const principal = calc !== null ? calc : val;
+                        const isEditing = registro !== undefined && editando?.id === registro.id;
                         return (
                           <td
                             key={d}
-                            title={discrepa ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)}` : undefined}
-                            className={`text-center px-2 py-1.5 tabular-nums ${
+                            title={
+                              discrepa
+                                ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)}`
+                                : registro
+                                ? "Click para corregir el conteo"
+                                : undefined
+                            }
+                            onClick={() => {
+                              if (registro && !isEditing) setEditando({ id: registro.id, value: String(registro.cantidad) });
+                            }}
+                            className={`text-center px-2 py-1.5 tabular-nums ${registro ? "cursor-pointer" : ""} ${
                               vacio
                                 ? "text-cream-dark"
                                 : discrepa
@@ -1047,11 +1084,30 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                                 : "text-text"
                             }`}
                           >
-                            {vacio
-                              ? "--"
-                              : calc !== null
-                              ? <>{formatCantidad(calc)}{val !== undefined && <span className="text-warm-gray font-normal"> ({formatCantidad(val)})</span>}</>
-                              : <span className="text-warm-gray font-normal">({formatCantidad(val!)})</span>}
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                step="any"
+                                autoFocus
+                                disabled={savingEdit}
+                                value={editando!.value}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setEditando({ id: editando!.id, value: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") guardarEdicion();
+                                  if (e.key === "Escape") setEditando(null);
+                                }}
+                                onBlur={guardarEdicion}
+                                className="w-16 px-1 py-0.5 rounded border border-brot text-center text-xs focus:outline-none"
+                              />
+                            ) : vacio ? (
+                              "--"
+                            ) : calc !== null ? (
+                              <>{formatCantidad(calc)}{val !== undefined && <span className="text-warm-gray font-normal"> ({formatCantidad(val)})</span>}</>
+                            ) : (
+                              <span className="text-warm-gray font-normal">({formatCantidad(val!)})</span>
+                            )}
                           </td>
                         );
                       })}

@@ -952,16 +952,50 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
       });
   }, [conteosManuales, calculado, productos]);
 
-  // For congelados, aggregate quantities per (date, product) since there can be multiple entries
+  // For congelados, aggregate quantities per (date, product) since there can be multiple entries.
+  // Editing inline only makes sense when a cell is backed by exactly one entry -- with two or
+  // more lots on the same date for the same product, there's no unambiguous row to correct.
   const pivotData = useMemo(() => {
-    const map = new Map<string, Map<number, number>>();
+    const map = new Map<string, Map<number, { total: number; entries: StockCongelado[] }>>();
     for (const e of conteosManuales) {
       if (!map.has(e.fecha_entrada)) map.set(e.fecha_entrada, new Map());
       const dateMap = map.get(e.fecha_entrada)!;
-      dateMap.set(e.producto_congelado_id, (dateMap.get(e.producto_congelado_id) ?? 0) + e.cantidad);
+      const existing = dateMap.get(e.producto_congelado_id);
+      if (existing) {
+        existing.total += e.cantidad;
+        existing.entries.push(e);
+      } else {
+        dateMap.set(e.producto_congelado_id, { total: e.cantidad, entries: [e] });
+      }
     }
     return map;
   }, [conteosManuales]);
+
+  const [editando, setEditando] = useState<{ id: number; value: string } | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const guardarEdicion = async () => {
+    if (!editando) return;
+    const num = parseFloat(editando.value.replace(",", "."));
+    if (isNaN(num) || num < 0) {
+      toast("Cantidad invalida", "error");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await apiFetch(`/api/congelados/${editando.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ cantidad: num }),
+      });
+      toast("Conteo corregido");
+      setEditando(null);
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Error al corregir el conteo", "error");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const shortDate = (d: string) => {
     const dt = new Date(d + "T00:00:00");
@@ -1142,18 +1176,30 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                         {prod.unidad}
                       </td>
                       {allDates.map((d) => {
-                        const val = pivotData.get(d)?.get(prod.id);
+                        const cell = pivotData.get(d)?.get(prod.id);
+                        const val = cell?.total;
+                        const registro = cell && cell.entries.length === 1 ? cell.entries[0] : undefined;
                         const calc = valorCalculadoEnFecha(calculado.get(prod.id), d);
                         const vacio = calc === null && val === undefined;
                         const discrepa = calc !== null && val !== undefined && Math.abs(calc - val) > DISCREPANCIA_TOLERANCIA;
                         const principal = calc !== null ? calc : val;
                         const negativo = !vacio && principal !== undefined && principal < 0;
                         const valNegativo = val !== undefined && val < 0;
+                        const isEditing = registro !== undefined && editando?.id === registro.id;
                         return (
                           <td
                             key={d}
-                            title={discrepa ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)}` : undefined}
-                            className={`text-center px-2 py-1.5 tabular-nums ${
+                            title={
+                              discrepa
+                                ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)}`
+                                : registro
+                                ? "Click para corregir el conteo"
+                                : undefined
+                            }
+                            onClick={() => {
+                              if (registro && !isEditing) setEditando({ id: registro.id, value: String(registro.cantidad) });
+                            }}
+                            className={`text-center px-2 py-1.5 tabular-nums ${registro ? "cursor-pointer" : ""} ${
                               vacio
                                 ? "text-cream-dark"
                                 : negativo
@@ -1165,11 +1211,30 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                                 : "text-text"
                             }`}
                           >
-                            {vacio
-                              ? "--"
-                              : calc !== null
-                              ? <>{formatCantidad(calc)}{val !== undefined && <span className={valNegativo ? "text-red-600 font-bold" : "text-warm-gray font-normal"}> ({formatCantidad(val)})</span>}</>
-                              : <span className={valNegativo ? "text-red-600 font-bold" : "text-warm-gray font-normal"}>({formatCantidad(val!)})</span>}
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                step="any"
+                                autoFocus
+                                disabled={savingEdit}
+                                value={editando!.value}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setEditando({ id: editando!.id, value: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") guardarEdicion();
+                                  if (e.key === "Escape") setEditando(null);
+                                }}
+                                onBlur={guardarEdicion}
+                                className="w-16 px-1 py-0.5 rounded border border-brot text-center text-xs focus:outline-none"
+                              />
+                            ) : vacio ? (
+                              "--"
+                            ) : calc !== null ? (
+                              <>{formatCantidad(calc)}{val !== undefined && <span className={valNegativo ? "text-red-600 font-bold" : "text-warm-gray font-normal"}> ({formatCantidad(val)})</span>}</>
+                            ) : (
+                              <span className={valNegativo ? "text-red-600 font-bold" : "text-warm-gray font-normal"}>({formatCantidad(val!)})</span>
+                            )}
                           </td>
                         );
                       })}
