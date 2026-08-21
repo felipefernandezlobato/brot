@@ -34,10 +34,20 @@ interface TareaStat {
   duracion_promedio: number | null;
 }
 
+interface NoProgramada {
+  fecha: string;
+  titulo: string;
+  cantidad_real: number | null;
+  unidad: string | null;
+  producto_congelado_id: number | null;
+  receta_id: number | null;
+}
+
 interface AnalyticsData {
   resumen: Resumen;
   por_dia: DiaStat[];
   por_tarea: TareaStat[];
+  no_programada: NoProgramada[];
 }
 
 /* ─── Helpers ──────────────────────────────────────────────────────── */
@@ -499,12 +509,46 @@ export default function ProduccionAnalytics() {
             </div>
           )}
 
-          {/* Empty state */}
-          {data.por_dia.length === 0 && data.por_tarea.length === 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
-              Sin datos de produccion en este periodo
+          {/* Unscheduled production -- real production with no plan entry to
+              compare it against, so it's excluded from cumplimiento above,
+              but still shown here so it doesn't just disappear. */}
+          {data.no_programada.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+              <h2 className="font-[family-name:var(--font-garamond)] text-lg text-gray-900 mb-1">
+                Produccion no programada
+              </h2>
+              <p className="text-xs text-gray-400 mb-4">
+                No estaba en el plan de esta semana, por eso no cuenta para el cumplimiento de arriba.
+              </p>
+              <div className="space-y-2">
+                {data.no_programada.map((item, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between border-b border-gray-100 last:border-0 pb-2 last:pb-0"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{item.titulo}</p>
+                      <p className="text-[10px] text-gray-400">{displayDate(item.fecha)}</p>
+                    </div>
+                    <p className="text-sm text-gray-700 font-medium">
+                      {item.cantidad_real !== null
+                        ? `${item.cantidad_real} ${item.unidad || ""}`
+                        : "-"}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
+
+          {/* Empty state */}
+          {data.por_dia.length === 0 &&
+            data.por_tarea.length === 0 &&
+            data.no_programada.length === 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
+                Sin datos de produccion en este periodo
+              </div>
+            )}
         </>
       )}
     </div>

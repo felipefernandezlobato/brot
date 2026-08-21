@@ -2,6 +2,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -522,6 +523,25 @@ def get_analytics(
         stats["duracion_promedio"] = round(sum(duraciones) / len(duraciones), 1) if duraciones else None
         por_tarea.append(stats)
 
+    # Production that happened with no tarea_id at all -- doesn't belong in
+    # "cumplimiento" (there's no plan entry to compare it against), but it's
+    # real completed work and was invisible here entirely before, even
+    # though it already affected stock via the normal producir_producto path.
+    no_programada = (
+        db.query(RegistroProduccion)
+        .filter(
+            RegistroProduccion.fecha >= d_desde,
+            RegistroProduccion.fecha <= d_hasta,
+            RegistroProduccion.tarea_id == None,
+            or_(
+                RegistroProduccion.producto_congelado_id != None,
+                RegistroProduccion.receta_id != None,
+            ),
+        )
+        .order_by(RegistroProduccion.fecha)
+        .all()
+    )
+
     return {
         "resumen": {
             "total_planificadas": total_planned,
@@ -531,6 +551,17 @@ def get_analytics(
         },
         "por_dia": por_dia,
         "por_tarea": sorted(por_tarea, key=lambda x: x["titulo"]),
+        "no_programada": [
+            {
+                "fecha": r.fecha.isoformat(),
+                "titulo": r.titulo_extra or "Produccion extra",
+                "cantidad_real": r.cantidad_real,
+                "unidad": r.unidad_extra,
+                "producto_congelado_id": r.producto_congelado_id,
+                "receta_id": r.receta_id,
+            }
+            for r in no_programada
+        ],
     }
 
 
