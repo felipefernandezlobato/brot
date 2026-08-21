@@ -459,6 +459,7 @@ class TareaProduccionUpdate(BaseModel):
     cantidad_planificada: Optional[float] = None
     unidad_cantidad: Optional[str] = None
     receta_id: Optional[int] = None
+    producto_congelado_id: Optional[int] = None
     tipo: Optional[str] = None
     posicion: Optional[int] = None
     is_active: Optional[bool] = None
