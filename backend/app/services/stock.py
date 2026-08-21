@@ -775,14 +775,22 @@ def ajustar_correccion_conteo(
         base.saldo_despues = nueva_cantidad
         base.registrado_por = user_id
         base.registrado_at = datetime.now(timezone.utc)
+        db.flush()
         return base
 
     ledger_actual = sum(m.cantidad for m in previos)
     delta = nueva_cantidad - ledger_actual
     if abs(delta) < 1e-9:
         return None
-    return registrar_movimiento(
+    mov = registrar_movimiento(
         db, tipo_stock, producto_id, delta, unidad, "correccion_conteo",
         referencia, nueva_cantidad, user_id, fecha=fecha,
         notas=f"Correccion de conteo manual (registro #{registro_id})",
     )
+    # Session is autoflush=False: without this, calling this function twice
+    # for the same registro_id in one transaction (no commit in between) --
+    # exactly what a caller with its own commit-per-call, like the tests
+    # here, does NOT hit, but a future bulk-sync caller might -- would have
+    # _revertir_correccion_conteo's next lookup miss this row entirely.
+    db.flush()
+    return mov

@@ -25,7 +25,7 @@ from app.schemas import (
     StockCongeladoUpdate,
 )
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
-from app.services.stock import ajustar_correccion_conteo, es_conteo_manual, historial_movimientos_acumulado
+from app.services.stock import es_conteo_manual, historial_movimientos_acumulado
 
 router = APIRouter(prefix="/api/congelados", tags=["congelados"])
 
@@ -325,14 +325,15 @@ def update_stock_congelado(
     db: Session = Depends(get_db),
 ):
     """Correct a past manual stock count -- a mistyped quantity or a wrong
-    date. The ledger is adjusted to match via a single dated
-    correccion_conteo movement (see ajustar_correccion_conteo).
+    date.
 
-    A brand new count should go through POST instead: creating one
-    deliberately leaves the ledger untouched, so a real discrepancy stays
-    visible. A lot created BY a production run (registro_produccion_id set)
-    can't be corrected here either -- edit the production record itself so
-    its own revert/reapply cycle handles the lot consistently.
+    This is a plain record correction: it does NOT touch MovimientoStock
+    (see update_inventario's docstring for why edits and the ledger are
+    kept independent). A lot created BY a production run
+    (registro_produccion_id set) still can't have its quantity/date
+    corrected here -- edit the production record itself instead, since its
+    stock effect is exactly what that record's own revert/reapply cycle is
+    responsible for.
     """
     entry = (
         db.query(StockCongelado)
@@ -344,14 +345,14 @@ def update_stock_congelado(
         raise HTTPException(status_code=404, detail="Entrada de stock no encontrada")
 
     updates = data.model_dump(exclude_unset=True)
-    afecta_ledger = bool({"cantidad", "fecha_entrada"} & updates.keys())
+    cambia_stock = bool({"cantidad", "fecha_entrada"} & updates.keys())
 
-    if afecta_ledger and entry.registro_produccion_id is not None:
+    if cambia_stock and entry.registro_produccion_id is not None:
         raise HTTPException(
             status_code=409,
             detail="Este lote proviene de una produccion -- corregi la produccion, no este lote.",
         )
-    if afecta_ledger and not es_conteo_manual("congelado", entry.notas):
+    if cambia_stock and not es_conteo_manual("congelado", entry.notas):
         raise HTTPException(
             status_code=409,
             detail="Esta entrada fue generada automaticamente -- corregi el origen, no esta entrada.",
@@ -359,12 +360,6 @@ def update_stock_congelado(
 
     for k, v in updates.items():
         setattr(entry, k, v)
-
-    if afecta_ledger:
-        ajustar_correccion_conteo(
-            db, "congelado", entry.producto_congelado_id, entry.id, entry.cantidad,
-            entry.producto.unidad, entry.fecha_entrada, user.id,
-        )
 
     db.commit()
     db.refresh(entry)

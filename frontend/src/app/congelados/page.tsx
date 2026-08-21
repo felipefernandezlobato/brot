@@ -971,8 +971,20 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
     return map;
   }, [conteosManuales]);
 
-  const [editando, setEditando] = useState<{ id: number; value: string } | null>(null);
+  // Editing a manual count triggers a real ledger adjustment (PUT /api/congelados/{id}),
+  // not just a text change -- entering/leaving edit mode needs a deliberate gesture on
+  // both ends (a pencil click to start, an explicit check/cancel to end) after an
+  // incident where clicking a cell then losing focus (a stray click, or scrolling the
+  // mouse wheel over the focused number input, which Chrome/Firefox treat as
+  // increment/decrement) silently corrected real stock counts.
+  const [editando, setEditando] = useState<{ id: number; value: string; original: number; unidad: string } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const iniciarEdicion = (registro: StockCongelado, unidad: string) => {
+    setEditando({ id: registro.id, value: String(registro.cantidad), original: registro.cantidad, unidad });
+  };
+
+  const cancelarEdicion = () => setEditando(null);
 
   const guardarEdicion = async () => {
     if (!editando) return;
@@ -987,7 +999,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
         method: "PUT",
         body: JSON.stringify({ cantidad: num }),
       });
-      toast("Conteo corregido");
+      toast(`Corregido: ${formatCantidad(editando.original)} → ${formatCantidad(num)} ${editando.unidad}`);
       setEditando(null);
       load();
     } catch (err) {
@@ -1189,17 +1201,8 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                         return (
                           <td
                             key={d}
-                            title={
-                              discrepa
-                                ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)}`
-                                : registro
-                                ? "Click para corregir el conteo"
-                                : undefined
-                            }
-                            onClick={() => {
-                              if (registro && !isEditing) setEditando({ id: registro.id, value: String(registro.cantidad) });
-                            }}
-                            className={`text-center px-2 py-1.5 tabular-nums ${registro ? "cursor-pointer" : ""} ${
+                            title={discrepa ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)}` : undefined}
+                            className={`group relative text-center px-2 py-1.5 tabular-nums ${
                               vacio
                                 ? "text-cream-dark"
                                 : negativo
@@ -1212,28 +1215,62 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                             }`}
                           >
                             {isEditing ? (
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                step="any"
-                                autoFocus
-                                disabled={savingEdit}
-                                value={editando!.value}
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={(e) => setEditando({ id: editando!.id, value: e.target.value })}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") guardarEdicion();
-                                  if (e.key === "Escape") setEditando(null);
+                              <div
+                                className="flex items-center justify-center gap-1"
+                                onBlur={(e) => {
+                                  if (!e.currentTarget.contains(e.relatedTarget as Node)) cancelarEdicion();
                                 }}
-                                onBlur={() => setEditando(null)}
-                                className="w-16 px-1 py-0.5 rounded border border-brot text-center text-xs focus:outline-none"
-                              />
-                            ) : vacio ? (
-                              "--"
-                            ) : calc !== null ? (
-                              <>{formatCantidad(calc)}{val !== undefined && <span className={valNegativo ? "text-red-600 font-bold" : "text-warm-gray font-normal"}> ({formatCantidad(val)})</span>}</>
+                              >
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  step="any"
+                                  autoFocus
+                                  disabled={savingEdit}
+                                  value={editando!.value}
+                                  onChange={(e) => setEditando({ ...editando!, value: e.target.value })}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") guardarEdicion();
+                                    if (e.key === "Escape") cancelarEdicion();
+                                    if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+                                  }}
+                                  onWheel={(e) => e.currentTarget.blur()}
+                                  className="w-14 px-1 py-0.5 rounded border border-brot text-center text-xs focus:outline-none"
+                                />
+                                <button
+                                  onClick={guardarEdicion}
+                                  disabled={savingEdit}
+                                  title="Guardar"
+                                  className="text-green-600 hover:text-green-700 font-bold leading-none px-0.5 min-w-[16px]"
+                                >
+                                  ✓
+                                </button>
+                                <button
+                                  onClick={cancelarEdicion}
+                                  disabled={savingEdit}
+                                  title="Cancelar"
+                                  className="text-red-500 hover:text-red-700 font-bold leading-none px-0.5 min-w-[16px]"
+                                >
+                                  ✕
+                                </button>
+                              </div>
                             ) : (
-                              <span className={valNegativo ? "text-red-600 font-bold" : "text-warm-gray font-normal"}>({formatCantidad(val!)})</span>
+                              <>
+                                {vacio
+                                  ? "--"
+                                  : calc !== null
+                                  ? <>{formatCantidad(calc)}{val !== undefined && <span className={valNegativo ? "text-red-600 font-bold" : "text-warm-gray font-normal"}> ({formatCantidad(val)})</span>}</>
+                                  : <span className={valNegativo ? "text-red-600 font-bold" : "text-warm-gray font-normal"}>({formatCantidad(val!)})</span>}
+                                {registro && (
+                                  <button
+                                    onClick={() => iniciarEdicion(registro, prod.unidad)}
+                                    title="Corregir este conteo"
+                                    className="hidden group-hover:inline-block ml-1 text-warm-gray hover:text-brot align-middle"
+                                  >
+                                    ✎
+                                  </button>
+                                )}
+                              </>
                             )}
                           </td>
                         );
