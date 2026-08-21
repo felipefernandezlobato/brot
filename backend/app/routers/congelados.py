@@ -12,6 +12,7 @@ from app.models import (
     MovimientoStock,
     ProductoCongelado,
     Receta,
+    RegistroProduccion,
     StockCongelado,
     User,
 )
@@ -230,6 +231,60 @@ def delete_producto_congelado(
     db.delete(prod)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/productos/{viejo_id}/fusionar-en/{nuevo_id}")
+def fusionar_producto(
+    viejo_id: int,
+    nuevo_id: int,
+    user: User = require_permission("congelados", "edit"),
+    db: Session = Depends(get_db),
+):
+    """Fold a superseded product's stock lots and movement history into its
+    replacement, when a product was restructured (renamed, or split across a
+    new baston/crudo/terminado chain) and the production calendar was
+    pointed at the wrong one for a while -- so real, already-completed
+    production doesn't just sit stranded on a product nobody looks at
+    anymore.
+
+    Only re-parents `producto_congelado_id`/`referencia_producto_id`
+    (StockCongelado, congelado MovimientoStock, RegistroProduccion) --
+    never touches materia_prima movements, since the ingredients for that
+    production were already correctly deducted once; redoing that would
+    double-consume them.
+    """
+    viejo = db.query(ProductoCongelado).filter(ProductoCongelado.id == viejo_id).first()
+    if not viejo:
+        raise HTTPException(status_code=404, detail="Producto viejo no encontrado")
+    nuevo = db.query(ProductoCongelado).filter(ProductoCongelado.id == nuevo_id).first()
+    if not nuevo:
+        raise HTTPException(status_code=404, detail="Producto nuevo no encontrado")
+    if viejo_id == nuevo_id:
+        raise HTTPException(status_code=422, detail="No se puede fusionar un producto consigo mismo")
+
+    lotes = db.query(StockCongelado).filter(StockCongelado.producto_congelado_id == viejo_id).all()
+    for lote in lotes:
+        lote.producto_congelado_id = nuevo_id
+
+    movimientos = db.query(MovimientoStock).filter(
+        MovimientoStock.tipo_stock == "congelado",
+        MovimientoStock.referencia_producto_id == viejo_id,
+    ).all()
+    for mov in movimientos:
+        mov.referencia_producto_id = nuevo_id
+
+    registros = db.query(RegistroProduccion).filter(
+        RegistroProduccion.producto_congelado_id == viejo_id
+    ).all()
+    for reg in registros:
+        reg.producto_congelado_id = nuevo_id
+
+    db.commit()
+    return {
+        "lotes_movidos": len(lotes),
+        "movimientos_movidos": len(movimientos),
+        "registros_produccion_movidos": len(registros),
+    }
 
 
 # ── Stock CRUD  (/api/congelados) ──────────────────────────────────────────────
