@@ -198,6 +198,7 @@ class _LineaRecepcion(BaseModel):
 
 class _RecepcionRequest(BaseModel):
     lineas: list[_LineaRecepcion]
+    fecha: date | None = None
 
 
 @router.post("/{pedido_id}/recibir", response_model=PedidoOut)
@@ -220,8 +221,9 @@ def recibir_pedido(
     for lr in data.lineas:
         recepcion_map[lr.linea_id] = lr
 
+    fecha = data.fecha or date.today()
     p.estado = "recibido"
-    p.fecha_recepcion = date.today()
+    p.fecha_recepcion = fecha
     for linea in p.lineas:
         rec = recepcion_map.get(linea.id)
         if rec:
@@ -239,12 +241,13 @@ def recibir_pedido(
             ingrediente_id=linea.ingrediente_id,
             cantidad=nuevo_saldo,
             unidad=linea.unidad,
-            fecha_registro=date.today(),
+            fecha_registro=fecha,
             notas=f"Pedido #{pedido_id} recibido (+{cantidad_recibida})",
         ))
         registrar_movimiento(
             db, "materia_prima", linea.ingrediente_id, +cantidad_recibida,
             linea.unidad, "recepcion", f"pedido:{pedido_id}", nuevo_saldo, user.id,
+            fecha=fecha,
         )
         if linea.precio_unitario:
             ing = db.query(Ingrediente).filter(Ingrediente.id == linea.ingrediente_id).first()
@@ -253,10 +256,10 @@ def recibir_pedido(
                     ingrediente_id=ing.id,
                     precio_anterior=ing.precio_compra,
                     precio_nuevo=linea.precio_unitario,
-                    fecha_cambio=date.today(),
+                    fecha_cambio=fecha,
                 ))
                 ing.precio_compra = linea.precio_unitario
-                ing.fecha_actualizacion = date.today()
+                ing.fecha_actualizacion = fecha
     db.commit()
     p = _load_pedido(db, pedido_id)
     return _pedido_out(p)
