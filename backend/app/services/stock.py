@@ -728,16 +728,25 @@ def ajustar_correccion_conteo(
     reconciling itself the moment someone recounts.
 
     Exception to "never mutate a MovimientoStock row": if the ONLY movement
-    on or before `fecha` is a lone `carga_inicial`, it gets edited in place
-    instead of leaving a correction next to it. A carga_inicial was never a
-    real event -- it's just our best guess at history when the item was set
-    up (see scripts/reconciliar_ledger_*.py) -- so fixing a typo in it isn't
-    erasing evidence of anything real, and the ledger reads as one clean
-    correct number instead of "+220 / -219.78" forever. The instant a real
-    movement (production/merma/entrega/recepcion) exists on or before this
-    date, this can't apply -- rewriting a real event would be exactly the
-    "hand-edit the ledger to make a discrepancy disappear" this file's other
-    reversal functions all exist to avoid.
+    on or before `fecha` is a lone `carga_inicial` DATED ON THE SAME DAY AS
+    `fecha`, it gets edited in place instead of leaving a correction next to
+    it. A carga_inicial was never a real event -- it's just our best guess
+    at history when the item was set up (see scripts/reconciliar_ledger_*.py)
+    -- so fixing a typo in it isn't erasing evidence of anything real, and
+    the ledger reads as one clean correct number instead of "+220 / -219.78"
+    forever. The instant a real movement (production/merma/entrega/recepcion)
+    exists on or before this date, this can't apply -- rewriting a real
+    event would be exactly the "hand-edit the ledger to make a discrepancy
+    disappear" this file's other reversal functions all exist to avoid.
+
+    The same-day check matters even when carga_inicial IS the only prior
+    movement: editing a LATER count (say, correcting the 20th) with nothing
+    real between the 13th's carga_inicial and the 20th would otherwise match
+    "only one prior movement" and silently overwrite the 13th's baseline
+    with the 20th's corrected value -- fixing one date by corrupting a
+    different one. Without a same-day match this falls through to the
+    append-only path below, which is always safe: it only ever shifts the
+    balance from `fecha` forward, never rewrites an earlier date.
     """
     referencia = f"correccion_conteo:{tipo_stock}:{registro_id}"
     _revertir_correccion_conteo(db, referencia, user_id)
@@ -759,7 +768,7 @@ def ajustar_correccion_conteo(
         )
         .all()
     )
-    if len(previos) == 1 and previos[0].tipo_movimiento == "carga_inicial":
+    if len(previos) == 1 and previos[0].tipo_movimiento == "carga_inicial" and previos[0].fecha == fecha:
         base = previos[0]
         base.cantidad = nueva_cantidad
         base.unidad = unidad

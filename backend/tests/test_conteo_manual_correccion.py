@@ -93,6 +93,39 @@ def test_editar_conteo_corrige_carga_inicial_en_el_lugar(client, db):
     assert _ledger_sum(db, "materia_prima", ing_id) == 3.0
 
 
+def test_editar_conteo_de_fecha_posterior_no_corrompe_el_carga_inicial(client, db):
+    """Bug real (2026-08-21): con un carga_inicial del 13/08 como UNICO
+    movimiento previo, corregir un conteo de una fecha POSTERIOR (20/08, sin
+    nada real en el medio) coincidia con "un solo movimiento previo" y
+    sobreescribia el carga_inicial del 13/08 con el valor pensado para el
+    20/08 -- arreglaba una fecha corrompiendo otra. Debe usar el camino de
+    correccion aparte, fechada al 20/08, dejando el 13/08 intacto."""
+    token = _admin_token(client, db)
+    ing_id = _create_ingrediente(db, unidad_uso="kg")
+
+    carga_id = _carga_inicial(db, "materia_prima", ing_id, 4.0, "kg", date(2026, 8, 13))
+    reg = client.post(
+        "/api/inventario",
+        json=[{"ingrediente_id": ing_id, "cantidad": 4.0, "unidad": "kg", "fecha_registro": "2026-08-20"}],
+        headers=_auth(token),
+    ).json()[0]
+
+    res = client.put(f"/api/inventario/{reg['id']}", json={"cantidad": 3.0}, headers=_auth(token))
+    assert res.status_code == 200, res.text
+
+    carga = db.query(MovimientoStock).filter(MovimientoStock.id == carga_id).first()
+    assert carga.cantidad == 4.0  # 13/08 untouched
+    assert str(carga.fecha) == "2026-08-13"
+
+    correccion = db.query(MovimientoStock).filter(
+        MovimientoStock.tipo_movimiento == "correccion_conteo",
+        MovimientoStock.referencia_producto_id == ing_id,
+    ).first()
+    assert correccion.cantidad == -1.0
+    assert str(correccion.fecha) == "2026-08-20"
+    assert _ledger_sum(db, "materia_prima", ing_id) == 3.0
+
+
 def test_editar_conteo_convierte_unidad(client, db):
     """Replica el caso real (Canela): carga_inicial quedo en 4kg por una
     confusion de unidad: el conteo correcto era 220g (=0.22kg). Sigue siendo

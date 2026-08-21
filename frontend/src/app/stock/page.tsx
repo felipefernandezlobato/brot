@@ -1098,7 +1098,7 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                                   if (e.key === "Enter") guardarEdicion();
                                   if (e.key === "Escape") setEditando(null);
                                 }}
-                                onBlur={guardarEdicion}
+                                onBlur={() => setEditando(null)}
                                 className="w-16 px-1 py-0.5 rounded border border-brot text-center text-xs focus:outline-none"
                               />
                             ) : vacio ? (
