@@ -230,7 +230,7 @@ def create_merma(
         dump["coste_unitario"] = cpu
         dump["coste_total"] = round(cpu * data.cantidad, 4)
 
-    dump.setdefault("fecha", date.today())
+    dump["fecha"] = dump.get("fecha") or date.today()
     dump["registered_by"] = user.id
 
     merma = MermaRegistro(**dump)
@@ -291,6 +291,9 @@ def update_merma(
         raise HTTPException(status_code=404, detail="Merma no encontrada")
 
     updates = data.model_dump(exclude_unset=True)
+
+    if "fecha" in updates and updates["fecha"] is None:
+        raise HTTPException(status_code=422, detail="La fecha no puede quedar vacia")
 
     if "motivo" in updates and updates["motivo"] not in MOTIVOS_VALIDOS:
         raise HTTPException(

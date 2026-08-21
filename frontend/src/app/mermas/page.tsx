@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import { formatARS, formatDateTime } from "@/lib/format";
+import { formatARS, formatDate } from "@/lib/format";
 import DateRangeShortcuts from "@/components/DateRangeShortcuts";
 
 type Motivo = "caducado" | "dañado" | "produccion" | "otro";
@@ -242,9 +242,15 @@ export default function MermasPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-warm-gray text-xs">
-                        {formatDateTime(m.registered_at)}
+                        {formatDate(m.fecha)}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => router.push(`/mermas/${m.id}/editar`)}
+                          className="text-warm-gray hover:text-brot transition-colors text-xs mr-3"
+                        >
+                          Editar
+                        </button>
                         <button
                           onClick={() => handleDelete(m.id)}
                           disabled={deleting === m.id}
@@ -287,7 +293,7 @@ export default function MermasPage() {
                         </p>
                       )}
                       <p className="text-xs text-warm-gray mt-0.5">
-                        {formatDateTime(m.registered_at)}
+                        {formatDate(m.fecha)}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
@@ -298,13 +304,21 @@ export default function MermasPage() {
                       ) : (
                         <p className="text-sm text-warm-gray">—</p>
                       )}
-                      <button
-                        onClick={() => handleDelete(m.id)}
-                        disabled={deleting === m.id}
-                        className="text-xs text-warm-gray hover:text-red-600 mt-1 transition-colors disabled:opacity-50"
-                      >
-                        Eliminar
-                      </button>
+                      <div className="flex gap-3 justify-end mt-1">
+                        <button
+                          onClick={() => router.push(`/mermas/${m.id}/editar`)}
+                          className="text-xs text-warm-gray hover:text-brot transition-colors"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleDelete(m.id)}
+                          disabled={deleting === m.id}
+                          className="text-xs text-warm-gray hover:text-red-600 transition-colors disabled:opacity-50"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
