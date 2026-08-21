@@ -5,7 +5,7 @@ and the Stock Congelado / Stock Materia Prima pivot tables' calculated column.
 from datetime import date
 
 from app.models import Categoria, Ingrediente, InventarioRegistro, MovimientoStock, ProductoCongelado, StockCongelado
-from app.services.stock import historial_movimientos_acumulado
+from app.services.stock import deducir_congelado_fifo, historial_movimientos_acumulado, revertir_consumos
 
 
 def _mov(db, producto_id, cantidad, fecha, tipo_stock="congelado"):
@@ -188,6 +188,46 @@ def test_congelado_suma_lotes_del_mismo_dia_como_una_sola_ancla(db):
         {"fecha": "2026-08-01", "cantidad": 50.0},
         {"fecha": "2026-08-21", "cantidad": 31.0},  # (10+20) + 1.0
     ]
+
+
+def test_congelado_ancla_usa_cantidad_original_no_la_restante_tras_consumo(db):
+    """StockCongelado.cantidad se muta in-place por cada consumo FIFO
+    (deducir_congelado_fifo resta directo del lote) -- si el ancla del conteo
+    manual leyera ese valor actual, un conteo de hace semanas se veria cada
+    vez mas chico a medida que se sigue vendiendo, aunque lo que se conto ese
+    dia haya sido siempre el mismo numero. El ancla debe reconstruir la
+    cantidad ORIGINAL contada sumando lo que el lote ya entrego via consumos
+    todavia vigentes (no revertidos)."""
+    prod_id = _producto_congelado(db)
+    db.add(StockCongelado(producto_congelado_id=prod_id, cantidad=50.0, fecha_entrada=date(2026, 8, 1)))
+    db.commit()
+
+    deducir_congelado_fifo(db, prod_id, 20.0, "entrega_b2b:1:Cliente", fecha=date(2026, 8, 5))
+    db.commit()
+
+    result = historial_movimientos_acumulado(db, "congelado", ids=[prod_id])
+
+    assert result[prod_id] == [
+        {"fecha": "2026-08-05", "cantidad": 30.0},
+    ]
+
+
+def test_congelado_ancla_no_cuenta_dos_veces_un_consumo_revertido(db):
+    """Si el consumo que se le saco al lote de conteo manual fue revertido,
+    _restaurar_lotes ya le devolvio la cantidad -- sumar de nuevo ese
+    ConsumoFifoDetalle inflaria el ancla por encima de lo realmente contado."""
+    prod_id = _producto_congelado(db)
+    db.add(StockCongelado(producto_congelado_id=prod_id, cantidad=50.0, fecha_entrada=date(2026, 8, 1)))
+    db.commit()
+
+    deducir_congelado_fifo(db, prod_id, 20.0, "entrega_b2b:1:Cliente", fecha=date(2026, 8, 5))
+    db.commit()
+    revertir_consumos(db, "entrega_b2b:1:Cliente", fecha=date(2026, 8, 5))
+    db.commit()
+
+    result = historial_movimientos_acumulado(db, "congelado", ids=[prod_id])
+
+    assert result[prod_id] == [{"fecha": "2026-08-05", "cantidad": 50.0}]
 
 
 def test_item_nunca_recontado_sigue_acumulando_normal(db):
