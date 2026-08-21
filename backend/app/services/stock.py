@@ -99,6 +99,44 @@ def get_saldo_congelado(db: Session, producto_congelado_id: int) -> float:
     return get_saldos_congelado(db, [producto_congelado_id]).get(producto_congelado_id, 0.0)
 
 
+def _conteos_manuales_por_fecha(db: Session, tipo_stock: str, ids: list[int]) -> dict[int, dict[str, float]]:
+    """The physical count total per (producto, fecha), genuine manual counts
+    only (es_conteo_manual) -- what historial_movimientos_acumulado re-anchors
+    calculado to from the day AFTER each one.
+
+    materia_prima: InventarioRegistro is a single running snapshot, so a
+    same-day recount keeps only the LAST one entered (rows come back sorted
+    ascending by id, so a later dict assignment simply overwrites the
+    earlier one for the same date).
+    congelado: StockCongelado rows are physical lots, several of which can
+    legitimately be counted the same day, so same-day entries are summed --
+    the same convention the historial pivot table's own aggregation uses.
+    """
+    if not ids:
+        return {}
+    out: dict[int, dict[str, float]] = {}
+    if tipo_stock == "materia_prima":
+        rows = (
+            db.query(InventarioRegistro)
+            .filter(InventarioRegistro.ingrediente_id.in_(ids))
+            .order_by(InventarioRegistro.fecha_registro, InventarioRegistro.id)
+            .all()
+        )
+        for r in rows:
+            if not es_conteo_manual("materia_prima", r.notas):
+                continue
+            out.setdefault(r.ingrediente_id, {})[str(r.fecha_registro)] = r.cantidad
+    else:
+        rows = db.query(StockCongelado).filter(StockCongelado.producto_congelado_id.in_(ids)).all()
+        for r in rows:
+            if not es_conteo_manual("congelado", r.notas):
+                continue
+            dia = out.setdefault(r.producto_congelado_id, {})
+            key = str(r.fecha_entrada)
+            dia[key] = dia.get(key, 0.0) + r.cantidad
+    return out
+
+
 def historial_movimientos_acumulado(
     db: Session,
     tipo_stock: str,
@@ -124,6 +162,18 @@ def historial_movimientos_acumulado(
     reproduces the old per-item behavior of this function's original callers
     -- including stock_actual, which is always exactly the last point's
     cantidad (== sum of all that item's movement cantidades).
+
+    Re-anchors to the physical count from the day AFTER each genuine manual
+    count (2026-08-21): a running balance that never resets just accumulates
+    untracked drift forever, so a discrepancy from three weeks ago still
+    shows up today even though this week's physical count already accounted
+    for it. On the count's own date the running balance is still whatever it
+    was BEFORE that count (so the gap against the physical count is visible
+    right there, same as always); starting the next date, it resets to that
+    count's value and accumulates only real movements from then on, until
+    the next manual count repeats the cycle. Items never recounted keep
+    accumulating from whatever their last real anchor was -- there's nothing
+    day-of-week-specific here, it's purely "did THIS item get counted."
     """
     q = db.query(MovimientoStock).filter(MovimientoStock.tipo_stock == tipo_stock)
     if ids is not None:
@@ -140,11 +190,18 @@ def historial_movimientos_acumulado(
         key = str(m.fecha)
         day_map[key] = day_map.get(key, 0.0) + m.cantidad
 
+    anclas = _conteos_manuales_por_fecha(db, tipo_stock, list(by_id_date.keys()))
+
     result: dict[int, list[dict]] = {}
     for rid, day_map in by_id_date.items():
+        anclas_rid = sorted(anclas.get(rid, {}).items())
+        ancla_idx = 0
         running = 0.0
         points = []
         for fecha_str in sorted(day_map.keys()):
+            while ancla_idx < len(anclas_rid) and anclas_rid[ancla_idx][0] < fecha_str:
+                running = anclas_rid[ancla_idx][1]
+                ancla_idx += 1
             running += day_map[fecha_str]
             points.append({"fecha": fecha_str, "cantidad": round(running, 2)})
         result[rid] = points

@@ -4,7 +4,7 @@ and the Stock Congelado / Stock Materia Prima pivot tables' calculated column.
 """
 from datetime import date
 
-from app.models import MovimientoStock
+from app.models import Categoria, Ingrediente, InventarioRegistro, MovimientoStock, ProductoCongelado, StockCongelado
 from app.services.stock import historial_movimientos_acumulado
 
 
@@ -13,6 +13,26 @@ def _mov(db, producto_id, cantidad, fecha, tipo_stock="congelado"):
         tipo_stock=tipo_stock, referencia_producto_id=producto_id, cantidad=cantidad,
         unidad="u", tipo_movimiento="produccion_salida", fecha=fecha,
     ))
+
+
+def _ingrediente(db) -> int:
+    cat = Categoria(nombre="Cat-reanclaje", tipo="ingrediente")
+    db.add(cat)
+    db.flush()
+    ing = Ingrediente(
+        nombre="Ingrediente reanclaje", categoria_id=cat.id, unidad_compra="kg",
+        cantidad_compra=1, precio_compra=100, unidad_uso="kg",
+    )
+    db.add(ing)
+    db.flush()
+    return ing.id
+
+
+def _producto_congelado(db) -> int:
+    prod = ProductoCongelado(nombre="Producto reanclaje", categoria="bolleria", unidad="u")
+    db.add(prod)
+    db.flush()
+    return prod.id
 
 
 def test_running_balance_single_producto(db):
@@ -89,3 +109,98 @@ def test_id_sin_movimientos_no_aparece(db):
     result = historial_movimientos_acumulado(db, "congelado", ids=[999])
 
     assert result == {}
+
+
+# ── Re-anclaje al conteo fisico (2026-08-21) ────────────────────────────────
+
+def test_materia_prima_se_reancla_al_conteo_del_dia_siguiente(db):
+    """El dia del conteo (20/08) sigue mostrando el acumulado VIEJO -- se ve
+    el desvio contra el conteo real. Recien el 21/08 arranca del conteo
+    fisico del 20/08 en vez de seguir acumulando desde el 1 de agosto."""
+    ing_id = _ingrediente(db)
+    _mov(db, ing_id, 100.0, date(2026, 8, 1), tipo_stock="materia_prima")
+    _mov(db, ing_id, -0.5, date(2026, 8, 20), tipo_stock="materia_prima")
+    db.add(InventarioRegistro(
+        ingrediente_id=ing_id, cantidad=3.0, unidad="kg", fecha_registro=date(2026, 8, 20),
+    ))
+    _mov(db, ing_id, -1.0, date(2026, 8, 21), tipo_stock="materia_prima")
+    db.commit()
+
+    result = historial_movimientos_acumulado(db, "materia_prima", ids=[ing_id])
+
+    assert result[ing_id] == [
+        {"fecha": "2026-08-01", "cantidad": 100.0},
+        {"fecha": "2026-08-20", "cantidad": 99.5},   # old trajectory, desvio visible vs conteo=3.0
+        {"fecha": "2026-08-21", "cantidad": 2.0},    # 3.0 (conteo del 20/08) - 1.0
+    ]
+
+
+def test_congelado_se_reancla_al_conteo_del_dia_siguiente(db):
+    prod_id = _producto_congelado(db)
+    _mov(db, prod_id, 50.0, date(2026, 8, 1))
+    _mov(db, prod_id, -2.0, date(2026, 8, 20))
+    db.add(StockCongelado(producto_congelado_id=prod_id, cantidad=30.0, fecha_entrada=date(2026, 8, 20)))
+    _mov(db, prod_id, 5.0, date(2026, 8, 21))
+    db.commit()
+
+    result = historial_movimientos_acumulado(db, "congelado", ids=[prod_id])
+
+    assert result[prod_id] == [
+        {"fecha": "2026-08-01", "cantidad": 50.0},
+        {"fecha": "2026-08-20", "cantidad": 48.0},   # old trajectory
+        {"fecha": "2026-08-21", "cantidad": 35.0},   # 30.0 (conteo del 20/08) + 5.0
+    ]
+
+
+def test_conteo_automatico_no_reancla(db):
+    """Una fila auto-generada (Consumo automatico:, Reversion de, Pedido #)
+    no es un conteo fisico -- no debe usarse como ancla."""
+    ing_id = _ingrediente(db)
+    _mov(db, ing_id, 100.0, date(2026, 8, 1), tipo_stock="materia_prima")
+    db.add(InventarioRegistro(
+        ingrediente_id=ing_id, cantidad=3.0, unidad="kg", fecha_registro=date(2026, 8, 20),
+        notas="Consumo automatico: registro_produccion:1",
+    ))
+    _mov(db, ing_id, -1.0, date(2026, 8, 21), tipo_stock="materia_prima")
+    db.commit()
+
+    result = historial_movimientos_acumulado(db, "materia_prima", ids=[ing_id])
+
+    assert result[ing_id] == [
+        {"fecha": "2026-08-01", "cantidad": 100.0},
+        {"fecha": "2026-08-21", "cantidad": 99.0},  # kept accumulating, ignored the auto row
+    ]
+
+
+def test_congelado_suma_lotes_del_mismo_dia_como_una_sola_ancla(db):
+    """Dos lotes contados el mismo dia se suman para formar el ancla, igual
+    que la agregacion que ya hace la tabla pivot del frontend."""
+    prod_id = _producto_congelado(db)
+    _mov(db, prod_id, 50.0, date(2026, 8, 1))
+    db.add(StockCongelado(producto_congelado_id=prod_id, cantidad=10.0, fecha_entrada=date(2026, 8, 20)))
+    db.add(StockCongelado(producto_congelado_id=prod_id, cantidad=20.0, fecha_entrada=date(2026, 8, 20)))
+    _mov(db, prod_id, 1.0, date(2026, 8, 21))
+    db.commit()
+
+    result = historial_movimientos_acumulado(db, "congelado", ids=[prod_id])
+
+    assert result[prod_id] == [
+        {"fecha": "2026-08-01", "cantidad": 50.0},
+        {"fecha": "2026-08-21", "cantidad": 31.0},  # (10+20) + 1.0
+    ]
+
+
+def test_item_nunca_recontado_sigue_acumulando_normal(db):
+    """Sin ningun conteo manual, el comportamiento es exactamente el de
+    siempre -- acumulado puro desde el primer movimiento."""
+    ing_id = _ingrediente(db)
+    _mov(db, ing_id, 100.0, date(2026, 8, 1), tipo_stock="materia_prima")
+    _mov(db, ing_id, -5.0, date(2026, 8, 21), tipo_stock="materia_prima")
+    db.commit()
+
+    result = historial_movimientos_acumulado(db, "materia_prima", ids=[ing_id])
+
+    assert result[ing_id] == [
+        {"fecha": "2026-08-01", "cantidad": 100.0},
+        {"fecha": "2026-08-21", "cantidad": 95.0},
+    ]
