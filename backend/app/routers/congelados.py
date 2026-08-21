@@ -26,7 +26,7 @@ from app.schemas import (
     StockCongeladoUpdate,
 )
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
-from app.services.stock import es_conteo_manual, historial_movimientos_acumulado
+from app.services.stock import ajustar_correccion_conteo, es_conteo_manual, historial_movimientos_acumulado
 
 router = APIRouter(prefix="/api/congelados", tags=["congelados"])
 
@@ -419,6 +419,44 @@ def update_stock_congelado(
     db.commit()
     db.refresh(entry)
     return _stock_out(entry)
+
+
+@router.post("/{entry_id}/sincronizar-ledger")
+def sincronizar_ledger(
+    entry_id: int,
+    user: User = require_permission("congelados", "edit"),
+    db: Session = Depends(get_db),
+):
+    """One-off correction: re-anchor the ledger's carga_inicial baseline to
+    this manual count's current (corrected) value.
+
+    Only takes effect when ajustar_correccion_conteo finds the sole ledger
+    movement on or before this entry's date is a lone carga_inicial dated
+    the same day -- see that function's docstring, and
+    inventario.py's identical materia_prima version, for the full guard.
+    """
+    entry = db.query(StockCongelado).filter(StockCongelado.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entrada de stock no encontrada")
+    if not es_conteo_manual("congelado", entry.notas):
+        raise HTTPException(
+            status_code=409,
+            detail="Esta entrada no es un conteo manual -- no aplica.",
+        )
+
+    prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == entry.producto_congelado_id).first()
+    mov = ajustar_correccion_conteo(
+        db,
+        tipo_stock="congelado",
+        producto_id=entry.producto_congelado_id,
+        registro_id=entry.id,
+        nueva_cantidad=entry.cantidad,
+        unidad=prod.unidad if prod else "u",
+        fecha=entry.fecha_entrada,
+        user_id=user.id,
+    )
+    db.commit()
+    return {"ajustado": mov is not None, "movimiento_id": mov.id if mov else None}
 
 
 @router.delete("/{entry_id}")
