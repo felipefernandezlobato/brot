@@ -158,6 +158,30 @@ def test_update_stock_congelado(client, db):
     assert body["cantidad"] == 25
     assert body["notas"] == "Recontado"
 
+    updated = db.query(StockCongelado).filter(StockCongelado.id == entry["id"]).one()
+    assert updated.cantidad_original == 25
+
+
+def test_update_stock_congelado_sin_tocar_cantidad_no_toca_cantidad_original(client, db):
+    """Editar solo notas/fecha no debe pisar cantidad_original con nada."""
+    token = _admin_token(client, db)
+    prod = _create_producto(client, token)
+    entry = client.post(
+        "/api/congelados",
+        json={"producto_congelado_id": prod["id"], "cantidad": 10},
+        headers=_auth(token),
+    ).json()
+
+    res = client.put(
+        f"/api/congelados/{entry['id']}",
+        json={"notas": "Solo una nota"},
+        headers=_auth(token),
+    )
+    assert res.status_code == 200
+
+    updated = db.query(StockCongelado).filter(StockCongelado.id == entry["id"]).one()
+    assert updated.cantidad_original == 10
+
 
 def test_delete_stock_congelado(client, db):
     token = _admin_token(client, db)
