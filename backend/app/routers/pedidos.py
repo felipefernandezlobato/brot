@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import HistorialPrecio, Ingrediente, InventarioRegistro, LineaPedido, MovimientoStock, Pedido, Proveedor, User
+from app.models import HistorialPrecio, Ingrediente, InventarioRegistro, LineaPedido, Pedido, Proveedor, User
 from app.services.stock import get_saldo_materia_prima, registrar_movimiento
 from app.permissions import require_permission
 from app.schemas import (
@@ -147,7 +147,10 @@ def delete_pedido(
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
 
     if p.estado == "recibido":
-        ref = f"pedido:{pedido_id}"
+        # Never delete the original "recepcion" ledger movement -- only ever
+        # append a compensating one, same as every other reversal in this
+        # app. Deleting it here on top of the negative correccion below used
+        # to double-reverse the ledger sum by an extra -cantidad.
         for linea in p.lineas:
             cantidad = linea.cantidad_recibida if linea.cantidad_recibida is not None else linea.cantidad_pedida
             saldo_actual = get_saldo_materia_prima(db, linea.ingrediente_id)
@@ -163,7 +166,6 @@ def delete_pedido(
                 db, "materia_prima", linea.ingrediente_id, -cantidad,
                 linea.unidad, "correccion", f"pedido_borrado:{pedido_id}", nuevo_saldo, user.id,
             )
-        db.query(MovimientoStock).filter(MovimientoStock.referencia_origen == ref).delete()
 
     db.delete(p)
     db.commit()
