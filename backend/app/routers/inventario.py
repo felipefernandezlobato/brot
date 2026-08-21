@@ -11,7 +11,7 @@ from app.models import Ingrediente, InventarioRegistro, LineaPedido, Pedido, Use
 from app.permissions import require_permission
 from app.schemas import InventarioRegistroCreate, InventarioRegistroOut, InventarioRegistroUpdate
 from app.services.conversiones import convertir
-from app.services.stock import es_conteo_manual, historial_movimientos_acumulado
+from app.services.stock import ajustar_correccion_conteo, es_conteo_manual, historial_movimientos_acumulado
 
 router = APIRouter(prefix="/api/inventario", tags=["inventario"])
 
@@ -349,6 +349,44 @@ def update_inventario(
     db.commit()
     db.refresh(reg)
     return _to_out(reg)
+
+
+@router.post("/{registro_id}/sincronizar-ledger")
+def sincronizar_ledger(
+    registro_id: int,
+    user: User = require_permission("stock", "edit"),
+    db: Session = Depends(get_db),
+):
+    """One-off correction: re-anchor the ledger's carga_inicial baseline to
+    this manual count's current (corrected) value.
+
+    Only takes effect when ajustar_correccion_conteo finds the sole ledger
+    movement on or before this record's date is a lone carga_inicial dated
+    the same day -- exactly the "the original baseline guess was wrong"
+    case, not a real production/merma/entrega event. See that function's
+    docstring for the full guard.
+    """
+    reg = db.query(InventarioRegistro).filter(InventarioRegistro.id == registro_id).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    if not es_conteo_manual("materia_prima", reg.notas):
+        raise HTTPException(
+            status_code=409,
+            detail="Este registro no es un conteo manual -- no aplica.",
+        )
+
+    mov = ajustar_correccion_conteo(
+        db,
+        tipo_stock="materia_prima",
+        producto_id=reg.ingrediente_id,
+        registro_id=reg.id,
+        nueva_cantidad=reg.cantidad,
+        unidad=reg.unidad,
+        fecha=reg.fecha_registro,
+        user_id=user.id,
+    )
+    db.commit()
+    return {"ajustado": mov is not None, "movimiento_id": mov.id if mov else None}
 
 
 @router.delete("/{registro_id}")
