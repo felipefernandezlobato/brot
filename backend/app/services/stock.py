@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -111,6 +111,12 @@ def _conteos_manuales_por_fecha(db: Session, tipo_stock: str, ids: list[int]) ->
     congelado: StockCongelado rows are physical lots, several of which can
     legitimately be counted the same day, so same-day entries are summed --
     the same convention the historial pivot table's own aggregation uses.
+    Unlike InventarioRegistro, `cantidad` on a lot is mutated in place by
+    every later FIFO draw (deducir_congelado_fifo), so it stops representing
+    what was actually counted that day the moment any of it gets consumed --
+    the anchor must add back whatever's still validly drawn from the lot
+    (ConsumoFifoDetalle, excluding draws since reversed -- `_restaurar_lotes`
+    already put those back onto `cantidad`) to reconstruct the original count.
     """
     if not ids:
         return {}
@@ -128,12 +134,27 @@ def _conteos_manuales_por_fecha(db: Session, tipo_stock: str, ids: list[int]) ->
             out.setdefault(r.ingrediente_id, {})[str(r.fecha_registro)] = r.cantidad
     else:
         rows = db.query(StockCongelado).filter(StockCongelado.producto_congelado_id.in_(ids)).all()
-        for r in rows:
-            if not es_conteo_manual("congelado", r.notas):
-                continue
+        manuales = [r for r in rows if es_conteo_manual("congelado", r.notas)]
+        drawn_por_lote: dict[int, float] = {}
+        if manuales:
+            drawn_por_lote = dict(
+                db.query(ConsumoFifoDetalle.stock_congelado_id, func.sum(ConsumoFifoDetalle.cantidad))
+                .join(MovimientoStock, MovimientoStock.id == ConsumoFifoDetalle.movimiento_stock_id)
+                .filter(
+                    ConsumoFifoDetalle.stock_congelado_id.in_([r.id for r in manuales]),
+                    or_(
+                        MovimientoStock.referencia_origen.is_(None),
+                        ~MovimientoStock.referencia_origen.like("%:rev"),
+                    ),
+                )
+                .group_by(ConsumoFifoDetalle.stock_congelado_id)
+                .all()
+            )
+        for r in manuales:
+            original = r.cantidad + drawn_por_lote.get(r.id, 0.0)
             dia = out.setdefault(r.producto_congelado_id, {})
             key = str(r.fecha_entrada)
-            dia[key] = dia.get(key, 0.0) + r.cantidad
+            dia[key] = dia.get(key, 0.0) + original
     return out
 
 
