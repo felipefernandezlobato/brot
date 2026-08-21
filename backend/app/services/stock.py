@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import func
@@ -204,6 +204,7 @@ def historial_movimientos_acumulado(
         day_map[key] = day_map.get(key, 0.0) + m.cantidad
 
     anclas = _conteos_manuales_por_fecha(db, tipo_stock, list(by_id_date.keys()))
+    referencia = str(fecha_hasta or date.today())
 
     result: dict[int, list[dict]] = {}
     for rid, day_map in by_id_date.items():
@@ -217,6 +218,24 @@ def historial_movimientos_acumulado(
                 ancla_idx += 1
             running += day_map[fecha_str]
             points.append({"fecha": fecha_str, "cantidad": round(running, 2)})
+
+        # A count dated after this item's last real movement never triggers
+        # the reset above -- that only fires while iterating a LATER movement
+        # date, and there isn't one, so the loop above never gets that far.
+        # Without this, "today" would show the stale pre-count balance
+        # indefinitely, which defeats the entire point of counting: nothing
+        # moved since, so today should just read what was counted. Emits one
+        # trailing point per still-unconsumed anchor, the day after each --
+        # the frontend's own lookup (valorCalculadoEnFecha in
+        # congelados/page.tsx and stock/page.tsx: latest point with fecha <=
+        # the displayed column) carries it forward to every later column.
+        while ancla_idx < len(anclas_rid) and anclas_rid[ancla_idx][0] < referencia:
+            fecha_ancla, running = anclas_rid[ancla_idx]
+            ancla_idx += 1
+            siguiente = str(date.fromisoformat(fecha_ancla) + timedelta(days=1))
+            if siguiente <= referencia:
+                points.append({"fecha": siguiente, "cantidad": round(running, 2)})
+
         result[rid] = points
     return result
 

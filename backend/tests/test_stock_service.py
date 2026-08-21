@@ -190,6 +190,88 @@ def test_congelado_suma_lotes_del_mismo_dia_como_una_sola_ancla(db):
     ]
 
 
+def test_materia_prima_conteo_sin_movimiento_posterior_igual_se_refleja(db):
+    """Si nada se produjo/vendio/desperdicio desde el conteo, el calculado de
+    HOY (fecha_hasta) debe ser el conteo mismo -- antes de este fix, el reset
+    solo se aplicaba al iterar un movimiento POSTERIOR al conteo, y si no
+    habia ninguno el calculado se quedaba pegado en la trayectoria vieja para
+    siempre, ignorando el conteo por completo."""
+    ing_id = _ingrediente(db)
+    _mov(db, ing_id, 100.0, date(2026, 8, 1), tipo_stock="materia_prima")
+    db.add(InventarioRegistro(
+        ingrediente_id=ing_id, cantidad=3.0, unidad="kg", fecha_registro=date(2026, 8, 20),
+    ))
+    db.commit()
+
+    result = historial_movimientos_acumulado(
+        db, "materia_prima", ids=[ing_id], fecha_hasta=date(2026, 8, 21),
+    )
+
+    assert result[ing_id] == [
+        {"fecha": "2026-08-01", "cantidad": 100.0},  # old trajectory, up to the count's own day
+        {"fecha": "2026-08-21", "cantidad": 3.0},    # nothing moved since -- today = the count
+    ]
+
+
+def test_congelado_conteo_sin_movimiento_posterior_igual_se_refleja(db):
+    prod_id = _producto_congelado(db)
+    _mov(db, prod_id, 50.0, date(2026, 8, 1))
+    db.add(StockCongelado(producto_congelado_id=prod_id, cantidad=30.0, fecha_entrada=date(2026, 8, 20)))
+    db.commit()
+
+    result = historial_movimientos_acumulado(
+        db, "congelado", ids=[prod_id], fecha_hasta=date(2026, 8, 21),
+    )
+
+    assert result[prod_id] == [
+        {"fecha": "2026-08-01", "cantidad": 50.0},
+        {"fecha": "2026-08-21", "cantidad": 30.0},
+    ]
+
+
+def test_conteo_en_el_dia_de_referencia_todavia_no_reancla(db):
+    """Simetria con el conteo del dia mismo: si HOY (fecha_hasta) coincide con
+    la fecha del conteo, todavia se ve la trayectoria vieja ese mismo dia --
+    el reset arranca al dia SIGUIENTE, no antes."""
+    ing_id = _ingrediente(db)
+    _mov(db, ing_id, 100.0, date(2026, 8, 1), tipo_stock="materia_prima")
+    db.add(InventarioRegistro(
+        ingrediente_id=ing_id, cantidad=3.0, unidad="kg", fecha_registro=date(2026, 8, 21),
+    ))
+    db.commit()
+
+    result = historial_movimientos_acumulado(
+        db, "materia_prima", ids=[ing_id], fecha_hasta=date(2026, 8, 21),
+    )
+
+    assert result[ing_id] == [{"fecha": "2026-08-01", "cantidad": 100.0}]
+
+
+def test_dos_conteos_seguidos_sin_movimiento_entre_ellos_reanclan_cada_uno(db):
+    """Dos conteos consecutivos, sin ningun movimiento real entre medio ni
+    despues -- cada uno debe reflejarse al dia siguiente de si mismo, no solo
+    el ultimo."""
+    ing_id = _ingrediente(db)
+    _mov(db, ing_id, 100.0, date(2026, 8, 1), tipo_stock="materia_prima")
+    db.add(InventarioRegistro(
+        ingrediente_id=ing_id, cantidad=10.0, unidad="kg", fecha_registro=date(2026, 8, 15),
+    ))
+    db.add(InventarioRegistro(
+        ingrediente_id=ing_id, cantidad=4.0, unidad="kg", fecha_registro=date(2026, 8, 18),
+    ))
+    db.commit()
+
+    result = historial_movimientos_acumulado(
+        db, "materia_prima", ids=[ing_id], fecha_hasta=date(2026, 8, 21),
+    )
+
+    assert result[ing_id] == [
+        {"fecha": "2026-08-01", "cantidad": 100.0},
+        {"fecha": "2026-08-16", "cantidad": 10.0},  # dia siguiente al conteo del 15
+        {"fecha": "2026-08-19", "cantidad": 4.0},   # dia siguiente al conteo del 18
+    ]
+
+
 def test_congelado_ancla_usa_cantidad_original_no_la_mutada_por_fifo(db):
     """cantidad se muta in-place por cada consumo FIFO (deducir_congelado_fifo
     resta directo del lote) -- si el ancla leyera ese valor actual en vez de
