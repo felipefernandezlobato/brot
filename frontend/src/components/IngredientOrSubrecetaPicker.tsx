@@ -21,6 +21,8 @@ interface Props {
   ingredientes: PickerOption[];
   subrecetas?: PickerOption[];
   excludeRecetaId?: number;
+  title?: string;
+  searchPlaceholder?: string;
 }
 
 export function IngredientOrSubrecetaPicker({
@@ -30,6 +32,8 @@ export function IngredientOrSubrecetaPicker({
   ingredientes,
   subrecetas = [],
   excludeRecetaId,
+  title = "Seleccionar",
+  searchPlaceholder,
 }: Props) {
   const [tab, setTab] = useState<"ingrediente" | "subreceta">("ingrediente");
   const [buscar, setBuscar] = useState("");
@@ -42,6 +46,8 @@ export function IngredientOrSubrecetaPicker({
   const filtered = activeList.filter((i) =>
     i.nombre.toLowerCase().includes(buscar.toLowerCase())
   );
+  const placeholder =
+    searchPlaceholder ?? (tab === "ingrediente" ? "Buscar ingrediente..." : "Buscar subreceta...");
 
   const close = () => {
     onClose();
@@ -57,7 +63,7 @@ export function IngredientOrSubrecetaPicker({
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-xl">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-medium text-text">Seleccionar</h3>
+          <h3 className="font-medium text-text">{title}</h3>
           <button
             onClick={close}
             className="text-warm-gray hover:text-text min-h-[44px] min-w-[44px] flex items-center justify-center text-xl leading-none"
@@ -93,7 +99,7 @@ export function IngredientOrSubrecetaPicker({
         <div className="p-3 border-b border-gray-100">
           <input
             type="search"
-            placeholder={tab === "ingrediente" ? "Buscar ingrediente..." : "Buscar subreceta..."}
+            placeholder={placeholder}
             value={buscar}
             onChange={(e) => setBuscar(e.target.value)}
             autoFocus

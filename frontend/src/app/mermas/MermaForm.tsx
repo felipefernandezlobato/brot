@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { formatARS } from "@/lib/format";
+import { IngredientOrSubrecetaPicker, PickerOption } from "@/components/IngredientOrSubrecetaPicker";
 
 export type Motivo = "caducado" | "dañado" | "produccion" | "otro";
 
@@ -80,6 +81,7 @@ export default function MermaForm({
   const [form, setForm] = useState<MermaFormData>(initialValues ?? EMPTY_MERMA_FORM);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -105,13 +107,18 @@ export default function MermaForm({
     (p) => String(p.id) === form.producto_congelado_id
   );
 
-  const productosPorCategoria = productos.reduce<Record<string, ProductoCongelado[]>>(
-    (acc, p) => {
-      (acc[p.categoria] ||= []).push(p);
-      return acc;
-    },
-    {}
-  );
+  const ingredientesOpts: PickerOption[] = ingredientes.map((i) => ({
+    id: i.id,
+    nombre: i.nombre,
+    unidad: i.unidad_uso,
+    costoPorUnidad: i.costo_por_unidad_uso,
+  }));
+  const productosOpts: PickerOption[] = productos.map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    unidad: p.unidad,
+    costoPorUnidad: p.costo_unitario,
+  }));
 
   const costPreview = (() => {
     const qty = Number(form.cantidad);
@@ -272,28 +279,21 @@ export default function MermaForm({
           </button>
         </div>
 
-        {/* Product dropdown */}
+        {/* Product picker */}
         {form.modo === "producto" && (
           <div>
             <label className="block text-sm font-medium text-text mb-1">
               Producto
             </label>
-            <select
-              value={form.producto_congelado_id}
-              onChange={(e) => setField("producto_congelado_id", e.target.value)}
-              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-left focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.producto_congelado_id ? "border-red-400" : "border-cream-dark"
-              }`}
+              } ${selectedProducto ? "text-text" : "text-warm-gray"}`}
             >
-              <option value="">Seleccionar producto...</option>
-              {Object.entries(productosPorCategoria).map(([categoria, prods]) => (
-                <optgroup key={categoria} label={categoria}>
-                  {prods.map((p) => (
-                    <option key={p.id} value={p.id}>{p.nombre}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+              {selectedProducto ? selectedProducto.nombre : "Seleccionar producto..."}
+            </button>
             {errors.producto_congelado_id && (
               <p className="text-xs text-red-500 mt-1">{errors.producto_congelado_id}</p>
             )}
@@ -305,26 +305,21 @@ export default function MermaForm({
           </div>
         )}
 
-        {/* Ingredient dropdown */}
+        {/* Ingredient picker */}
         {form.modo === "ingrediente" && (
           <div>
             <label className="block text-sm font-medium text-text mb-1">
               Ingrediente <span className="text-red-500">*</span>
             </label>
-            <select
-              value={form.ingrediente_id}
-              onChange={(e) => setField("ingrediente_id", e.target.value)}
-              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-left focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.ingrediente_id ? "border-red-400" : "border-cream-dark"
-              }`}
+              } ${selectedIngredient ? "text-text" : "text-warm-gray"}`}
             >
-              <option value="">Seleccionar ingrediente...</option>
-              {ingredientes.map((ing) => (
-                <option key={ing.id} value={ing.id}>
-                  {ing.nombre}
-                </option>
-              ))}
-            </select>
+              {selectedIngredient ? selectedIngredient.nombre : "Seleccionar ingrediente..."}
+            </button>
             {errors.ingrediente_id && (
               <p className="text-xs text-red-500 mt-1">
                 {errors.ingrediente_id}
@@ -503,6 +498,21 @@ export default function MermaForm({
           {saving ? "Guardando..." : submitLabel}
         </button>
       </div>
+
+      <IngredientOrSubrecetaPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(item) => {
+          if (form.modo === "producto") {
+            setField("producto_congelado_id", String(item.id));
+          } else {
+            setField("ingrediente_id", String(item.id));
+          }
+        }}
+        ingredientes={form.modo === "producto" ? productosOpts : ingredientesOpts}
+        title={form.modo === "producto" ? "Seleccionar producto" : "Seleccionar ingrediente"}
+        searchPlaceholder={form.modo === "producto" ? "Buscar producto..." : "Buscar ingrediente..."}
+      />
     </form>
   );
 }
