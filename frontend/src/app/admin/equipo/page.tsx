@@ -9,28 +9,53 @@ interface UsuarioBasico {
   name: string;
 }
 
+interface UsuarioCreado {
+  id: number;
+  name: string;
+  role: string;
+}
+
 export default function EquipoPage() {
   const [usuarios, setUsuarios] = useState<UsuarioBasico[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [nombre, setNombre] = useState("");
+  const [pin, setPin] = useState("");
+  const [rol, setRol] = useState<"staff" | "admin">("staff");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
+  const reload = () => {
+    setLoading(true);
     apiFetch<UsuarioBasico[]>("/api/auth/users")
       .then(setUsuarios)
       .catch(() => toast("Error al cargar usuarios", "error"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    reload();
   }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    // API endpoint not yet implemented — placeholder
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 300));
-    setSaving(false);
-    toast("El endpoint de creación de usuarios estará disponible próximamente", "error");
+    try {
+      await apiFetch<UsuarioCreado>("/api/auth/users", {
+        method: "POST",
+        body: JSON.stringify({ name: nombre.trim(), pin, role: rol }),
+      });
+      toast("Usuario creado");
+      setShowForm(false);
+      setNombre("");
+      setPin("");
+      setRol("staff");
+      reload();
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : "Error al crear usuario", "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const initials = (name: string) => name.trim()[0]?.toUpperCase() ?? "?";
@@ -49,7 +74,7 @@ export default function EquipoPage() {
         </button>
       </div>
 
-      {/* Create form (placeholder — API not yet available) */}
+      {/* Create form */}
       {showForm && (
         <div className="bg-white rounded-xl border border-cream-dark p-5 mb-6">
           <h3 className="font-medium mb-4">Nuevo Usuario</h3>
@@ -67,13 +92,39 @@ export default function EquipoPage() {
                 className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream focus:outline-none focus:ring-2 focus:ring-brot/30"
               />
             </div>
-            <p className="text-xs text-warm-gray bg-cream rounded-lg px-3 py-2">
-              El PIN, rol y permisos se asignarán una vez el endpoint de creación esté disponible.
-            </p>
+            <div>
+              <label className="block text-sm font-medium text-warm-gray mb-1">
+                PIN (4 dígitos)
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                placeholder="1234"
+                required
+                pattern="\d{4}"
+                maxLength={4}
+                className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream focus:outline-none focus:ring-2 focus:ring-brot/30"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-warm-gray mb-1">
+                Rol
+              </label>
+              <select
+                value={rol}
+                onChange={(e) => setRol(e.target.value as "staff" | "admin")}
+                className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream focus:outline-none focus:ring-2 focus:ring-brot/30"
+              >
+                <option value="staff">Staff</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
             <div className="flex gap-3">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || pin.length !== 4}
                 className="px-4 py-2 bg-brot text-white rounded-lg text-sm font-medium min-h-[44px] hover:bg-brot-dark transition-colors disabled:opacity-50"
               >
                 {saving ? "Guardando..." : "Crear Usuario"}
@@ -83,6 +134,8 @@ export default function EquipoPage() {
                 onClick={() => {
                   setShowForm(false);
                   setNombre("");
+                  setPin("");
+                  setRol("staff");
                 }}
                 className="px-4 py-2 border border-cream-dark rounded-lg text-sm min-h-[44px] hover:bg-cream-dark transition-colors"
               >
