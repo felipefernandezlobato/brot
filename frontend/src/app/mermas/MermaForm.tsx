@@ -372,7 +372,7 @@ export default function MermaForm({
               type="text"
               inputMode="decimal"
               value={form.cantidad}
-              onChange={(e) => setField("cantidad", e.target.value)}
+              onChange={(e) => setField("cantidad", e.target.value.replace(",", "."))}
               placeholder="0"
               className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.cantidad ? "border-red-400" : "border-cream-dark"
