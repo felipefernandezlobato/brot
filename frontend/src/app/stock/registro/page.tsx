@@ -130,8 +130,8 @@ export default function RegistroStockPage() {
 
   return (
     <PermissionGate
-      module="inventario"
-      action="write"
+      module="stock"
+      action="create"
       fallback={
         <div className="p-8 text-center text-warm-gray">
           No tenes permisos para registrar stock.

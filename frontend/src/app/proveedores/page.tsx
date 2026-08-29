@@ -169,7 +169,7 @@ export default function ProveedoresPage() {
         <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
           Proveedores
         </h1>
-        <PermissionGate module="proveedores" action="create">
+        <PermissionGate module="pedidos_proveedores" action="create">
           <button
             onClick={() => {
               setShowCreate(true);
@@ -434,7 +434,7 @@ export default function ProveedoresPage() {
                     )}
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    <PermissionGate module="proveedores" action="update">
+                    <PermissionGate module="pedidos_proveedores" action="edit">
                       <button
                         onClick={() => startEdit(p)}
                         className="border border-brot text-brot px-3 py-1.5 rounded-lg text-xs font-medium min-h-[36px] hover:bg-brot hover:text-white transition-colors"
@@ -442,7 +442,7 @@ export default function ProveedoresPage() {
                         Editar
                       </button>
                     </PermissionGate>
-                    <PermissionGate module="proveedores" action="delete">
+                    <PermissionGate module="pedidos_proveedores" action="delete">
                       <button
                         onClick={() => setDeleteId(p.id)}
                         className="border border-red-300 text-red-500 px-3 py-1.5 rounded-lg text-xs font-medium min-h-[36px] hover:bg-red-50 transition-colors"

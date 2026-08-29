@@ -681,7 +681,7 @@ export default function ProduccionHoy() {
                         {tarea.necesita_bastones && (
                           <div className="flex items-center gap-1">
                             <input
-                              type="number"
+                              type="text"
                               inputMode="decimal"
                               placeholder="1"
                               value={d.bastones}
@@ -695,7 +695,7 @@ export default function ProduccionHoy() {
                         {tarea.cantidad_planificada !== null && (
                           <div className="flex items-center gap-1">
                             <input
-                              type="number"
+                              type="text"
                               inputMode="decimal"
                               placeholder={String(tarea.cantidad_planificada)}
                               value={d.cantidad}
@@ -905,7 +905,7 @@ export default function ProduccionHoy() {
                       {extra.necesita_bastones && (
                         <div className="flex items-center gap-1">
                           <input
-                            type="number"
+                            type="text"
                             inputMode="decimal"
                             placeholder="1"
                             value={d.bastones}
@@ -919,7 +919,7 @@ export default function ProduccionHoy() {
                       {esProduccion && (
                         <div className="flex items-center gap-1">
                           <input
-                            type="number"
+                            type="text"
                             inputMode="decimal"
                             placeholder="0"
                             value={d.cantidad}
@@ -1025,7 +1025,7 @@ export default function ProduccionHoy() {
               </select>
               {extraProductoId && productosCongelados.find(p => p.id === parseInt(extraProductoId))?.necesita_bastones && (
                 <input
-                  type="number"
+                  type="text"
                   inputMode="decimal"
                   placeholder="Bastones consumidos"
                   value={extraBastones}
@@ -1037,7 +1037,7 @@ export default function ProduccionHoy() {
               <div className={extraProductoId.startsWith("tarea:") ? "" : "grid grid-cols-2 gap-2"}>
                 {!extraProductoId.startsWith("tarea:") && (
                   <input
-                    type="number"
+                    type="text"
                     inputMode="decimal"
                     placeholder="Cantidad"
                     value={extraCantidad}

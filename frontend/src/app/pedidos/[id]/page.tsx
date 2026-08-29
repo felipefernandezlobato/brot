@@ -211,7 +211,7 @@ export default function PedidoDetailPage() {
           <div className="flex gap-2 shrink-0 flex-wrap justify-end">
             {pedido.estado === "borrador" && (
               <>
-                <PermissionGate module="pedidos" action="update">
+                <PermissionGate module="pedidos_proveedores" action="edit">
                   <button
                     onClick={handleEnviar}
                     disabled={sending}
@@ -220,7 +220,7 @@ export default function PedidoDetailPage() {
                     {sending ? "Enviando..." : "Marcar Enviado"}
                   </button>
                 </PermissionGate>
-                <PermissionGate module="pedidos" action="delete">
+                <PermissionGate module="pedidos_proveedores" action="delete">
                   <button
                     onClick={() => setShowDelete(true)}
                     className="border border-red-300 text-red-500 px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] hover:bg-red-50 transition-colors"
@@ -231,7 +231,7 @@ export default function PedidoDetailPage() {
               </>
             )}
             {pedido.estado === "enviado" && (
-              <PermissionGate module="pedidos" action="update">
+              <PermissionGate module="pedidos_proveedores" action="edit">
                 <button
                   onClick={startReceive}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] hover:bg-green-700 transition-colors"

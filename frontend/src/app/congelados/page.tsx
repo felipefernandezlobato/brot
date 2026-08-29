@@ -709,14 +709,12 @@ function TabNuevaEntrada({
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <input
-                          type="number"
+                          type="text"
                           inputMode="decimal"
-                          min="0"
-                          step="any"
                           placeholder="0"
                           value={val}
                           onChange={(e) =>
-                            setCantidades((prev) => ({ ...prev, [p.id]: e.target.value }))
+                            setCantidades((prev) => ({ ...prev, [p.id]: e.target.value.replace(",", ".") }))
                           }
                           className="w-20 px-2 py-1.5 rounded-lg border border-cream-dark text-sm text-right focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
                         />
@@ -1222,9 +1220,8 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                                 }}
                               >
                                 <input
-                                  type="number"
+                                  type="text"
                                   inputMode="decimal"
-                                  step="any"
                                   autoFocus
                                   disabled={savingEdit}
                                   value={editando!.value}

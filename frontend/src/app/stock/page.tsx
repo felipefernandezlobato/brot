@@ -509,8 +509,8 @@ function TabRegistrar({
 
   return (
     <PermissionGate
-      module="inventario"
-      action="write"
+      module="stock"
+      action="create"
       fallback={
         <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           No tenes permisos para registrar stock.
@@ -586,14 +586,12 @@ function TabRegistrar({
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <input
-                          type="number"
+                          type="text"
                           inputMode="decimal"
-                          min="0"
-                          step="any"
                           placeholder="0"
                           value={val}
                           onChange={(e) =>
-                            setCantidades((p) => ({ ...p, [ing.id]: e.target.value }))
+                            setCantidades((p) => ({ ...p, [ing.id]: e.target.value.replace(",", ".") }))
                           }
                           className="w-20 px-2 py-1.5 rounded-lg border border-cream-dark text-sm text-right focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
                         />
@@ -1095,9 +1093,8 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                                 }}
                               >
                                 <input
-                                  type="number"
+                                  type="text"
                                   inputMode="decimal"
-                                  step="any"
                                   autoFocus
                                   disabled={savingEdit}
                                   value={editando!.value}
