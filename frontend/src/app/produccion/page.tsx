@@ -95,6 +95,14 @@ function isDomingo(iso: string): boolean {
   return new Date(iso + "T12:00:00").getDay() === 0;
 }
 
+function formatDuracionTotal(totalMin: number): string {
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 export default function ProduccionHoy() {
   const searchParams = useSearchParams();
   const paramFecha = searchParams.get("fecha");
@@ -504,6 +512,9 @@ export default function ProduccionHoy() {
   const noteTareas = data?.tareas.filter((t) => t.hora === null) || [];
   const completedCount = data?.tareas.filter((t) => t.completada).length || 0;
   const totalCount = data?.tareas.length || 0;
+  const totalMinutos =
+    (data?.tareas.reduce((sum, t) => sum + (t.duracion_real || 0), 0) || 0) +
+    (data?.extras.reduce((sum, e) => sum + (e.duracion_real || 0), 0) || 0);
 
   if (loading) {
     return <p className="text-center py-12 text-gray-500">Cargando...</p>;
@@ -574,6 +585,7 @@ export default function ProduccionHoy() {
           </p>
           <p className="text-xs text-gray-400">
             {completedCount}/{totalCount} completadas
+            {totalMinutos > 0 && ` · ${formatDuracionTotal(totalMinutos)}`}
           </p>
         </div>
       </div>
