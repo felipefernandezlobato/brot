@@ -1207,8 +1207,6 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                                 ? "text-red-600 font-bold"
                                 : discrepa
                                 ? "text-red-600 font-semibold bg-red-50"
-                                : principal === 0
-                                ? "text-red-600 font-medium"
                                 : "text-text"
                             }`}
                           >

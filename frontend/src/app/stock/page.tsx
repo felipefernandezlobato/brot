@@ -1069,7 +1069,6 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                         const calc = valorCalculadoEnFecha(calculado.get(ing.id), d);
                         const vacio = calc === null && val === undefined;
                         const discrepa = calc !== null && val !== undefined && Math.abs(calc - val) > DISCREPANCIA_TOLERANCIA;
-                        const principal = calc !== null ? calc : val;
                         const isEditing = registro !== undefined && editando?.id === registro.id;
                         return (
                           <td
@@ -1080,8 +1079,6 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                                 ? "text-cream-dark"
                                 : discrepa
                                 ? "text-red-600 font-semibold bg-red-50"
-                                : principal === 0
-                                ? "text-red-600 font-medium"
                                 : "text-text"
                             }`}
                           >
