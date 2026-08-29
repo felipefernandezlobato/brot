@@ -344,7 +344,10 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
                   }`}>
                     {m.cantidad > 0 ? "+" : ""}{m.cantidad}
                   </span>
-                  <span className="text-warm-gray">{movLabel[m.tipo_movimiento] || m.tipo_movimiento}</span>
+                  <span className="text-warm-gray">
+                    {movLabel[m.tipo_movimiento] || m.tipo_movimiento}
+                    {m.saldo_despues != null && ` · ${Math.round(m.saldo_despues * 100) / 100} en stock`}
+                  </span>
                 </div>
                 <span className="text-xs text-warm-gray">{formatDate(m.fecha)}</span>
               </div>

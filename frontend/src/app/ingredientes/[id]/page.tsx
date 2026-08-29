@@ -498,6 +498,9 @@ export default function IngredienteDetailPage() {
                         </span>
                         <span className="text-sm text-text">
                           {label}{para}
+                          {m.saldo_despues != null && (
+                            <span className="text-warm-gray"> · {Math.round(m.saldo_despues * 100) / 100} {m.unidad} en stock</span>
+                          )}
                         </span>
                       </div>
                       <span className="text-xs text-warm-gray whitespace-nowrap">{formatDate(m.fecha)}</span>

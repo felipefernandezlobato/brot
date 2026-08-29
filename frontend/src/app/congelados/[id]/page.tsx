@@ -216,7 +216,10 @@ export default function CongeladoPage() {
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${
                       m.cantidad > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                     }`}>{m.cantidad > 0 ? "+" : ""}{m.cantidad}</span>
-                    <span className="text-warm-gray">{label}</span>
+                    <span className="text-warm-gray">
+                      {label}
+                      {m.saldo_despues != null && ` · ${Math.round(m.saldo_despues * 100) / 100} ${data.unidad} en stock`}
+                    </span>
                   </div>
                   <span className="text-xs text-warm-gray">{formatDate(m.fecha)}</span>
                 </div>

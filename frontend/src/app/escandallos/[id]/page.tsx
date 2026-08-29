@@ -500,7 +500,10 @@ export default function RecetaCompletoPage() {
                     }`}>
                       {m.cantidad > 0 ? "+" : ""}{m.cantidad}
                     </span>
-                    <span className="text-warm-gray">{label}</span>
+                    <span className="text-warm-gray">
+                      {label}
+                      {m.saldo_despues != null && producto && ` · ${Math.round(m.saldo_despues * 100) / 100} ${producto.unidad} en stock`}
+                    </span>
                   </div>
                   <span className="text-xs text-warm-gray">{formatDate(m.fecha)}</span>
                 </div>
