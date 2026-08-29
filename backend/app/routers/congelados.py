@@ -26,7 +26,13 @@ from app.schemas import (
     StockCongeladoUpdate,
 )
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
-from app.services.stock import ajustar_correccion_conteo, es_conteo_manual, historial_movimientos_acumulado
+from app.services.stock import (
+    ajustar_correccion_conteo,
+    es_conteo_manual,
+    historial_movimientos_acumulado,
+    reconciliar_lotes_tras_conteo,
+    saldo_despues_por_movimiento,
+)
 
 router = APIRouter(prefix="/api/congelados", tags=["congelados"])
 
@@ -159,13 +165,14 @@ def get_producto_detalle(
     stock_history = historial_movimientos_acumulado(db, "congelado", ids=[prod_id]).get(prod_id, [])
 
     # Recent movements
+    saldos_vivos = saldo_despues_por_movimiento(db, "congelado", prod_id)
     movimientos = [
         {
             "id": m.id, "tipo_movimiento": m.tipo_movimiento,
             "cantidad": m.cantidad, "fecha": m.fecha,
             "referencia_origen": m.referencia_origen,
             "nombre_origen": describir_referencia(db, m.referencia_origen),
-            "saldo_despues": m.saldo_despues,
+            "saldo_despues": saldos_vivos.get(m.id, m.saldo_despues),
         }
         for m in db.query(MovimientoStock)
         .filter(
@@ -367,6 +374,9 @@ def add_stock_congelado(
     entry = StockCongelado(**data.model_dump(exclude_none=True))
     entry.cantidad_original = entry.cantidad
     db.add(entry)
+    db.flush()
+    if entry.fecha_vencimiento is None:
+        reconciliar_lotes_tras_conteo(db, entry)
     db.commit()
     db.refresh(entry)
     db.refresh(entry, ["producto"])

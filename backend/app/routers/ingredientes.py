@@ -25,6 +25,7 @@ from app.schemas import (
 )
 from app.services.costes import costo_por_unidad_uso
 from app.services.produccion_registro import movimiento_no_revertido, nombre_origen_movimiento
+from app.services.stock import saldo_despues_por_movimiento
 
 router = APIRouter(prefix="/api/ingredientes", tags=["ingredientes"])
 
@@ -272,6 +273,7 @@ def get_movimientos_ingrediente(
         .all()
     )
 
+    saldos_vivos = saldo_despues_por_movimiento(db, "materia_prima", ing_id)
     return [
         {
             "id": m.id,
@@ -281,7 +283,7 @@ def get_movimientos_ingrediente(
             "fecha": m.fecha,
             "referencia_origen": m.referencia_origen,
             "nombre_origen": nombre_origen_movimiento(db, m),
-            "saldo_despues": m.saldo_despues,
+            "saldo_despues": saldos_vivos.get(m.id, m.saldo_despues),
         }
         for m in movs
     ]

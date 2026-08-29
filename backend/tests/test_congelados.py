@@ -113,6 +113,65 @@ def test_add_stock_congelado(client, db):
     assert entry.cantidad_original == 50
 
 
+def test_add_stock_congelado_reconcilia_conteo_sin_vencimiento(client, db):
+    """A fresh headcount (no fecha_vencimiento) supersedes prior active lots
+    for the same product instead of just adding alongside them -- otherwise
+    stock_actual double-counts (found 2026-08-29 across 20 real products)."""
+    token = _admin_token(client, db)
+    prod = _create_producto(client, token)
+
+    first = client.post(
+        "/api/congelados",
+        json={"producto_congelado_id": prod["id"], "cantidad": 40},
+        headers=_auth(token),
+    ).json()
+
+    client.post(
+        "/api/congelados",
+        json={"producto_congelado_id": prod["id"], "cantidad": 12},
+        headers=_auth(token),
+    )
+
+    first_row = db.query(StockCongelado).filter(StockCongelado.id == first["id"]).one()
+    assert first_row.is_active is False
+
+    detalle = client.get(
+        f"/api/congelados/productos/{prod['id']}/detalle", headers=_auth(token)
+    ).json()
+    assert detalle["stock_actual"] == 12
+
+
+def test_add_stock_congelado_con_vencimiento_no_reconcilia(client, db):
+    """Lots with an explicit fecha_vencimiento are distinctly-tracked
+    batches, not a headcount -- must coexist rather than supersede each
+    other (this is what the expiry-alerts feature relies on)."""
+    token = _admin_token(client, db)
+    prod = _create_producto(client, token)
+
+    first = client.post(
+        "/api/congelados",
+        json={
+            "producto_congelado_id": prod["id"],
+            "cantidad": 20,
+            "fecha_vencimiento": str(date.today() - timedelta(days=1)),
+        },
+        headers=_auth(token),
+    ).json()
+
+    client.post(
+        "/api/congelados",
+        json={
+            "producto_congelado_id": prod["id"],
+            "cantidad": 30,
+            "fecha_vencimiento": str(date.today() + timedelta(days=30)),
+        },
+        headers=_auth(token),
+    )
+
+    first_row = db.query(StockCongelado).filter(StockCongelado.id == first["id"]).one()
+    assert first_row.is_active is True
+
+
 def test_list_stock_congelado(client, db):
     token = _admin_token(client, db)
     prod = _create_producto(client, token)

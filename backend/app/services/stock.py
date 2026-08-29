@@ -240,6 +240,50 @@ def historial_movimientos_acumulado(
     return result
 
 
+def saldo_despues_por_movimiento(db: Session, tipo_stock: str, referencia_producto_id: int) -> dict[int, float]:
+    """Per-movement running balance, live-computed with the same manual-count
+    re-anchoring `historial_movimientos_acumulado` uses for the chart.
+
+    Unlike the stored `MovimientoStock.saldo_despues` column -- written once
+    at that movement's creation and never touched again -- this can't go
+    stale when a later correction changes what the true balance actually
+    was (found 2026-08-29: reconciliar_lotes_tras_conteo deactivating a
+    stale lot, or replaying an entrega with a corrected fecha_entrega, both
+    change the real balance without updating any already-written movement's
+    saldo_despues). Call this fresh on every request instead of trusting
+    the column for display.
+
+    Includes reversed (":rev"-tagged) movements in the replay -- needed for
+    correct running math even though callers typically only display the
+    non-reversed ones (see movimiento_no_revertido()).
+    """
+    movs = (
+        db.query(MovimientoStock)
+        .filter(
+            MovimientoStock.tipo_stock == tipo_stock,
+            MovimientoStock.referencia_producto_id == referencia_producto_id,
+        )
+        .order_by(MovimientoStock.fecha, MovimientoStock.id)
+        .all()
+    )
+    anclas = sorted(
+        _conteos_manuales_por_fecha(db, tipo_stock, [referencia_producto_id])
+        .get(referencia_producto_id, {})
+        .items()
+    )
+    ancla_idx = 0
+    running = 0.0
+    result: dict[int, float] = {}
+    for m in movs:
+        fecha_str = str(m.fecha)
+        while ancla_idx < len(anclas) and anclas[ancla_idx][0] < fecha_str:
+            running = anclas[ancla_idx][1]
+            ancla_idx += 1
+        running += m.cantidad
+        result[m.id] = round(running, 2)
+    return result
+
+
 def deducir_materia_prima(
     db: Session,
     ingrediente_id: int,
@@ -317,6 +361,47 @@ def crear_lote_ajuste(
     db.add(lote)
     db.flush()  # caller needs lote.id immediately for a ConsumoFifoDetalle row
     return lote
+
+
+def reconciliar_lotes_tras_conteo(db: Session, nuevo_lote: StockCongelado) -> int:
+    """A fresh physical count means "this is the true total right now" --
+    leaving whatever active lots existed before it around means
+    get_saldo_congelado() sums both, double-counting the same stock (found
+    2026-08-29: 20 products showed roughly 2x their real count after a batch
+    of physical counts, because the count lot was simply added alongside
+    untouched pre-existing active lots instead of superseding them).
+
+    Only call this for an entry with no fecha_vencimiento: that's the exact
+    (and only) shape the real "Registrar" screen ever submits -- a person
+    doing a headcount doesn't know or care about expiry dates, they're
+    reporting "this many units, period." An entry WITH a fecha_vencimiento
+    represents adding a specific, distinctly-tracked batch (see
+    test_alertas_vencimiento: two same-day lots with different expiry dates
+    are deliberately meant to coexist, not supersede each other) and must
+    never trigger this.
+
+    Deactivates every other active lot for the same product that existed
+    BEFORE `nuevo_lote` was created. "Before" is fecha_entrada, with `id` as
+    the tie-breaker for same-day lots -- a lot inserted after `nuevo_lote`
+    (higher id) that happens to share its fecha_entrada (e.g. production
+    logged the same day as the count) must NOT be swept up just because the
+    dates match; only truly-earlier lots (by insertion order) are stale.
+    Returns how many lots were deactivated.
+    """
+    viejos = (
+        db.query(StockCongelado)
+        .filter(
+            StockCongelado.producto_congelado_id == nuevo_lote.producto_congelado_id,
+            StockCongelado.is_active.is_(True),
+            StockCongelado.id != nuevo_lote.id,
+            StockCongelado.fecha_entrada <= nuevo_lote.fecha_entrada,
+            StockCongelado.id < nuevo_lote.id,
+        )
+        .all()
+    )
+    for lote in viejos:
+        lote.is_active = False
+    return len(viejos)
 
 
 def deducir_congelado_fifo(

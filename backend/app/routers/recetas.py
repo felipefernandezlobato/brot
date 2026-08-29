@@ -11,7 +11,7 @@ from app.schemas import RecetaCreate, RecetaOut, RecetaUpdate, LineaRecetaOut
 from app.services.costes import costo_linea, costo_receta
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
 from app.services.recetas_validacion import validar_lineas_receta
-from app.services.stock import historial_movimientos_acumulado
+from app.services.stock import historial_movimientos_acumulado, saldo_despues_por_movimiento
 
 router = APIRouter(prefix="/api/recetas", tags=["recetas"])
 
@@ -142,13 +142,14 @@ def get_receta_completo(
                 .scalar()
             ) or 0
 
+        saldos_vivos = saldo_despues_por_movimiento(db, "congelado", prod.id)
         movimientos = [
             {
                 "id": m.id, "tipo_movimiento": m.tipo_movimiento,
                 "cantidad": m.cantidad, "fecha": str(m.fecha),
                 "referencia_origen": m.referencia_origen,
                 "nombre_origen": describir_referencia(db, m.referencia_origen),
-                "saldo_despues": m.saldo_despues,
+                "saldo_despues": saldos_vivos.get(m.id, m.saldo_despues),
             }
             for m in db.query(MovimientoStock)
             .filter(
