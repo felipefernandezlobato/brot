@@ -79,6 +79,14 @@ def lotes_de_receta(db: Session, reg: RegistroProduccion) -> float:
         finished pieces, so lotes = pieces / porciones_por_lote.
     Getting this wrong previously inflated a masa's own stock by porciones_por_lote
     (1.5 lotes recorded as 13.5) while fixing ingredient deduction only by accident.
+
+    "u receta" tasks are exactly the ones producing a nivel="masa" product (verified:
+    every TareaProduccion.unidad_cantidad=="u receta" row points at a masa-level
+    ProductoCongelado, with no exceptions). A "produccion extra" record has no
+    unidad_cantidad at all (RegistroExtraCreate doesn't carry one), so it's checked
+    directly against the resolved product's nivel instead — otherwise logging a masa
+    (e.g. Amasar Pizza) as an extra would silently divide its ingredient lines by
+    porciones_por_lote, the same bug this function exists to prevent.
     """
     cantidad = reg.cantidad_real or 0.0
 
@@ -88,7 +96,12 @@ def lotes_de_receta(db: Session, reg: RegistroProduccion) -> float:
         unidad = reg.tarea.unidad_cantidad
         receta_id = reg.tarea.receta_id or receta_id
 
-    if unidad == "u receta" or not receta_id:
+    es_masa = False
+    if reg.producto_congelado_id:
+        prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == reg.producto_congelado_id).first()
+        es_masa = bool(prod and prod.nivel == "masa")
+
+    if unidad == "u receta" or es_masa or not receta_id:
         return cantidad
 
     receta = db.query(Receta).filter(Receta.id == receta_id).first()
