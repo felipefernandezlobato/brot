@@ -123,7 +123,22 @@ def update_pedido(
     p = _load_pedido(db, pedido_id)
     if not p:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
-    for key, val in data.model_dump(exclude_unset=True, exclude={"lineas"}).items():
+    updates = data.model_dump(exclude_unset=True, exclude={"lineas"})
+    if (
+        "fecha_recepcion" in updates
+        and updates["fecha_recepcion"] is not None
+        and p.estado == "recibido"
+        and updates["fecha_recepcion"] != p.fecha_recepcion
+    ):
+        nueva_fecha = updates["fecha_recepcion"]
+        db.query(InventarioRegistro).filter(
+            InventarioRegistro.notas.like(f"Pedido #{pedido_id} recibido%")
+        ).update({"fecha_registro": nueva_fecha}, synchronize_session=False)
+        db.query(MovimientoStock).filter(
+            MovimientoStock.referencia_origen == f"pedido:{pedido_id}",
+            MovimientoStock.tipo_movimiento == "recepcion",
+        ).update({"fecha": nueva_fecha}, synchronize_session=False)
+    for key, val in updates.items():
         setattr(p, key, val)
     if data.lineas is not None:
         for linea in list(p.lineas):
