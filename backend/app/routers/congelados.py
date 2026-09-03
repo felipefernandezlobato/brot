@@ -44,6 +44,7 @@ def _stock_out(s: StockCongelado) -> dict:
         "id": s.id,
         "producto_congelado_id": s.producto_congelado_id,
         "cantidad": s.cantidad,
+        "cantidad_original": s.cantidad_original,
         "fecha_entrada": s.fecha_entrada,
         "fecha_vencimiento": s.fecha_vencimiento,
         "lote": s.lote,

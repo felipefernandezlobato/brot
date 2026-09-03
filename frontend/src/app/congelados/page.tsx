@@ -38,6 +38,7 @@ interface StockCongelado {
   producto_congelado_id: number;
   producto_nombre: string;
   cantidad: number;
+  cantidad_original: number;
   fecha_entrada: string;
   fecha_vencimiento: string | null;
   lote: string | null;
@@ -880,7 +881,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
     const rawByDate = new Map<string, Map<number, number>>();
     for (const e of conteosManuales) {
       if (!rawByDate.has(e.fecha_entrada)) rawByDate.set(e.fecha_entrada, new Map());
-      rawByDate.get(e.fecha_entrada)!.set(e.producto_congelado_id, e.cantidad);
+      rawByDate.get(e.fecha_entrada)!.set(e.producto_congelado_id, e.cantidad_original);
     }
 
     const sorted = Array.from(dates)
@@ -960,10 +961,10 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
       const dateMap = map.get(e.fecha_entrada)!;
       const existing = dateMap.get(e.producto_congelado_id);
       if (existing) {
-        existing.total += e.cantidad;
+        existing.total += e.cantidad_original;
         existing.entries.push(e);
       } else {
-        dateMap.set(e.producto_congelado_id, { total: e.cantidad, entries: [e] });
+        dateMap.set(e.producto_congelado_id, { total: e.cantidad_original, entries: [e] });
       }
     }
     return map;
@@ -979,7 +980,9 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
   const [savingEdit, setSavingEdit] = useState(false);
 
   const iniciarEdicion = (registro: StockCongelado, unidad: string) => {
-    setEditando({ id: registro.id, value: String(registro.cantidad), original: registro.cantidad, unidad });
+    // Editing corrects what was COUNTED, not whatever's left of the lot after
+    // FIFO draws -- start the field from cantidad_original, not cantidad.
+    setEditando({ id: registro.id, value: String(registro.cantidad_original), original: registro.cantidad_original, unidad });
   };
 
   const cancelarEdicion = () => setEditando(null);

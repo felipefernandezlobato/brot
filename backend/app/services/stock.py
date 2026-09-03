@@ -414,12 +414,21 @@ def deducir_congelado_fifo(
     tipo_movimiento: str = "entrega_b2b",
 ) -> MovimientoStock:
     restante = cantidad
+    fecha_efectiva = fecha or date.today()
     entries = (
         db.query(StockCongelado)
         .filter(
             StockCongelado.producto_congelado_id == producto_congelado_id,
             StockCongelado.is_active.is_(True),
             StockCongelado.cantidad > 0,
+            # A backdated movement must never reach into a lot dated AFTER it --
+            # e.g. a delivery entered late for last week must not eat into
+            # today's physical count just because it's the only active lot
+            # left. Without this, the movement's own date becomes fiction:
+            # it's recorded as last week's consumption but actually drains
+            # stock that didn't exist yet. Real shortfall still surfaces
+            # correctly via the negative synthetic lot below.
+            StockCongelado.fecha_entrada <= fecha_efectiva,
         )
         .order_by(StockCongelado.fecha_entrada)
         .all()

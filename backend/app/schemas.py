@@ -589,6 +589,7 @@ class StockCongeladoOut(BaseModel):
     id: int
     producto_congelado_id: int
     cantidad: float
+    cantidad_original: float
     fecha_entrada: date
     fecha_vencimiento: Optional[date] = None
     lote: Optional[str] = None
