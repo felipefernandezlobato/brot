@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { formatARS, formatDateTime } from "@/lib/format";
+import { formatARS, formatDate, formatDateTime } from "@/lib/format";
 import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
 
@@ -82,6 +82,11 @@ export default function PedidoDetailPage() {
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Edit fecha de recepción
+  const [editingFecha, setEditingFecha] = useState(false);
+  const [fechaRecepcionDraft, setFechaRecepcionDraft] = useState("");
+  const [savingFecha, setSavingFecha] = useState(false);
+
   const load = () => {
     setLoading(true);
     apiFetch<PedidoOut>(`/api/pedidos/${id}`)
@@ -148,6 +153,35 @@ export default function PedidoDetailPage() {
       toast(msg, "error");
     } finally {
       setReceiving(false);
+    }
+  };
+
+  const startEditFecha = () => {
+    if (!pedido?.fecha_recepcion) return;
+    setFechaRecepcionDraft(pedido.fecha_recepcion);
+    setEditingFecha(true);
+  };
+
+  const cancelEditFecha = () => {
+    setEditingFecha(false);
+  };
+
+  const saveFecha = async () => {
+    if (!fechaRecepcionDraft) return;
+    setSavingFecha(true);
+    try {
+      const updated = await apiFetch<PedidoOut>(`/api/pedidos/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ fecha_recepcion: fechaRecepcionDraft }),
+      });
+      setPedido(updated);
+      setEditingFecha(false);
+      toast("Fecha de recepción actualizada");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al actualizar la fecha";
+      toast(msg, "error");
+    } finally {
+      setSavingFecha(false);
     }
   };
 
@@ -266,6 +300,66 @@ export default function PedidoDetailPage() {
             <p className="text-xs text-warm-gray mb-1">Estado</p>
             <EstadoBadge estado={pedido.estado} />
           </div>
+          {pedido.estado === "recibido" && pedido.fecha_recepcion && (
+            <div
+              className="bg-cream rounded-lg p-4 group relative"
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  cancelEditFecha();
+                }
+              }}
+            >
+              <p className="text-xs text-warm-gray mb-1">Fecha de recepción</p>
+              {editingFecha ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={fechaRecepcionDraft}
+                    onChange={(e) => setFechaRecepcionDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveFecha();
+                      if (e.key === "Escape") cancelEditFecha();
+                    }}
+                    autoFocus
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={saveFecha}
+                    disabled={savingFecha}
+                    className="text-green-600 hover:text-green-700 px-1 disabled:opacity-50"
+                    title="Guardar"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEditFecha}
+                    className="text-warm-gray hover:text-red-500 px-1"
+                    title="Cancelar"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-text">
+                    {formatDate(pedido.fecha_recepcion)}
+                  </p>
+                  <PermissionGate module="pedidos_proveedores" action="edit">
+                    <button
+                      type="button"
+                      onClick={startEditFecha}
+                      className="opacity-0 group-hover:opacity-100 text-warm-gray hover:text-brot transition-opacity"
+                      title="Editar fecha de recepción"
+                    >
+                      ✎
+                    </button>
+                  </PermissionGate>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         {pedido.notas && (
           <p className="mt-4 text-sm text-warm-gray italic">
