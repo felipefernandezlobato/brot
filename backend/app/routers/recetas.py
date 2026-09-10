@@ -166,7 +166,14 @@ def get_receta_completo(
             .all()
         ]
         conteos = conteos_manuales_movimientos(db, "congelado", prod.id, limit=10)
-        movimientos = sorted(movimientos + conteos, key=lambda m: m["fecha"], reverse=True)[:20]
+        # A conteo represents the LAST event of its day (counted at closing,
+        # after that day's mermas/entregas) -- within a tied date it must sort
+        # above the rest of that day's movements, not below.
+        movimientos = sorted(
+            movimientos + conteos,
+            key=lambda m: (m["fecha"], m["tipo_movimiento"] == "conteo_fisico"),
+            reverse=True,
+        )[:20]
 
         # Build full ancestor chain (walk up)
         ancestors = []
