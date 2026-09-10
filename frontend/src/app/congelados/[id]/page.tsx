@@ -31,7 +31,7 @@ interface ProductoDetalle {
   hijos: { id: number; nombre: string; nivel: string; cantidad_por_padre: number | null; receta_id?: number | null; hijos?: any[] }[];
   receta: { id: number; nombre: string; porciones_por_lote: number; costo_total: number; costo_porcion: number; precio_venta: number | null; num_ingredientes: number } | null;
   stock_history: { fecha: string; cantidad: number }[];
-  movimientos: { id: number; tipo_movimiento: string; cantidad: number; fecha: string; referencia_origen: string | null; nombre_origen: string | null; saldo_despues: number | null }[];
+  movimientos: { id: number; tipo_movimiento: string; cantidad: number | null; fecha: string; referencia_origen: string | null; nombre_origen: string | null; saldo_despues: number | null }[];
 }
 
 const NIVEL_COLORS: Record<string, string> = {
@@ -210,14 +210,15 @@ export default function CongeladoPage() {
                   label = `Entrega B2B #${parts[1]}`;
                 }
               }
+              const esConteo = m.tipo_movimiento === "conteo_fisico";
               return (
                 <div key={m.id} className="px-4 py-2 flex items-center justify-between gap-2 text-sm">
                   <div className="flex items-center gap-2">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${
-                      m.cantidad > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                    }`}>{m.cantidad > 0 ? "+" : ""}{m.cantidad}</span>
+                      esConteo ? "bg-blue-100 text-blue-700" : m.cantidad != null && m.cantidad > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    }`}>{esConteo ? "Conteo" : `${m.cantidad != null && m.cantidad > 0 ? "+" : ""}${m.cantidad}`}</span>
                     <span className="text-warm-gray">
-                      {label}
+                      {esConteo ? "Conteo fisico" : label}
                       {m.saldo_despues != null && ` · ${Math.round(m.saldo_despues * 100) / 100} ${data.unidad} en stock`}
                     </span>
                   </div>

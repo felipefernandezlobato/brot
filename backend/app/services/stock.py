@@ -150,6 +150,63 @@ def _conteos_manuales_por_fecha(db: Session, tipo_stock: str, ids: list[int]) ->
     return out
 
 
+def conteos_manuales_movimientos(
+    db: Session, tipo_stock: str, producto_id: int, limit: int = 15
+) -> list[dict]:
+    """Genuine manual stock counts for one product, shaped like a MovimientoStock
+    row so an activity feed can splice them in next to real movements. A manual
+    count never gets its own MovimientoStock row (it's what
+    historial_movimientos_acumulado's re-anchoring reads instead), so without
+    this it's invisible in "movimientos recientes" -- which hid exactly the
+    event that explains a sudden jump/drop in the calculated balance.
+    """
+    out: list[dict] = []
+    if tipo_stock == "materia_prima":
+        rows = (
+            db.query(InventarioRegistro)
+            .filter(InventarioRegistro.ingrediente_id == producto_id)
+            .order_by(InventarioRegistro.fecha_registro.desc(), InventarioRegistro.id.desc())
+            .all()
+        )
+        for r in rows:
+            if not es_conteo_manual("materia_prima", r.notas):
+                continue
+            out.append({
+                "id": -r.id,
+                "tipo_movimiento": "conteo_fisico",
+                "cantidad": None,
+                "fecha": str(r.fecha_registro),
+                "referencia_origen": None,
+                "nombre_origen": None,
+                "saldo_despues": r.cantidad,
+            })
+            if len(out) >= limit:
+                break
+    else:
+        rows = (
+            db.query(StockCongelado)
+            .filter(StockCongelado.producto_congelado_id == producto_id)
+            .order_by(StockCongelado.fecha_entrada.desc(), StockCongelado.id.desc())
+            .all()
+        )
+        for r in rows:
+            if not es_conteo_manual("congelado", r.notas):
+                continue
+            valor = r.cantidad_original if r.cantidad_original is not None else r.cantidad
+            out.append({
+                "id": -r.id,
+                "tipo_movimiento": "conteo_fisico",
+                "cantidad": None,
+                "fecha": str(r.fecha_entrada),
+                "referencia_origen": None,
+                "nombre_origen": None,
+                "saldo_despues": valor,
+            })
+            if len(out) >= limit:
+                break
+    return out
+
+
 def historial_movimientos_acumulado(
     db: Session,
     tipo_stock: str,

@@ -70,7 +70,7 @@ interface CompletoData {
   movimientos: {
     id: number;
     tipo_movimiento: string;
-    cantidad: number;
+    cantidad: number | null;
     fecha: string;
     referencia_origen: string | null;
     nombre_origen: string | null;
@@ -492,16 +492,17 @@ export default function RecetaCompletoPage() {
                   label = `Entrega B2B #${parts[1]}`;
                 }
               }
+              const esConteo = m.tipo_movimiento === "conteo_fisico";
               return (
                 <div key={m.id} className="px-4 py-2 flex items-center justify-between gap-2 text-sm">
                   <div className="flex items-center gap-2">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${
-                      m.cantidad > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                      esConteo ? "bg-blue-100 text-blue-700" : m.cantidad != null && m.cantidad > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                     }`}>
-                      {m.cantidad > 0 ? "+" : ""}{m.cantidad}
+                      {esConteo ? "Conteo" : `${m.cantidad != null && m.cantidad > 0 ? "+" : ""}${m.cantidad}`}
                     </span>
                     <span className="text-warm-gray">
-                      {label}
+                      {esConteo ? "Conteo fisico" : label}
                       {m.saldo_despues != null && producto && ` · ${Math.round(m.saldo_despues * 100) / 100} ${producto.unidad} en stock`}
                     </span>
                   </div>

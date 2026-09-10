@@ -11,7 +11,11 @@ from app.schemas import RecetaCreate, RecetaOut, RecetaUpdate, LineaRecetaOut
 from app.services.costes import costo_linea, costo_receta
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
 from app.services.recetas_validacion import validar_lineas_receta
-from app.services.stock import historial_movimientos_acumulado, saldo_despues_por_movimiento
+from app.services.stock import (
+    conteos_manuales_movimientos,
+    historial_movimientos_acumulado,
+    saldo_despues_por_movimiento,
+)
 
 router = APIRouter(prefix="/api/recetas", tags=["recetas"])
 
@@ -161,6 +165,8 @@ def get_receta_completo(
             .limit(20)
             .all()
         ]
+        conteos = conteos_manuales_movimientos(db, "congelado", prod.id, limit=10)
+        movimientos = sorted(movimientos + conteos, key=lambda m: m["fecha"], reverse=True)[:20]
 
         # Build full ancestor chain (walk up)
         ancestors = []

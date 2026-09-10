@@ -28,6 +28,7 @@ from app.schemas import (
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
 from app.services.stock import (
     ajustar_correccion_conteo,
+    conteos_manuales_movimientos,
     es_conteo_manual,
     historial_movimientos_acumulado,
     reconciliar_lotes_tras_conteo,
@@ -170,7 +171,7 @@ def get_producto_detalle(
     movimientos = [
         {
             "id": m.id, "tipo_movimiento": m.tipo_movimiento,
-            "cantidad": m.cantidad, "fecha": m.fecha,
+            "cantidad": m.cantidad, "fecha": str(m.fecha),
             "referencia_origen": m.referencia_origen,
             "nombre_origen": describir_referencia(db, m.referencia_origen),
             "saldo_despues": saldos_vivos.get(m.id, m.saldo_despues),
@@ -185,6 +186,8 @@ def get_producto_detalle(
         .limit(20)
         .all()
     ]
+    conteos = conteos_manuales_movimientos(db, "congelado", prod_id, limit=10)
+    movimientos = sorted(movimientos + conteos, key=lambda m: m["fecha"], reverse=True)[:20]
 
     return {
         "id": prod.id,
