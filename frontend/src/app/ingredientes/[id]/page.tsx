@@ -83,7 +83,7 @@ interface StockRecord {
 interface Movimiento {
   id: number;
   tipo_movimiento: string;
-  cantidad: number;
+  cantidad: number | null;
   unidad: string;
   fecha: string;
   referencia_origen: string | null;
@@ -471,8 +471,10 @@ export default function IngredienteDetailPage() {
               </div>
               <div className="divide-y divide-cream-dark max-h-[300px] overflow-y-auto">
                 {movimientos.map((m) => {
-                  const isPositive = m.cantidad > 0;
-                  const label = m.tipo_movimiento === "produccion_consumo" ? "Consumido"
+                  const esConteo = m.tipo_movimiento === "conteo_fisico";
+                  const isPositive = !esConteo && m.cantidad != null && m.cantidad > 0;
+                  const label = esConteo ? "Conteo fisico"
+                    : m.tipo_movimiento === "produccion_consumo" ? "Consumido"
                     : m.tipo_movimiento === "recepcion" ? "Recibido"
                     : m.tipo_movimiento === "merma" ? "Merma"
                     : m.tipo_movimiento === "ajuste" ? "Ajuste"
@@ -492,9 +494,9 @@ export default function IngredienteDetailPage() {
                     <div key={m.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${
-                          isPositive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                          esConteo ? "bg-blue-100 text-blue-700" : isPositive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                         }`}>
-                          {isPositive ? "+" : ""}{Math.round(m.cantidad * 100) / 100} {m.unidad}
+                          {esConteo ? "Conteo" : `${isPositive ? "+" : ""}${Math.round((m.cantidad ?? 0) * 100) / 100} ${m.unidad}`}
                         </span>
                         <span className="text-sm text-text">
                           {label}{para}

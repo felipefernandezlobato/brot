@@ -25,7 +25,7 @@ from app.schemas import (
 )
 from app.services.costes import costo_por_unidad_uso
 from app.services.produccion_registro import movimiento_no_revertido, nombre_origen_movimiento
-from app.services.stock import saldo_despues_por_movimiento
+from app.services.stock import conteos_manuales_movimientos, saldo_despues_por_movimiento
 
 router = APIRouter(prefix="/api/ingredientes", tags=["ingredientes"])
 
@@ -274,16 +274,25 @@ def get_movimientos_ingrediente(
     )
 
     saldos_vivos = saldo_despues_por_movimiento(db, "materia_prima", ing_id)
-    return [
+    movimientos = [
         {
             "id": m.id,
             "tipo_movimiento": m.tipo_movimiento,
             "cantidad": m.cantidad,
             "unidad": m.unidad,
-            "fecha": m.fecha,
+            "fecha": str(m.fecha),
             "referencia_origen": m.referencia_origen,
             "nombre_origen": nombre_origen_movimiento(db, m),
             "saldo_despues": saldos_vivos.get(m.id, m.saldo_despues),
         }
         for m in movs
     ]
+    conteos = conteos_manuales_movimientos(db, "materia_prima", ing_id, limit=10)
+    # A conteo represents the LAST event of its day (counted at closing, after
+    # that day's consumption/merma) -- within a tied date it must sort above
+    # the rest of that day's movements, not below.
+    return sorted(
+        movimientos + conteos,
+        key=lambda m: (m["fecha"], m["tipo_movimiento"] == "conteo_fisico"),
+        reverse=True,
+    )[:30]

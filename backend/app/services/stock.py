@@ -175,6 +175,7 @@ def conteos_manuales_movimientos(
                 "id": -r.id,
                 "tipo_movimiento": "conteo_fisico",
                 "cantidad": None,
+                "unidad": r.unidad,
                 "fecha": str(r.fecha_registro),
                 "referencia_origen": None,
                 "nombre_origen": None,
