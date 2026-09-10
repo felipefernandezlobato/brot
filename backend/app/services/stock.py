@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -208,6 +208,21 @@ def conteos_manuales_movimientos(
     return out
 
 
+def orden_visual_dia(tipo_movimiento: str) -> int:
+    """Tie-break rank for movements sharing a date in a newest-first activity
+    feed. A conteo_fisico is the LAST event of its day (counted at closing) so
+    it must sort above everything else that date; a carga_inicial is the
+    baseline that predates that date's real activity, so it must sort below
+    everything else. Ordinary movements (production, merma, entrega, consumo)
+    land in between, in whatever order the query already returned them.
+    """
+    if tipo_movimiento == "conteo_fisico":
+        return 2
+    if tipo_movimiento == "carga_inicial":
+        return 0
+    return 1
+
+
 def historial_movimientos_acumulado(
     db: Session,
     tipo_stock: str,
@@ -315,14 +330,25 @@ def saldo_despues_por_movimiento(db: Session, tipo_stock: str, referencia_produc
     Includes reversed (":rev"-tagged) movements in the replay -- needed for
     correct running math even though callers typically only display the
     non-reversed ones (see movimiento_no_revertido()).
+
+    A `carga_inicial` row represents the baseline that was already on the
+    shelf before that date's real activity, even when it's inserted (by a
+    reconciliation script, days or weeks later) with a higher id than a
+    same-day movement that was recorded first in wall-clock time. Ordering
+    same-day ties by id alone replays real consumption before the baseline
+    that was supposed to precede it, handing each movement the other one's
+    saldo_despues (found 2026-09-10 on Papa Deshidratada: a same-day
+    carga_inicial showed ~0 while its consumo showed strongly negative,
+    backwards from "loaded the baseline, then consumed some of it").
     """
+    carga_primero = case((MovimientoStock.tipo_movimiento == "carga_inicial", 0), else_=1)
     movs = (
         db.query(MovimientoStock)
         .filter(
             MovimientoStock.tipo_stock == tipo_stock,
             MovimientoStock.referencia_producto_id == referencia_producto_id,
         )
-        .order_by(MovimientoStock.fecha, MovimientoStock.id)
+        .order_by(MovimientoStock.fecha, carga_primero, MovimientoStock.id)
         .all()
     )
     anclas = sorted(

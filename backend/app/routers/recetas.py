@@ -14,6 +14,7 @@ from app.services.recetas_validacion import validar_lineas_receta
 from app.services.stock import (
     conteos_manuales_movimientos,
     historial_movimientos_acumulado,
+    orden_visual_dia,
     saldo_despues_por_movimiento,
 )
 
@@ -166,12 +167,9 @@ def get_receta_completo(
             .all()
         ]
         conteos = conteos_manuales_movimientos(db, "congelado", prod.id, limit=10)
-        # A conteo represents the LAST event of its day (counted at closing,
-        # after that day's mermas/entregas) -- within a tied date it must sort
-        # above the rest of that day's movements, not below.
         movimientos = sorted(
             movimientos + conteos,
-            key=lambda m: (m["fecha"], m["tipo_movimiento"] == "conteo_fisico"),
+            key=lambda m: (m["fecha"], orden_visual_dia(m["tipo_movimiento"])),
             reverse=True,
         )[:20]
 
