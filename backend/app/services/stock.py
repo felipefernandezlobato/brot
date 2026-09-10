@@ -209,32 +209,33 @@ def historial_movimientos_acumulado(
     result: dict[int, list[dict]] = {}
     for rid, day_map in by_id_date.items():
         anclas_rid = sorted(anclas.get(rid, {}).items())
+
+        # Checkpoints are every real movement date PLUS the day right after
+        # each count (2026-09-10 fix): resetting only on the next MOVEMENT
+        # date left a gap whenever that next movement was more than a day
+        # away -- e.g. a count on the 3rd with nothing moving again until
+        # the 5th showed the stale pre-count balance for the 4th too (the
+        # frontend's "latest point with fecha <= column" lookup has nothing
+        # closer to pick up), instead of the counted value. Adding the
+        # day-after-count date as its own checkpoint, even with zero
+        # movements that day, guarantees the reset is visible starting
+        # immediately the day after the count, not whenever the next
+        # unrelated movement happens to land.
+        checkpoints = set(day_map.keys())
+        for fecha_ancla, _ in anclas_rid:
+            siguiente = str(date.fromisoformat(fecha_ancla) + timedelta(days=1))
+            if siguiente <= referencia:
+                checkpoints.add(siguiente)
+
         ancla_idx = 0
         running = 0.0
         points = []
-        for fecha_str in sorted(day_map.keys()):
+        for fecha_str in sorted(checkpoints):
             while ancla_idx < len(anclas_rid) and anclas_rid[ancla_idx][0] < fecha_str:
                 running = anclas_rid[ancla_idx][1]
                 ancla_idx += 1
-            running += day_map[fecha_str]
+            running += day_map.get(fecha_str, 0.0)
             points.append({"fecha": fecha_str, "cantidad": round(running, 2)})
-
-        # A count dated after this item's last real movement never triggers
-        # the reset above -- that only fires while iterating a LATER movement
-        # date, and there isn't one, so the loop above never gets that far.
-        # Without this, "today" would show the stale pre-count balance
-        # indefinitely, which defeats the entire point of counting: nothing
-        # moved since, so today should just read what was counted. Emits one
-        # trailing point per still-unconsumed anchor, the day after each --
-        # the frontend's own lookup (valorCalculadoEnFecha in
-        # congelados/page.tsx and stock/page.tsx: latest point with fecha <=
-        # the displayed column) carries it forward to every later column.
-        while ancla_idx < len(anclas_rid) and anclas_rid[ancla_idx][0] < referencia:
-            fecha_ancla, running = anclas_rid[ancla_idx]
-            ancla_idx += 1
-            siguiente = str(date.fromisoformat(fecha_ancla) + timedelta(days=1))
-            if siguiente <= referencia:
-                points.append({"fecha": siguiente, "cantidad": round(running, 2)})
 
         result[rid] = points
     return result

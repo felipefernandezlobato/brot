@@ -290,7 +290,10 @@ def test_congelado_ancla_usa_cantidad_original_no_la_mutada_por_fifo(db):
 
     result = historial_movimientos_acumulado(db, "congelado", ids=[prod_id])
 
-    assert result[prod_id] == [{"fecha": "2026-08-05", "cantidad": 30.0}]
+    assert result[prod_id] == [
+        {"fecha": "2026-08-02", "cantidad": 50.0},
+        {"fecha": "2026-08-05", "cantidad": 30.0},
+    ]
 
 
 def test_congelado_ancla_no_duplica_con_multiples_consumos_posteriores(db):
@@ -313,6 +316,7 @@ def test_congelado_ancla_no_duplica_con_multiples_consumos_posteriores(db):
     result = historial_movimientos_acumulado(db, "congelado", ids=[prod_id])
 
     assert result[prod_id] == [
+        {"fecha": "2026-08-14", "cantidad": 141.0},
         {"fecha": "2026-08-15", "cantidad": 139.0},
         {"fecha": "2026-08-18", "cantidad": 134.0},
     ]
