@@ -58,7 +58,19 @@ interface CalculadoIngrediente {
   historial: CalculadoPunto[];
 }
 
-const DISCREPANCIA_TOLERANCIA = 0.5;
+const DISCREPANCIA_TOLERANCIA_PCT = 10;
+
+/** Percentage variation between calculado and contado, relative to whichever
+ * is nonzero (contado when available, since it's the physical ground truth
+ * being checked against). Differences under 0.005 are treated as zero so
+ * rounding noise invisible at formatCantidad's 2-decimal display doesn't
+ * paint a cell orange over nothing. */
+function discrepanciaPct(calc: number, val: number): number {
+  const diff = Math.abs(calc - val);
+  if (diff < 0.005) return 0;
+  const base = Math.abs(val) > 0 ? Math.abs(val) : Math.abs(calc);
+  return base > 0 ? (diff / base) * 100 : 0;
+}
 
 /** Latest calculated point with fecha <= the given date (points are sorted ascending). */
 function valorCalculadoEnFecha(puntos: CalculadoPunto[] | undefined, fecha: string): number | null {
@@ -1068,17 +1080,22 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                         const val = registro?.cantidad;
                         const calc = valorCalculadoEnFecha(calculado.get(ing.id), d);
                         const vacio = calc === null && val === undefined;
-                        const discrepa = calc !== null && val !== undefined && Math.abs(calc - val) > DISCREPANCIA_TOLERANCIA;
+                        const discrepaPct = calc !== null && val !== undefined ? discrepanciaPct(calc, val) : 0;
+                        const discrepaAlta = discrepaPct > DISCREPANCIA_TOLERANCIA_PCT;
+                        const discrepaMedia = discrepaPct > 0 && discrepaPct <= DISCREPANCIA_TOLERANCIA_PCT;
+                        const discrepa = discrepaAlta || discrepaMedia;
                         const isEditing = registro !== undefined && editando?.id === registro.id;
                         return (
                           <td
                             key={d}
-                            title={discrepa ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)}` : undefined}
+                            title={discrepa ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)} (${discrepaPct.toFixed(1)}%)` : undefined}
                             className={`group relative text-center px-2 py-1.5 tabular-nums ${
                               vacio
                                 ? "text-cream-dark"
-                                : discrepa
+                                : discrepaAlta
                                 ? "text-red-600 font-semibold bg-red-50"
+                                : discrepaMedia
+                                ? "text-orange-600 font-semibold bg-orange-50"
                                 : "text-text"
                             }`}
                           >
