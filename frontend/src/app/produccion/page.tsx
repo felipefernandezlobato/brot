@@ -553,7 +553,7 @@ export default function ProduccionHoy() {
       </div>
 
       {/* Day nav */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
         <button
           onClick={() => changeDay(-1)}
           className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-lg"
@@ -579,6 +579,18 @@ export default function ProduccionHoy() {
         >
           &rsaquo;
         </button>
+        <input
+          type="date"
+          value={fecha}
+          onChange={(e) => {
+            if (!e.target.value) return;
+            setFecha(e.target.value);
+            window.history.replaceState(null, "", `/produccion?fecha=${e.target.value}`);
+          }}
+          className="px-2 h-10 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#004225]/30"
+          style={{ touchAction: "manipulation" }}
+          title="Ir a una fecha especifica"
+        />
         <div className="ml-2">
           <p className="text-sm font-semibold text-gray-800">
             {data?.dia_nombre} {displayDate(fecha)}
