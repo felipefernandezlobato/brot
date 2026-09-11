@@ -442,3 +442,32 @@ def test_analytics_rejects_bad_date_range(client, db):
     token, _ = _setup(client, db)
     res = client.get("/api/produccion/analytics?desde=not-a-date&hasta=2024-01-05", headers=_headers(token))
     assert res.status_code == 400
+
+
+def test_analytics_surfaces_extras_on_days_with_no_plan(client, db):
+    """A day with zero scheduled TareaProduccion (e.g. an extra-only product
+    like Pizza/Pan Lomo) used to be missing from por_dia entirely, making it
+    look like nothing happened. It should now show up with its extra count
+    and logged minutes, without a misleading 0/0 completion ratio.
+    """
+    token, _ = _setup(client, db)
+    prod, receta, ing = _producto_con_receta(db)
+
+    client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod.id, "cantidad_producida": 5.0, "fecha": HOY.isoformat(), "duracion_real": 45},
+        headers=_headers(token),
+    )
+
+    res = client.get(
+        f"/api/produccion/analytics?desde={HOY.isoformat()}&hasta={HOY.isoformat()}",
+        headers=_headers(token),
+    )
+    assert res.status_code == 200
+    data = res.json()
+    dia = next((d for d in data["por_dia"] if d["fecha"] == HOY.isoformat()), None)
+    assert dia is not None
+    assert dia["planificadas"] == 0
+    assert dia["porcentaje"] is None
+    assert dia["extra_count"] == 1
+    assert dia["minutos_totales"] == 45

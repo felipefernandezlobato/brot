@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { formatDuracion } from "@/lib/format";
 import { useToast } from "@/components/Toast";
 
 interface TareaDia {
@@ -95,13 +96,6 @@ function isDomingo(iso: string): boolean {
   return new Date(iso + "T12:00:00").getDay() === 0;
 }
 
-function formatDuracionTotal(totalMin: number): string {
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (h === 0) return `${m} min`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
-}
 
 export default function ProduccionHoy() {
   const searchParams = useSearchParams();
@@ -597,7 +591,7 @@ export default function ProduccionHoy() {
           </p>
           <p className="text-xs text-gray-400">
             {completedCount}/{totalCount} completadas
-            {totalMinutos > 0 && ` · ${formatDuracionTotal(totalMinutos)}`}
+            {totalMinutos > 0 && ` · ${formatDuracion(totalMinutos)}`}
           </p>
         </div>
       </div>

@@ -2,7 +2,6 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -453,11 +452,14 @@ def get_analytics(
         .filter(
             RegistroProduccion.fecha >= d_desde,
             RegistroProduccion.fecha <= d_hasta,
-            RegistroProduccion.tarea_id != None,
         )
         .all()
     )
-    reg_set = {(r.tarea_id, r.fecha): r for r in registros}
+    reg_set = {(r.tarea_id, r.fecha): r for r in registros if r.tarea_id is not None}
+    extras_by_day: dict[date, list[RegistroProduccion]] = {}
+    for r in registros:
+        if r.tarea_id is None:
+            extras_by_day.setdefault(r.fecha, []).append(r)
 
     tareas_by_day: dict[int, list[TareaProduccion]] = {}
     all_tareas = (
@@ -478,6 +480,7 @@ def get_analytics(
         day_tareas = tareas_by_day.get(dow, [])
         day_planned = len(day_tareas)
         day_completed = 0
+        day_minutos = 0
 
         for t in day_tareas:
             reg = reg_set.get((t.id, d))
@@ -501,18 +504,35 @@ def get_analytics(
                 if reg.cantidad_real is not None:
                     tarea_stats[t.id]["cantidades"].append(reg.cantidad_real)
                 if reg.duracion_real is not None:
+                    day_minutos += reg.duracion_real
                     tarea_stats[t.id]["duraciones"].append(reg.duracion_real)
+
+        # Extras (tarea_id is None) never belong to the weekly plan, so they
+        # can't count toward completadas/planificadas -- but they're real
+        # work, and a day with no planned tasks completed used to look like
+        # "0 work done" even when e.g. Pizza/Pan Lomo (which by design have
+        # no TareaProduccion at all) got produced. day_extra_count only
+        # counts genuine production extras (mirrors the no_programada filter
+        # below); day_minutos folds in every extra's logged time, including
+        # pure time-log entries like "Limpieza".
+        day_extras = extras_by_day.get(d, [])
+        day_extra_count = sum(
+            1 for r in day_extras if r.producto_congelado_id is not None or r.receta_id is not None
+        )
+        day_minutos += sum(r.duracion_real or 0 for r in day_extras)
 
         total_planned += day_planned
         total_completed += day_completed
 
-        if day_planned > 0:
+        if day_planned > 0 or day_extras:
             por_dia.append({
                 "fecha": d.isoformat(),
                 "dia_nombre": DIAS.get(dow, ""),
                 "planificadas": day_planned,
                 "completadas": day_completed,
-                "porcentaje": round(day_completed / day_planned * 100, 1),
+                "porcentaje": round(day_completed / day_planned * 100, 1) if day_planned > 0 else None,
+                "extra_count": day_extra_count,
+                "minutos_totales": day_minutos if day_minutos > 0 else None,
             })
 
     por_tarea = []
@@ -527,19 +547,15 @@ def get_analytics(
     # "cumplimiento" (there's no plan entry to compare it against), but it's
     # real completed work and was invisible here entirely before, even
     # though it already affected stock via the normal producir_producto path.
-    no_programada = (
-        db.query(RegistroProduccion)
-        .filter(
-            RegistroProduccion.fecha >= d_desde,
-            RegistroProduccion.fecha <= d_hasta,
-            RegistroProduccion.tarea_id == None,
-            or_(
-                RegistroProduccion.producto_congelado_id != None,
-                RegistroProduccion.receta_id != None,
-            ),
-        )
-        .order_by(RegistroProduccion.fecha)
-        .all()
+    # Reuses extras_by_day (already fetched above) instead of a second query.
+    no_programada = sorted(
+        (
+            r
+            for regs in extras_by_day.values()
+            for r in regs
+            if r.producto_congelado_id is not None or r.receta_id is not None
+        ),
+        key=lambda r: r.fecha,
     )
 
     return {

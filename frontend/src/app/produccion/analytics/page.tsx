@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { formatDuracion } from "@/lib/format";
 import { useToast } from "@/components/Toast";
 
 /* ─── Types ────────────────────────────────────────────────────────── */
@@ -19,7 +20,9 @@ interface DiaStat {
   dia_nombre: string;
   planificadas: number;
   completadas: number;
-  porcentaje: number;
+  porcentaje: number | null;
+  extra_count: number;
+  minutos_totales: number | null;
 }
 
 interface TareaStat {
@@ -310,6 +313,7 @@ export default function ProduccionAnalytics() {
               </h2>
               <div className="space-y-2">
                 {data.por_dia.map((dia) => {
+                  const sinPlan = dia.planificadas === 0;
                   const pct = dia.planificadas > 0
                     ? (dia.completadas / dia.planificadas) * 100
                     : 0;
@@ -323,34 +327,57 @@ export default function ProduccionAnalytics() {
                         <p className="text-[10px] text-gray-400">
                           {displayDate(dia.fecha)}
                         </p>
+                        {dia.minutos_totales != null && (
+                          <p className="text-[10px] text-gray-500 font-medium">
+                            {formatDuracion(dia.minutos_totales)}
+                          </p>
+                        )}
                       </div>
 
-                      {/* Bar */}
-                      <div className="flex-1 h-7 bg-gray-100 rounded-md overflow-hidden relative">
-                        <div
-                          className="h-full bg-[#004225] rounded-md transition-all duration-300"
-                          style={{ width: `${Math.min(pct, 100)}%` }}
-                        />
-                        {/* Count overlay */}
-                        <span className="absolute inset-0 flex items-center px-2 text-xs font-medium">
-                          <span
-                            className={
-                              pct > 40 ? "text-white" : "text-gray-600"
-                            }
-                          >
-                            {dia.completadas}/{dia.planificadas}
+                      {/* Bar, or a "no plan" marker when nothing was scheduled that day */}
+                      {sinPlan ? (
+                        <div className="flex-1 h-7 bg-blue-50 border border-blue-100 rounded-md flex items-center px-2">
+                          <span className="text-xs font-medium text-blue-700">
+                            Sin tareas planificadas
                           </span>
-                        </span>
-                      </div>
+                        </div>
+                      ) : (
+                        <div className="flex-1 h-7 bg-gray-100 rounded-md overflow-hidden relative">
+                          <div
+                            className="h-full bg-[#004225] rounded-md transition-all duration-300"
+                            style={{ width: `${Math.min(pct, 100)}%` }}
+                          />
+                          {/* Count overlay */}
+                          <span className="absolute inset-0 flex items-center px-2 text-xs font-medium">
+                            <span
+                              className={
+                                pct > 40 ? "text-white" : "text-gray-600"
+                              }
+                            >
+                              {dia.completadas}/{dia.planificadas}
+                            </span>
+                          </span>
+                        </div>
+                      )}
 
-                      {/* Percentage */}
+                      {/* Percentage (not meaningful on a no-plan day) */}
                       <span
-                        className={`w-12 text-right text-sm font-semibold ${cumplimientoColor(
-                          dia.porcentaje
-                        )}`}
+                        className={`w-12 text-right text-sm font-semibold ${
+                          sinPlan ? "text-gray-300" : cumplimientoColor(dia.porcentaje ?? 0)
+                        }`}
                       >
-                        {dia.porcentaje.toFixed(0)}%
+                        {sinPlan ? "—" : `${(dia.porcentaje ?? 0).toFixed(0)}%`}
                       </span>
+
+                      {/* Extra production that day, outside the fixed plan
+                          (e.g. Pizza/Pan Lomo, which never have a scheduled
+                          tarea) -- without this a day like this looked like
+                          "0 work done" even when real production happened. */}
+                      {dia.extra_count > 0 && (
+                        <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                          +{dia.extra_count} extra
+                        </span>
+                      )}
                     </div>
                   );
                 })}
