@@ -457,7 +457,9 @@ def get_analytics(
     )
     reg_set = {(r.tarea_id, r.fecha): r for r in registros if r.tarea_id is not None}
     extras_by_day: dict[date, list[RegistroProduccion]] = {}
+    registros_by_day: dict[date, list[RegistroProduccion]] = {}
     for r in registros:
+        registros_by_day.setdefault(r.fecha, []).append(r)
         if r.tarea_id is None:
             extras_by_day.setdefault(r.fecha, []).append(r)
 
@@ -480,7 +482,6 @@ def get_analytics(
         day_tareas = tareas_by_day.get(dow, [])
         day_planned = len(day_tareas)
         day_completed = 0
-        day_minutos = 0
 
         for t in day_tareas:
             reg = reg_set.get((t.id, d))
@@ -504,7 +505,6 @@ def get_analytics(
                 if reg.cantidad_real is not None:
                     tarea_stats[t.id]["cantidades"].append(reg.cantidad_real)
                 if reg.duracion_real is not None:
-                    day_minutos += reg.duracion_real
                     tarea_stats[t.id]["duraciones"].append(reg.duracion_real)
 
         # Extras (tarea_id is None) never belong to the weekly plan, so they
@@ -513,18 +513,25 @@ def get_analytics(
         # "0 work done" even when e.g. Pizza/Pan Lomo (which by design have
         # no TareaProduccion at all) got produced. day_extra_count only
         # counts genuine production extras (mirrors the no_programada filter
-        # below); day_minutos folds in every extra's logged time, including
-        # pure time-log entries like "Limpieza".
+        # below).
         day_extras = extras_by_day.get(d, [])
         day_extra_count = sum(
             1 for r in day_extras if r.producto_congelado_id is not None or r.receta_id is not None
         )
-        day_minutos += sum(r.duracion_real or 0 for r in day_extras)
+
+        # Minutes worked that day come from EVERY completed registro, not
+        # just tipo="produccion" ones -- a task like "Guardar + Armar Pedido"
+        # (tipo="admin") still represents real logged time and was silently
+        # dropped when this only summed the day_tareas loop above (found
+        # 2026-09-11: a day with 170 real minutes showed 50, missing a
+        # 120-minute admin task with no production TareaProduccion at all).
+        dia_registros = registros_by_day.get(d, [])
+        day_minutos = sum(r.duracion_real or 0 for r in dia_registros if r.completada)
 
         total_planned += day_planned
         total_completed += day_completed
 
-        if day_planned > 0 or day_extras:
+        if day_planned > 0 or dia_registros:
             por_dia.append({
                 "fecha": d.isoformat(),
                 "dia_nombre": DIAS.get(dow, ""),

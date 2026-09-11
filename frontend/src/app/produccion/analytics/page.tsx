@@ -334,11 +334,17 @@ export default function ProduccionAnalytics() {
                         )}
                       </div>
 
-                      {/* Bar, or a "no plan" marker when nothing was scheduled that day */}
+                      {/* Bar, or a "no plan" marker when nothing was scheduled that day.
+                          Extra production outside the fixed plan (e.g. Pizza/Pan Lomo,
+                          which never have a scheduled tarea) shows inline in the bar
+                          itself -- without this a day like this looked like "0 work
+                          done" even when real production happened. */}
                       {sinPlan ? (
-                        <div className="flex-1 h-7 bg-blue-50 border border-blue-100 rounded-md flex items-center px-2">
-                          <span className="text-xs font-medium text-blue-700">
-                            Sin tareas planificadas
+                        <div className="flex-1 h-7 bg-blue-500 rounded-md flex items-center px-2">
+                          <span className="text-xs font-medium text-white">
+                            {dia.extra_count > 0
+                              ? `${dia.extra_count} produccion${dia.extra_count > 1 ? "es" : ""} extra`
+                              : "Sin tareas planificadas"}
                           </span>
                         </div>
                       ) : (
@@ -356,6 +362,11 @@ export default function ProduccionAnalytics() {
                             >
                               {dia.completadas}/{dia.planificadas}
                             </span>
+                            {dia.extra_count > 0 && (
+                              <span className="ml-1.5 text-blue-600 font-semibold">
+                                +{dia.extra_count} extra
+                              </span>
+                            )}
                           </span>
                         </div>
                       )}
@@ -368,16 +379,6 @@ export default function ProduccionAnalytics() {
                       >
                         {sinPlan ? "—" : `${(dia.porcentaje ?? 0).toFixed(0)}%`}
                       </span>
-
-                      {/* Extra production that day, outside the fixed plan
-                          (e.g. Pizza/Pan Lomo, which never have a scheduled
-                          tarea) -- without this a day like this looked like
-                          "0 work done" even when real production happened. */}
-                      {dia.extra_count > 0 && (
-                        <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">
-                          +{dia.extra_count} extra
-                        </span>
-                      )}
                     </div>
                   );
                 })}
