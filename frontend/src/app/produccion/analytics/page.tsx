@@ -348,27 +348,37 @@ export default function ProduccionAnalytics() {
                           </span>
                         </div>
                       ) : (
-                        <div className="flex-1 h-7 bg-gray-100 rounded-md overflow-hidden relative">
-                          <div
-                            className="h-full bg-[#004225] rounded-md transition-all duration-300"
-                            style={{ width: `${Math.min(pct, 100)}%` }}
-                          />
-                          {/* Count overlay */}
-                          <span className="absolute inset-0 flex items-center px-2 text-xs font-medium">
-                            <span
-                              className={
-                                pct > 40 ? "text-white" : "text-gray-600"
-                              }
+                        (() => {
+                          const greenPct = Math.min(pct, 100);
+                          const extraPct = dia.planificadas > 0 ? (dia.extra_count / dia.planificadas) * 100 : 0;
+                          const bluePct = Math.min(extraPct, 100 - greenPct);
+                          const label = dia.extra_count > 0
+                            ? `${dia.completadas}/${dia.planificadas} planificadas + ${dia.extra_count} extra${dia.extra_count > 1 ? "s" : ""}`
+                            : `${dia.completadas}/${dia.planificadas} planificadas`;
+                          return (
+                            <div
+                              className="flex-1 h-7 bg-gray-100 rounded-md overflow-hidden relative"
+                              title={label}
                             >
-                              {dia.completadas}/{dia.planificadas}
-                            </span>
-                            {dia.extra_count > 0 && (
-                              <span className="ml-1.5 text-blue-600 font-semibold">
-                                +{dia.extra_count} extra
+                              <div
+                                className="h-full bg-[#004225] absolute left-0 top-0 transition-all duration-300"
+                                style={{ width: `${greenPct}%` }}
+                              />
+                              {bluePct > 0 && (
+                                <div
+                                  className="h-full bg-blue-500 absolute top-0 transition-all duration-300"
+                                  style={{ left: `${greenPct}%`, width: `${bluePct}%` }}
+                                />
+                              )}
+                              {/* Count overlay */}
+                              <span className="absolute inset-0 flex items-center px-2 text-xs font-medium">
+                                <span className={greenPct > 40 ? "text-white" : "text-gray-600"}>
+                                  {dia.completadas}/{dia.planificadas}
+                                </span>
                               </span>
-                            )}
-                          </span>
-                        </div>
+                            </div>
+                          );
+                        })()
                       )}
 
                       {/* Percentage (not meaningful on a no-plan day) */}
