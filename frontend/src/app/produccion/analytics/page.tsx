@@ -366,13 +366,17 @@ export default function ProduccionAnalytics() {
                               />
                               {bluePct > 0 && (
                                 <div
-                                  className="h-full bg-blue-500 absolute top-0 transition-all duration-300"
+                                  className="h-full bg-blue-500 absolute top-0 transition-all duration-300 flex items-center justify-center"
                                   style={{ left: `${greenPct}%`, width: `${bluePct}%` }}
-                                />
+                                >
+                                  <span className="text-[10px] font-bold text-amber-300 whitespace-nowrap px-0.5">
+                                    +{dia.extra_count}
+                                  </span>
+                                </div>
                               )}
                               {/* Count overlay */}
                               <span className="absolute inset-0 flex items-center px-2 text-xs font-medium">
-                                <span className={greenPct > 40 ? "text-white" : "text-gray-600"}>
+                                <span className="text-white" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.35)" }}>
                                   {dia.completadas}/{dia.planificadas}
                                 </span>
                               </span>
