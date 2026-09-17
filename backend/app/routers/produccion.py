@@ -422,6 +422,97 @@ def delete_registro(
     return {"ok": True, "movimientos_revertidos": revertidos}
 
 
+# (registro terminado, receta de la masa, lotes amasados)
+_BARRAS_A_CORREGIR = [
+    (88, 47, 25.0 / 24.0),   # 2026-08-20, 25u Barra Blanca
+    (237, 47, 26.0 / 24.0),  # 2026-09-17, 26u Barra Blanca
+    (238, 48, 26.0 / 24.0),  # 2026-09-17, 26u Barra Negra
+]
+
+
+@router.post("/corregir-barras-masa")
+def corregir_barras_masa(
+    user: User = require_permission("produccion", "edit"),
+    db: Session = Depends(get_db),
+):
+    """One-off: reprocess the three barra productions logged under the old chain.
+
+    Until scripts/crear_masas_barra.py ran, Barra Blanca/Negra Cocinado hung off
+    Masa Pan Blanco/Negro while their recipes ALSO carried the full dough formula
+    as direct ingredient lines, so each production deducted both. The three
+    records already logged are wrong in two different ways:
+
+      * registro 88 (20/08, 25u Blanca) took 1.042u Masa Pan Blanco and no
+        ingredients at all -- at the time PC 18 had no receta_id yet, so the
+        flour for that batch was never deducted from Stock MP;
+      * registros 237/238 (17/09, 26u each) took the whole ingredient batch AND
+        1.083u of pan dough on top.
+
+    For each one this logs the amasado that actually happened that day as a
+    production extra of the new masa (which is what deducts the ingredients,
+    exactly once), then re-saves the terminado through revertir_efectos /
+    aplicar_efectos so it gives back the pan dough and consumes its own masa
+    instead. The amasado is booked at exactly what the barras consume
+    (cantidad / 24), which is the only quantity we can know after the fact --
+    it leaves the masa at 0 rather than inventing a yield.
+
+    Idempotent: skips a pair whose amasado record already exists.
+    """
+    resultado = {"corregidos": [], "omitidos": []}
+
+    for registro_id, masa_receta_id, lotes in _BARRAS_A_CORREGIR:
+        reg = db.query(RegistroProduccion).filter(RegistroProduccion.id == registro_id).first()
+        masa = db.query(Receta).filter(Receta.id == masa_receta_id).first()
+        if not reg or not masa:
+            resultado["omitidos"].append(f"registro {registro_id}: no encontrado")
+            continue
+
+        ya_existe = (
+            db.query(RegistroProduccion)
+            .filter(
+                RegistroProduccion.fecha == reg.fecha,
+                RegistroProduccion.receta_id == masa_receta_id,
+            )
+            .first()
+        )
+        if ya_existe:
+            resultado["omitidos"].append(
+                f"registro {registro_id}: {masa.nombre} del {reg.fecha} ya registrado"
+            )
+            continue
+
+        # The amasado first, so the terminado has its own masa to draw from.
+        amasado = RegistroProduccion(
+            tarea_id=None,
+            fecha=reg.fecha,
+            completada=True,
+            cantidad_real=lotes,  # not rounded: the masa must net to exactly 0
+            receta_id=masa_receta_id,
+            titulo_extra=masa.nombre,
+            notas="Amasado reconstruido al separar la masa de barra de Masa Pan Blanco/Negro",
+            registrado_por=user.id,
+        )
+        db.add(amasado)
+        db.flush()
+        movs_amasado = aplicar_efectos(db, amasado, user.id)
+
+        revertidos = revertir_efectos(db, reg, user.id)
+        movs_barra = aplicar_efectos(db, reg, user.id)
+
+        resultado["corregidos"].append({
+            "registro": registro_id,
+            "fecha": str(reg.fecha),
+            "masa": masa.nombre,
+            "lotes": round(lotes, 4),  # display only
+            "movimientos_amasado": movs_amasado,
+            "movimientos_revertidos": revertidos,
+            "movimientos_barra": movs_barra,
+        })
+
+    db.commit()
+    return resultado
+
+
 # ==============================================================
 # Analytics
 # ==============================================================
