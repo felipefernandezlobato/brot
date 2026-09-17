@@ -48,6 +48,15 @@ const ESTADO_CLASSES: Record<EstadoPedido, string> = {
   recibido: "bg-green-50 text-green-700",
 };
 
+/** Today as YYYY-MM-DD in LOCAL time (toISOString() would roll over to
+ *  tomorrow after 21:00 in Argentina, UTC-3). */
+function hoyISO(): string {
+  const d = new Date();
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
 function EstadoBadge({ estado }: { estado: EstadoPedido }) {
   return (
     <span
@@ -73,6 +82,7 @@ export default function PedidoDetailPage() {
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState<
     Record<number, string>
   >({});
+  const [fechaRecepcion, setFechaRecepcion] = useState(hoyISO());
   const [receiving, setReceiving] = useState(false);
 
   // Send action
@@ -114,6 +124,7 @@ export default function PedidoDetailPage() {
       initial[l.id] = String(l.cantidad_recibida ?? l.cantidad_pedida);
     });
     setCantidadesRecibidas(initial);
+    setFechaRecepcion(pedido.fecha_recepcion ?? hoyISO());
     setReceiveMode(true);
   };
 
@@ -135,6 +146,10 @@ export default function PedidoDetailPage() {
 
   const handleRecibir = async () => {
     if (!pedido) return;
+    if (!fechaRecepcion) {
+      toast("Indica la fecha en que llegó el pedido", "error");
+      return;
+    }
     setReceiving(true);
     try {
       const lineas = pedido.lineas.map((l) => ({
@@ -143,7 +158,7 @@ export default function PedidoDetailPage() {
       }));
       const updated = await apiFetch<PedidoOut>(`/api/pedidos/${id}/recibir`, {
         method: "POST",
-        body: JSON.stringify({ lineas }),
+        body: JSON.stringify({ lineas, fecha: fechaRecepcion }),
       });
       setPedido(updated);
       setReceiveMode(false);
@@ -367,6 +382,31 @@ export default function PedidoDetailPage() {
           </p>
         )}
       </div>
+
+      {/* Reception date — set at the moment of confirming, so a delivery
+          entered late lands on the day it actually arrived. */}
+      {receiveMode && (
+        <div className="bg-white rounded-xl p-5 shadow-sm mb-4">
+          <label
+            htmlFor="fecha-recepcion"
+            className="block text-xs text-warm-gray mb-1"
+          >
+            Fecha de recepción
+          </label>
+          <input
+            id="fecha-recepcion"
+            type="date"
+            value={fechaRecepcion}
+            max={hoyISO()}
+            onChange={(e) => setFechaRecepcion(e.target.value)}
+            className="w-full sm:w-56 border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+          />
+          <p className="text-xs text-warm-gray mt-2">
+            El día en que llegó el pedido. El stock y los movimientos se
+            registran con esta fecha.
+          </p>
+        </div>
+      )}
 
       {/* Line items */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
