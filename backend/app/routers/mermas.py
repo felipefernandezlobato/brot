@@ -19,7 +19,7 @@ from app.services.stock import (
 
 router = APIRouter(prefix="/api/mermas", tags=["mermas"])
 
-MOTIVOS_VALIDOS = {"caducado", "dañado", "produccion", "otro"}
+MOTIVOS_VALIDOS = {"caducado", "dañado", "produccion", "consumo_personal", "otro"}
 
 
 def _apply_date_filters(q, fecha_desde: Optional[date], fecha_hasta: Optional[date]):

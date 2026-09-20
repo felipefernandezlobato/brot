@@ -16,7 +16,12 @@ import {
   CartesianGrid,
 } from "recharts";
 
-type Motivo = "caducado" | "dañado" | "produccion" | "otro";
+type Motivo =
+  | "caducado"
+  | "dañado"
+  | "produccion"
+  | "consumo_personal"
+  | "otro";
 type Agrupacion = "semana" | "mes";
 
 interface PorMotivo {
@@ -56,6 +61,7 @@ const MOTIVO_LABELS: Record<Motivo, string> = {
   caducado: "Caducado",
   dañado: "Dañado",
   produccion: "Producción",
+  consumo_personal: "Consumo personal",
   otro: "Otro",
 };
 
@@ -63,6 +69,7 @@ const MOTIVO_COLORS: Record<Motivo, string> = {
   caducado: "bg-amber-400",
   dañado: "bg-red-500",
   produccion: "bg-blue-400",
+  consumo_personal: "bg-purple-400",
   otro: "bg-warm-gray",
 };
 
@@ -70,6 +77,7 @@ const MOTIVO_TEXT_COLORS: Record<Motivo, string> = {
   caducado: "text-amber-700",
   dañado: "text-red-700",
   produccion: "text-blue-700",
+  consumo_personal: "text-purple-700",
   otro: "text-warm-gray",
 };
 

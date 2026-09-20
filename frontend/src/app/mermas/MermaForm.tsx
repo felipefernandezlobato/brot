@@ -6,7 +6,12 @@ import { useToast } from "@/components/Toast";
 import { formatARS } from "@/lib/format";
 import { IngredientOrSubrecetaPicker, PickerOption } from "@/components/IngredientOrSubrecetaPicker";
 
-export type Motivo = "caducado" | "dañado" | "produccion" | "otro";
+export type Motivo =
+  | "caducado"
+  | "dañado"
+  | "produccion"
+  | "consumo_personal"
+  | "otro";
 
 interface Ingrediente {
   id: number;
@@ -27,6 +32,7 @@ const MOTIVOS: { value: Motivo; label: string }[] = [
   { value: "caducado", label: "Caducado" },
   { value: "dañado", label: "Dañado" },
   { value: "produccion", label: "Merma de produccion" },
+  { value: "consumo_personal", label: "Consumo personal" },
   { value: "otro", label: "Otro" },
 ];
 

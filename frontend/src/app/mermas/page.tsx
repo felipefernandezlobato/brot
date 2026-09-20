@@ -7,7 +7,12 @@ import { useToast } from "@/components/Toast";
 import { formatARS, formatDate } from "@/lib/format";
 import DateRangeShortcuts from "@/components/DateRangeShortcuts";
 
-type Motivo = "caducado" | "dañado" | "produccion" | "otro";
+type Motivo =
+  | "caducado"
+  | "dañado"
+  | "produccion"
+  | "consumo_personal"
+  | "otro";
 
 interface Merma {
   id: number;
@@ -33,6 +38,7 @@ const MOTIVO_LABELS: Record<Motivo, string> = {
   caducado: "Caducado",
   dañado: "Dañado",
   produccion: "Producción",
+  consumo_personal: "Consumo personal",
   otro: "Otro",
 };
 
@@ -40,6 +46,7 @@ const MOTIVO_COLORS: Record<Motivo, string> = {
   caducado: "bg-amber-100 text-amber-800",
   dañado: "bg-red-100 text-red-700",
   produccion: "bg-blue-100 text-blue-700",
+  consumo_personal: "bg-purple-100 text-purple-700",
   otro: "bg-gray-100 text-warm-gray",
 };
 
@@ -48,6 +55,7 @@ const MOTIVO_FILTERS: (Motivo | "todos")[] = [
   "caducado",
   "dañado",
   "produccion",
+  "consumo_personal",
   "otro",
 ];
 

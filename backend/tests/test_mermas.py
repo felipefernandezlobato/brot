@@ -110,6 +110,33 @@ def test_invalid_motivo_rejected(client, db):
     assert res.status_code == 422, res.text
 
 
+# ── test_consumo_personal ─────────────────────────────────────────────────────
+
+
+def test_consumo_personal_es_motivo_valido(client, db):
+    """Lo que se lleva el equipo no es merma de produccion ni "otro": tiene su
+    propio motivo para poder separarlo en el analisis."""
+    token, ing_id = _setup(client, db)
+    hdrs = {"Authorization": f"Bearer {token}"}
+
+    res = client.post(
+        "/api/mermas",
+        json={
+            "ingrediente_id": ing_id,
+            "cantidad": 130,
+            "unidad": "g",
+            "motivo": "consumo_personal",
+        },
+        headers=hdrs,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["motivo"] == "consumo_personal"
+
+    listado = client.get("/api/mermas?motivo=consumo_personal", headers=hdrs)
+    assert listado.status_code == 200
+    assert [m["motivo"] for m in listado.json()] == ["consumo_personal"]
+
+
 # ── test_list_mermas_filter_motivo ────────────────────────────────────────────
 
 
