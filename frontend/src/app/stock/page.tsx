@@ -896,6 +896,35 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
     }
   };
 
+  // Deleting a count also shifts every automatic row derived from it (see the
+  // DELETE endpoint's docstring), so it gets the same two-step gesture as
+  // editing: a trash click arms it, an explicit check confirms.
+  const [borrando, setBorrando] = useState<{ id: number } | null>(null);
+  const [savingDelete, setSavingDelete] = useState(false);
+
+  const confirmarBorrado = async () => {
+    if (!borrando) return;
+    setSavingDelete(true);
+    try {
+      const res = await apiFetch<{ registros_reajustados: number }>(
+        `/api/inventario/${borrando.id}`,
+        { method: "DELETE" },
+      );
+      const reajustados = res?.registros_reajustados ?? 0;
+      toast(
+        reajustados > 0
+          ? `Conteo borrado · ${reajustados} registro${reajustados !== 1 ? "s" : ""} posterior${reajustados !== 1 ? "es" : ""} reajustado${reajustados !== 1 ? "s" : ""}`
+          : "Conteo borrado",
+      );
+      setBorrando(null);
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Error al borrar el conteo", "error");
+    } finally {
+      setSavingDelete(false);
+    }
+  };
+
   const shortDate = (d: string) => {
     const dt = new Date(d + "T00:00:00");
     return dt.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
@@ -1085,6 +1114,7 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                         const discrepaMedia = discrepaPct > 0 && discrepaPct <= DISCREPANCIA_TOLERANCIA_PCT;
                         const discrepa = discrepaAlta || discrepaMedia;
                         const isEditing = registro !== undefined && editando?.id === registro.id;
+                        const isDeleting = registro !== undefined && borrando?.id === registro.id;
                         return (
                           <td
                             key={d}
@@ -1099,7 +1129,33 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                                 : "text-text"
                             }`}
                           >
-                            {isEditing ? (
+                            {isDeleting ? (
+                              <div
+                                className="flex items-center justify-center gap-1"
+                                onBlur={(e) => {
+                                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setBorrando(null);
+                                }}
+                              >
+                                <span className="text-xs text-warm-gray">¿Borrar?</span>
+                                <button
+                                  autoFocus
+                                  onClick={confirmarBorrado}
+                                  disabled={savingDelete}
+                                  title="Borrar este conteo"
+                                  className="text-red-600 hover:text-red-700 font-bold leading-none px-0.5 min-w-[16px]"
+                                >
+                                  ✓
+                                </button>
+                                <button
+                                  onClick={() => setBorrando(null)}
+                                  disabled={savingDelete}
+                                  title="Cancelar"
+                                  className="text-warm-gray hover:text-text font-bold leading-none px-0.5 min-w-[16px]"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : isEditing ? (
                               <div
                                 className="flex items-center justify-center gap-1"
                                 onBlur={(e) => {
@@ -1146,13 +1202,22 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                                   ? <>{formatCantidad(calc)}{val !== undefined && <span className="text-warm-gray font-normal"> ({formatCantidad(val)})</span>}</>
                                   : <span className="text-warm-gray font-normal">({formatCantidad(val!)})</span>}
                                 {registro && (
-                                  <button
-                                    onClick={() => iniciarEdicion(registro)}
-                                    title="Corregir este conteo"
-                                    className="hidden group-hover:inline-block ml-1 text-warm-gray hover:text-brot align-middle"
-                                  >
-                                    ✎
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => iniciarEdicion(registro)}
+                                      title="Corregir este conteo"
+                                      className="hidden group-hover:inline-block ml-1 text-warm-gray hover:text-brot align-middle"
+                                    >
+                                      ✎
+                                    </button>
+                                    <button
+                                      onClick={() => setBorrando({ id: registro.id })}
+                                      title="Borrar este conteo, como si nunca se hubiera contado"
+                                      className="hidden group-hover:inline-block ml-1 text-warm-gray hover:text-red-600 align-middle"
+                                    >
+                                      ✕
+                                    </button>
+                                  </>
                                 )}
                               </>
                             )}

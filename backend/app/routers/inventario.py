@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, tuple_ as sa_tuple
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -395,10 +395,66 @@ def delete_inventario(
     user: User = require_permission("stock", "delete"),
     db: Session = Depends(get_db),
 ):
-    """Delete an inventory record (admin / stock-delete permission required)."""
+    """Delete an inventory record, as if that count had never been taken.
+
+    Deleting the row alone is not enough. `InventarioRegistro` stores a running
+    TOTAL, not a delta: `deducir_materia_prima()` reads the latest row and
+    inserts a new one carrying `latest - consumo`. So every automatic row
+    written after a manual count was computed FROM that count -- drop the count
+    and those totals keep carrying its value, which is how a miscount survives
+    its own deletion (found on Azucar: a wrong 26.7 kg count on 17/09 left the
+    three production rows of 18/09 sitting ~16 kg low even after the count was
+    gone, while calculado re-anchored to the previous good count and moved on).
+
+    So the later rows get shifted by exactly what the deleted count introduced:
+    `previo - borrado`. The shift stops at the next manual count, which is an
+    independent absolute measurement -- it and everything anchored to it are
+    already correct and must not move.
+
+    MovimientoStock is deliberately untouched: a manual count never writes one,
+    and the consumption movements record amounts consumed (deltas), which are
+    unaffected by a wrong starting point. Their displayed running balance is
+    recomputed per request by saldo_despues_por_movimiento(), so it follows
+    along on its own.
+    """
     reg = db.query(InventarioRegistro).filter(InventarioRegistro.id == registro_id).first()
     if not reg:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    reajustados = 0
+    delta = 0.0
+    if es_conteo_manual("materia_prima", reg.notas):
+        orden = (InventarioRegistro.fecha_registro, InventarioRegistro.id)
+        previo = (
+            db.query(InventarioRegistro)
+            .filter(
+                InventarioRegistro.ingrediente_id == reg.ingrediente_id,
+                sa_tuple(*orden) < sa_tuple(reg.fecha_registro, reg.id),
+            )
+            .order_by(InventarioRegistro.fecha_registro.desc(), InventarioRegistro.id.desc())
+            .first()
+        )
+        posteriores = (
+            db.query(InventarioRegistro)
+            .filter(
+                InventarioRegistro.ingrediente_id == reg.ingrediente_id,
+                sa_tuple(*orden) > sa_tuple(reg.fecha_registro, reg.id),
+            )
+            .order_by(*orden)
+            .all()
+        )
+
+        # With no earlier row there is no trajectory to fall back to: the count
+        # WAS the starting point, so the rows after it are all there is. Leave
+        # them alone rather than invent a baseline.
+        if previo is not None:
+            delta = previo.cantidad - reg.cantidad
+            for posterior in posteriores:
+                if es_conteo_manual("materia_prima", posterior.notas):
+                    break
+                posterior.cantidad += delta
+                reajustados += 1
+
     db.delete(reg)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "registros_reajustados": reajustados, "delta": delta}
