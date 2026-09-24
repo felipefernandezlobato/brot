@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import { formatDate } from "@/lib/format";
+import { formatARS, formatDate } from "@/lib/format";
 
 interface ClienteB2B {
   id: number;
@@ -25,6 +25,7 @@ interface ProductoCatalogo {
   id: number;
   nombre: string;
   receta_id: number | null;
+  precio: number | null;
 }
 
 interface EntregaUnificada {
@@ -440,6 +441,7 @@ function TabCalendario({
 interface LineaForm {
   producto_id: number | null;
   cantidad: string;
+  precio: string;
 }
 
 function TabEntregas({
@@ -460,18 +462,47 @@ function TabEntregas({
   const [clienteId, setClienteId] = useState("");
   const [fecha, setFecha] = useState(() => new Date().toISOString().split("T")[0]);
   const [notas, setNotas] = useState("");
-  const [lineas, setLineas] = useState<LineaForm[]>([{ producto_id: null, cantidad: "" }]);
+  const [lineas, setLineas] = useState<LineaForm[]>([{ producto_id: null, cantidad: "", precio: "" }]);
 
-  const addLinea = () => setLineas((prev) => [...prev, { producto_id: null, cantidad: "" }]);
+  const addLinea = () => setLineas((prev) => [...prev, { producto_id: null, cantidad: "", precio: "" }]);
   const removeLinea = (idx: number) => setLineas((prev) => prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx));
   const updateLinea = (idx: number, field: keyof LineaForm, value: string | number | null) => {
     setLineas((prev) => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l));
   };
+
+  // Picking a product fills in its catalog PVP. Until this existed the form sent
+  // a hardcoded precio_unitario: 0 on every line, so 160 delivered lines (4.032
+  // units, 15/08-20/09) were invoiced at zero and every sales report read about
+  // a third of reality. The price stays editable for a genuine one-off, but it
+  // is never silently absent. An explicitly cleared price is left cleared.
+  const selectProducto = (idx: number, productoId: number | null) => {
+    const producto = productoId ? productos.find((p) => p.id === productoId) : null;
+    setLineas((prev) => prev.map((l, i) => i === idx
+      ? { ...l, producto_id: productoId, precio: producto?.precio ? String(producto.precio) : "" }
+      : l));
+  };
+
   const usedProductIds = new Set(lineas.map((l) => l.producto_id).filter(Boolean));
   const validLineas = lineas.filter((l) => l.producto_id && parseFloat(l.cantidad) > 0);
+  const precioDe = (l: LineaForm) => parseFloat(l.precio.replace(",", ".")) || 0;
+  const lineasSinPrecio = validLineas.filter((l) => precioDe(l) <= 0);
+  const totalEntrega = validLineas.reduce((acc, l) => acc + parseFloat(l.cantidad) * precioDe(l), 0);
 
   const submitEntrega = async () => {
     if (!clienteId || !fecha || validLineas.length === 0) return;
+
+    if (lineasSinPrecio.length > 0) {
+      const nombres = lineasSinPrecio
+        .map((l) => productos.find((p) => p.id === l.producto_id)?.nombre ?? "?")
+        .join(", ");
+      const ok = window.confirm(
+        `${lineasSinPrecio.length} producto${lineasSinPrecio.length !== 1 ? "s" : ""} sin precio (${nombres}).\n\n` +
+        "Se registrarán como entregados sin facturar y no aparecerán en las ventas. " +
+        "¿Es correcto?"
+      );
+      if (!ok) return;
+    }
+
     setSaving(true);
     try {
       await apiFetch("/api/entregas-b2b", {
@@ -484,7 +515,7 @@ function TabEntregas({
           lineas: validLineas.map((l) => ({
             producto_id: l.producto_id,
             cantidad: parseFloat(l.cantidad),
-            precio_unitario: 0,
+            precio_unitario: precioDe(l),
           })),
         }),
       });
@@ -492,7 +523,7 @@ function TabEntregas({
       setShowForm(false);
       setClienteId("");
       setNotas("");
-      setLineas([{ producto_id: null, cantidad: "" }]);
+      setLineas([{ producto_id: null, cantidad: "", precio: "" }]);
       onReload();
     } catch {
       toast("Error al crear entrega", "error");
@@ -571,7 +602,7 @@ function TabEntregas({
             <div className="space-y-2">
               {lineas.map((l, idx) => (
                 <div key={idx} className="flex gap-2 items-center">
-                  <select value={l.producto_id ?? ""} onChange={(e) => updateLinea(idx, "producto_id", e.target.value ? parseInt(e.target.value) : null)}
+                  <select value={l.producto_id ?? ""} onChange={(e) => selectProducto(idx, e.target.value ? parseInt(e.target.value) : null)}
                     className="flex-1 px-3 py-2.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]">
                     <option value="">Producto...</option>
                     {productos.map((p) => <option key={p.id} value={p.id} disabled={usedProductIds.has(p.id) && l.producto_id !== p.id}>{p.nombre}</option>)}
@@ -579,12 +610,32 @@ function TabEntregas({
                   <input type="text" inputMode="decimal" placeholder="Cant." value={l.cantidad}
                     onChange={(e) => updateLinea(idx, "cantidad", e.target.value.replace(",", "."))}
                     className="w-20 px-3 py-2.5 border border-cream-dark rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] tabular-nums" />
+                  <input type="text" inputMode="decimal" placeholder="Precio" value={l.precio}
+                    onChange={(e) => updateLinea(idx, "precio", e.target.value.replace(",", "."))}
+                    title="Precio unitario. Se rellena solo con el PVP del catalogo."
+                    className={`w-24 px-3 py-2.5 border rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] tabular-nums ${
+                      l.producto_id && parseFloat(l.cantidad) > 0 && precioDe(l) <= 0
+                        ? "border-amber-400 bg-amber-50"
+                        : "border-cream-dark"
+                    }`} />
                   <button onClick={() => removeLinea(idx)} disabled={lineas.length <= 1}
                     className="p-2 text-warm-gray hover:text-red-500 transition-colors disabled:opacity-30 min-h-[44px] min-w-[44px] flex items-center justify-center">x</button>
                 </div>
               ))}
             </div>
-            <button onClick={addLinea} className="mt-2 text-sm text-brot hover:text-brot-dark transition-colors">+ Agregar producto</button>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <button onClick={addLinea} className="text-sm text-brot hover:text-brot-dark transition-colors">+ Agregar producto</button>
+              {validLineas.length > 0 && (
+                <span className="text-sm text-text tabular-nums">
+                  Total: <span className="font-medium">{formatARS(totalEntrega)}</span>
+                </span>
+              )}
+            </div>
+            {lineasSinPrecio.length > 0 && (
+              <p className="mt-2 text-xs text-amber-700">
+                {lineasSinPrecio.length} producto{lineasSinPrecio.length !== 1 ? "s" : ""} sin precio: se entregan sin facturar y no cuentan en las ventas.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-warm-gray mb-1">Notas (opcional)</label>
