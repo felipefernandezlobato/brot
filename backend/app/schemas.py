@@ -881,6 +881,7 @@ class LineaPedidoClienteOut(BaseModel):
     cantidad: float
     precio_unitario_snapshot: float
     subtotal: float
+    producto_nombre: Optional[str] = None
 
 
 class PedidoClienteOut(BaseModel):
@@ -893,6 +894,10 @@ class PedidoClienteOut(BaseModel):
     total: float
     pedido_recurrente_id: Optional[int] = None
     lineas: list[LineaPedidoClienteOut] = []
+    # "portal" = lo pidio el cliente desde la web; "entrega" = se la cargo el
+    # obrador como EntregaB2B. Los ids de las dos tablas se solapan, asi que el
+    # front tiene que combinar origen+id como clave.
+    origen: str = "portal"
 
 
 # ============================================================

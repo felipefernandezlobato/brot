@@ -6,7 +6,14 @@ from datetime import date, timedelta
 from app.auth import hash_pin
 from app.main import app
 from app.models import User
-from app.routers import catalogo, catalogo_admin, pedidos_clientes, pedidos_clientes_admin, recurrentes
+from app.routers import (
+    catalogo,
+    catalogo_admin,
+    entregas_b2b,
+    pedidos_clientes,
+    pedidos_clientes_admin,
+    recurrentes,
+)
 
 # Ensure routers are mounted (already in main.py; explicit for clarity)
 app.include_router(catalogo.router)
@@ -14,6 +21,7 @@ app.include_router(catalogo_admin.router)
 app.include_router(pedidos_clientes.router)
 app.include_router(pedidos_clientes_admin.router)
 app.include_router(recurrentes.router)
+app.include_router(entregas_b2b.router)
 
 
 # ---------------------------------------------------------------------------
@@ -312,3 +320,109 @@ def test_recurring_order_list_and_deactivate(client, db):
     )
     assert del_res.status_code == 200
     assert del_res.json()["activo"] is False
+
+
+# ---------------------------------------------------------------------------
+# Entregas B2B en el historial del cliente
+# ---------------------------------------------------------------------------
+
+def _crear_entrega_b2b(client, admin_token, cliente_id, producto_id, cantidad, precio, fecha):
+    res = client.post(
+        "/api/entregas-b2b",
+        json={
+            "cliente_b2b_id": cliente_id,
+            "fecha_entrega": fecha,
+            "estado": "pendiente",
+            "lineas": [
+                {"producto_id": producto_id, "cantidad": cantidad, "precio_unitario": precio}
+            ],
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert res.status_code == 201, res.text
+    return res.json()
+
+
+def test_cliente_ve_sus_entregas_b2b(client, db):
+    """El obrador carga las entregas de un cliente B2B como EntregaB2B, no como
+    PedidoCliente. Con pedidos_clientes vacia, "Mis Pedidos" salia vacio aunque
+    el cliente llevara doce entregas."""
+    admin_tok = _admin_token(client, db)
+    producto = _create_catalog_product(client, admin_tok, precio=100.0)
+    tok = _register_and_login_cliente(client, email="olula@test.com", nombre="Olula")
+
+    me = client.get("/api/auth/cliente/me", headers={"Authorization": f"Bearer {tok}"})
+    cliente_id = me.json()["id"]
+
+    _crear_entrega_b2b(client, admin_tok, cliente_id, producto["id"], 12, 100.0, NEXT_WEDNESDAY)
+
+    res = client.get("/api/cliente/pedidos", headers={"Authorization": f"Bearer {tok}"})
+    assert res.status_code == 200, res.text
+    historial = res.json()
+    assert len(historial) == 1
+
+    entrega = historial[0]
+    assert entrega["origen"] == "entrega"
+    assert entrega["fecha_entrega"] == NEXT_WEDNESDAY
+    assert entrega["total"] == 1200.0
+    assert entrega["lineas"][0]["cantidad"] == 12
+    assert entrega["lineas"][0]["subtotal"] == 1200.0
+    assert entrega["lineas"][0]["producto_nombre"] == producto["nombre"]
+
+
+def test_historial_mezcla_pedidos_y_entregas(client, db):
+    admin_tok = _admin_token(client, db)
+    producto = _create_catalog_product(client, admin_tok, precio=100.0)
+    tok = _register_and_login_cliente(client, email="mixto@test.com")
+    cliente_id = client.get("/api/auth/cliente/me",
+                            headers={"Authorization": f"Bearer {tok}"}).json()["id"]
+
+    client.post(
+        "/api/cliente/pedidos",
+        json={"fecha_entrega": NEXT_WEDNESDAY, "lineas": [{"producto_id": producto["id"], "cantidad": 1}]},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    _crear_entrega_b2b(client, admin_tok, cliente_id, producto["id"], 5, 100.0, NEXT_SATURDAY)
+
+    res = client.get("/api/cliente/pedidos", headers={"Authorization": f"Bearer {tok}"})
+    historial = res.json()
+    assert len(historial) == 2
+    assert {p["origen"] for p in historial} == {"portal", "entrega"}
+    # Mas reciente primero, sean del origen que sean. Cual de los dos dias cae
+    # antes depende del dia de la semana en que corran los tests, asi que se
+    # comprueba el orden, no una fecha concreta.
+    assert historial[0]["fecha_entrega"] > historial[1]["fecha_entrega"]
+    assert {p["fecha_entrega"] for p in historial} == {NEXT_WEDNESDAY, NEXT_SATURDAY}
+    # Los ids de las dos tablas se solapan, por eso el front necesita origen+id.
+    assert all("origen" in p for p in historial)
+
+
+def test_las_entregas_de_otro_cliente_no_se_ven(client, db):
+    admin_tok = _admin_token(client, db)
+    producto = _create_catalog_product(client, admin_tok, precio=100.0)
+    tok_a = _register_and_login_cliente(client, email="uno@test.com")
+    tok_b = _register_and_login_cliente(client, email="dos@test.com")
+    cliente_a = client.get("/api/auth/cliente/me",
+                           headers={"Authorization": f"Bearer {tok_a}"}).json()["id"]
+
+    _crear_entrega_b2b(client, admin_tok, cliente_a, producto["id"], 3, 100.0, NEXT_WEDNESDAY)
+
+    res = client.get("/api/cliente/pedidos", headers={"Authorization": f"Bearer {tok_b}"})
+    assert res.json() == []
+
+
+def test_los_pedidos_del_portal_llevan_nombre_de_producto(client, db):
+    """Antes el detalle mostraba 'Producto #4' porque la linea no traia nombre."""
+    admin_tok = _admin_token(client, db)
+    producto = _create_catalog_product(client, admin_tok, nombre="Croissant", precio=100.0)
+    tok = _register_and_login_cliente(client, email="nombres@test.com")
+
+    client.post(
+        "/api/cliente/pedidos",
+        json={"fecha_entrega": NEXT_WEDNESDAY, "lineas": [{"producto_id": producto["id"], "cantidad": 2}]},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+
+    res = client.get("/api/cliente/pedidos", headers={"Authorization": f"Bearer {tok}"})
+    assert res.json()[0]["lineas"][0]["producto_nombre"] == "Croissant"
+    assert res.json()[0]["origen"] == "portal"

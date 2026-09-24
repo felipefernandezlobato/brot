@@ -16,6 +16,7 @@ interface LineaPedido {
   cantidad: number;
   precio_unitario_snapshot: number;
   subtotal: number;
+  producto_nombre: string | null;
 }
 
 interface Pedido {
@@ -28,7 +29,12 @@ interface Pedido {
   total: number;
   pedido_recurrente_id: number | null;
   lineas: LineaPedido[];
+  // "portal" lo pidió el cliente; "entrega" la cargó el obrador. Los ids de las
+  // dos tablas se solapan, así que la clave de React combina las dos cosas.
+  origen: "portal" | "entrega";
 }
+
+const pedidoKey = (p: Pedido) => `${p.origen}-${p.id}`;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -97,7 +103,7 @@ function MisPedidosList({ cliente }: { cliente: Cliente }) {
   const { toast } = useToast();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     apiClienteFetch<Pedido[]>("/api/cliente/pedidos")
@@ -129,18 +135,17 @@ function MisPedidosList({ cliente }: { cliente: Cliente }) {
         ) : (
           <div className="space-y-3">
             {pedidos.map((pedido) => {
-              const expanded = expandedId === pedido.id;
+              const key = pedidoKey(pedido);
+              const expanded = expandedId === key;
               return (
                 <div
-                  key={pedido.id}
+                  key={key}
                   className="bg-white rounded-xl border border-cream-dark overflow-hidden"
                 >
                   {/* Header row */}
                   <button
                     className="w-full text-left px-4 py-4 flex items-start justify-between gap-3 hover:bg-cream/30 transition-colors"
-                    onClick={() =>
-                      setExpandedId(expanded ? null : pedido.id)
-                    }
+                    onClick={() => setExpandedId(expanded ? null : key)}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -148,6 +153,11 @@ function MisPedidosList({ cliente }: { cliente: Cliente }) {
                         <span className="text-xs text-warm-gray">
                           #{pedido.id}
                         </span>
+                        {pedido.origen === "entrega" && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cream-dark text-warm-gray">
+                            Entrega del obrador
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-text font-medium capitalize">
                         Entrega: {formatDate(pedido.fecha_entrega)}
@@ -172,7 +182,8 @@ function MisPedidosList({ cliente }: { cliente: Cliente }) {
                           className="flex items-center justify-between py-2 text-sm gap-3"
                         >
                           <span className="text-text flex-1">
-                            {linea.cantidad}× Producto #{linea.producto_id}
+                            {linea.cantidad}×{" "}
+                            {linea.producto_nombre ?? `Producto #${linea.producto_id}`}
                           </span>
                           <span className="text-warm-gray shrink-0">
                             {formatPrice(linea.subtotal)}
