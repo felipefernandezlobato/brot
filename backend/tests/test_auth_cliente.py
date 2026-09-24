@@ -64,3 +64,51 @@ def test_cliente_me(client):
     res = client.get("/api/auth/cliente/me", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
     assert res.json()["nombre"] == "Juan"
+
+
+# ── Email sin distinguir mayusculas ───────────────────────────────────────────
+
+
+def test_login_ignora_mayusculas(client):
+    """El teclado del movil capitaliza la primera letra: un cliente registrado
+    como Lisetteolula@gmail.com no podia entrar escribiendo lisetteolula@..."""
+    client.post("/api/auth/cliente/registro", json={
+        "email": "Lisetteolula@gmail.com", "password": "secreto123", "nombre": "Lisette"
+    })
+
+    for intento in ("lisetteolula@gmail.com", "LISETTEOLULA@GMAIL.COM",
+                    "Lisetteolula@Gmail.com", "  lisetteolula@gmail.com  "):
+        res = client.post("/api/auth/cliente/login",
+                          json={"email": intento, "password": "secreto123"})
+        assert res.status_code == 200, f"fallo con {intento!r}: {res.text}"
+        assert res.json()["token"]
+
+
+def test_registro_guarda_el_email_normalizado(client):
+    res = client.post("/api/auth/cliente/registro", json={
+        "email": "  Lisetteolula@Gmail.com  ", "password": "secreto123", "nombre": "Lisette"
+    })
+    assert res.status_code == 201
+    token = res.json()["token"]
+    me = client.get("/api/auth/cliente/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.json()["email"] == "lisetteolula@gmail.com"
+
+
+def test_no_se_puede_duplicar_cambiando_mayusculas(client):
+    client.post("/api/auth/cliente/registro", json={
+        "email": "lisette@gmail.com", "password": "abc", "nombre": "A"
+    })
+    res = client.post("/api/auth/cliente/registro", json={
+        "email": "Lisette@Gmail.com", "password": "def", "nombre": "B"
+    })
+    assert res.status_code == 409
+
+
+def test_password_sigue_distinguiendo_mayusculas(client):
+    """Normalizar el email no debe aflojar la contrasena."""
+    client.post("/api/auth/cliente/registro", json={
+        "email": "test2@example.com", "password": "Secreto123", "nombre": "A"
+    })
+    res = client.post("/api/auth/cliente/login",
+                      json={"email": "test2@example.com", "password": "secreto123"})
+    assert res.status_code == 401

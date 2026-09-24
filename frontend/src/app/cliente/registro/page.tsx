@@ -90,6 +90,10 @@ export default function ClienteRegistroPage() {
               name="email"
               type="email"
               autoComplete="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
               value={form.email}
               onChange={handleChange}

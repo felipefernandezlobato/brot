@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth_cliente import create_cliente_token, get_current_cliente, hash_password, verify_password
@@ -11,13 +12,28 @@ from app.schemas import ClienteLogin, ClienteOut, ClienteRegistro, TokenResponse
 router = APIRouter(prefix="/api/auth/cliente", tags=["auth-cliente"])
 
 
+def normalizar_email(email: str) -> str:
+    """Emails are case-insensitive in practice, and phone keyboards capitalise the
+    first letter by default. A customer registered as "Lisetteolula@gmail.com"
+    could not log in typing "lisetteolula@gmail.com" -- the lookup was an exact
+    `==`. Both sides get trimmed and lowercased now; stored emails are written
+    normalised so the comparison stays cheap and any future exact match is safe.
+    """
+    return email.strip().lower()
+
+
 @router.post("/registro", response_model=TokenResponse, status_code=201)
 def registrar(data: ClienteRegistro, db: Session = Depends(get_db)):
-    existing = db.query(ClienteB2B).filter(ClienteB2B.email == data.email).first()
+    email = normalizar_email(data.email)
+    existing = (
+        db.query(ClienteB2B)
+        .filter(func.lower(func.trim(ClienteB2B.email)) == email)
+        .first()
+    )
     if existing:
         raise HTTPException(status_code=409, detail="Email ya registrado")
     cliente = ClienteB2B(
-        email=data.email,
+        email=email,
         password_hash=hash_password(data.password),
         nombre=data.nombre,
         telefono=data.telefono,
@@ -35,7 +51,7 @@ def login(data: ClienteLogin, db: Session = Depends(get_db)):
     cliente = (
         db.query(ClienteB2B)
         .filter(
-            ClienteB2B.email == data.email,
+            func.lower(func.trim(ClienteB2B.email)) == normalizar_email(data.email),
             ClienteB2B.is_active == True,
             ClienteB2B.password_hash.isnot(None),
         )
