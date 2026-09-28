@@ -11,7 +11,12 @@ from app.models import Ingrediente, InventarioRegistro, LineaPedido, Pedido, Use
 from app.permissions import require_permission
 from app.schemas import InventarioRegistroCreate, InventarioRegistroOut, InventarioRegistroUpdate
 from app.services.conversiones import convertir
-from app.services.stock import ajustar_correccion_conteo, es_conteo_manual, historial_movimientos_acumulado
+from app.services.stock import (
+    ajustar_correccion_conteo,
+    es_conteo_manual,
+    get_saldos_materia_prima,
+    historial_movimientos_acumulado,
+)
 
 router = APIRouter(prefix="/api/inventario", tags=["inventario"])
 
@@ -65,31 +70,48 @@ def get_alertas(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return active ingredients with zero stock or no inventory records at all."""
-    ingredientes = db.query(Ingrediente).filter(Ingrediente.activo == True).all()
+    """Return active ingredients at or below zero stock, or with nothing recorded.
 
-    subq = _latest_subquery(db)
-    latest = (
-        db.query(InventarioRegistro)
-        .join(subq, InventarioRegistro.id == subq.c.max_id)
+    Quantities come from the ledger (get_saldos_materia_prima), not the stored
+    snapshot -- see that function for why. Negative counts as sin_stock, not
+    just exactly zero: stock is allowed to go negative on purpose here, and a
+    negative balance is a stronger signal than an empty one (something -- a
+    delivery, a production run -- never got recorded).
+    """
+    ingredientes = db.query(Ingrediente).filter(Ingrediente.activo == True).all()
+    saldos = get_saldos_materia_prima(db, [ing.id for ing in ingredientes])
+
+    # Only the date, for the "Ultimo registro" line on the card -- which row it
+    # came from no longer matters, so this needs no (fecha, id) tie-break.
+    ultima_fecha = dict(
+        db.query(
+            InventarioRegistro.ingrediente_id,
+            func.max(InventarioRegistro.fecha_registro),
+        )
+        .group_by(InventarioRegistro.ingrediente_id)
         .all()
     )
-    latest_by_ing = {r.ingrediente_id: r for r in latest}
 
     alertas = []
     for ing in ingredientes:
-        reg = latest_by_ing.get(ing.id)
-        if reg is None or reg.cantidad == 0:
-            alertas.append(
-                {
-                    "ingrediente_id": ing.id,
-                    "ingrediente_nombre": ing.nombre,
-                    "cantidad": reg.cantidad if reg else None,
-                    "unidad": reg.unidad if reg else ing.unidad_uso,
-                    "fecha_registro": str(reg.fecha_registro) if reg else None,
-                    "alerta": "sin_stock" if (reg and reg.cantidad == 0) else "sin_registro",
-                }
-            )
+        saldo = saldos.get(ing.id)
+        if saldo is not None and saldo > 0:
+            continue
+        fecha_registro = ultima_fecha.get(ing.id)
+        alertas.append(
+            {
+                "ingrediente_id": ing.id,
+                "ingrediente_nombre": ing.nombre,
+                "cantidad": saldo,
+                # The ledger is always written in unidad_uso, and the quantity
+                # above now comes from it -- reading a submitted reg.unidad here
+                # could pair the number with a different unit (POST does not
+                # normalize it the way PUT does).
+                "unidad": ing.unidad_uso,
+                "fecha_registro": str(fecha_registro) if fecha_registro else None,
+                "alerta": "sin_stock" if saldo is not None else "sin_registro",
+            }
+        )
     return alertas
 
 
@@ -98,7 +120,13 @@ def get_stock_actual(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return the most recent inventory record per ingredient (current stock snapshot)."""
+    """Return the most recent inventory record per ingredient (current stock snapshot).
+
+    Deliberately the stored rows, not the ledger balance /alertas and
+    /recomendacion report: this endpoint exists to hand the historial/edit UI
+    the actual InventarioRegistro records (id, notas, fecha), so it has to be
+    the rows themselves. The two can disagree -- see get_saldos_materia_prima.
+    """
     subq = _latest_subquery(db)
     registros = (
         db.query(InventarioRegistro)
@@ -174,13 +202,10 @@ def recomendacion_pedido(
     Consumption estimated from inventory record differences over last 8 weeks.
     """
     ingredientes = db.query(Ingrediente).filter(Ingrediente.activo.is_(True)).all()
-    subq = _latest_subquery(db)
-    latest_regs = (
-        db.query(InventarioRegistro)
-        .join(subq, InventarioRegistro.id == subq.c.max_id)
-        .all()
-    )
-    stock_map = {r.ingrediente_id: r.cantidad for r in latest_regs}
+    # Ledger-backed (see get_saldos_materia_prima). The consumption estimate
+    # below still walks the snapshots -- a separate, known overestimate, left
+    # alone on purpose.
+    stock_map = get_saldos_materia_prima(db, [ing.id for ing in ingredientes])
 
     # Estimate weekly consumption from last 8 weeks of inventory data
     hace_8_semanas = date.today() - timedelta(weeks=8)

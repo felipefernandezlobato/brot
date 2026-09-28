@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from app.main import app
 from app.routers.inventario import router
@@ -6,7 +6,12 @@ from app.routers.inventario import router
 app.include_router(router)
 
 from app.auth import hash_pin
-from app.models import Categoria, Ingrediente, MovimientoStock, User
+from app.models import Categoria, Ingrediente, InventarioRegistro, MovimientoStock, User
+from app.services.stock import (
+    deducir_materia_prima,
+    get_saldo_materia_prima,
+    get_saldos_materia_prima,
+)
 
 
 def _setup(client, db):
@@ -175,3 +180,124 @@ def test_calculado_sin_movimientos_no_aparece(client, db):
     assert res.status_code == 200
     ids = [i["ingrediente_id"] for i in res.json()["ingredientes"]]
     assert ing_id not in ids
+
+
+def _con_consumo_backdateado(db, ing_id):
+    """A 100 g count, then a 28/09-dated consumption, then a 25/09-dated one
+    saved after it -- the production shape that breaks the stored chain."""
+    db.add(InventarioRegistro(
+        ingrediente_id=ing_id, cantidad=100.0, unidad="g",
+        fecha_registro=date(2026, 9, 24),
+    ))
+    db.commit()
+    deducir_materia_prima(db, ing_id, 10, "g", "registro_produccion:1", fecha=date(2026, 9, 28))
+    # Backdated: saved later, but dated before the row above.
+    deducir_materia_prima(db, ing_id, 20, "g", "registro_produccion:2", fecha=date(2026, 9, 25))
+    db.commit()
+
+
+def test_saldos_materia_prima_ve_el_consumo_backdateado(client, db):
+    """A production logged for an earlier date AFTER a later-dated one already
+    exists never becomes the tip of the InventarioRegistro chain, so the stored
+    total silently misses it (found 2026-09-28 on six ingredients). The
+    ledger-backed read has no such ordering dependency and must still see it.
+    """
+    _token, ing_id = _setup(client, db)
+    _con_consumo_backdateado(db, ing_id)
+
+    # The write-path read is stale by exactly the backdated consumption.
+    assert get_saldo_materia_prima(db, ing_id) == 90.0
+    assert get_saldos_materia_prima(db, [ing_id])[ing_id] == 70.0
+
+
+def test_alertas_marca_stock_negativo(client, db):
+    """Negative stock is a real signal here (something never got recorded), so
+    it must alert -- the old `cantidad == 0` check only ever fired on exactly
+    zero, so a negative balance was reported as the milder sin_registro (or,
+    with a stored row present, not at all)."""
+    token, ing_id = _setup(client, db)
+    db.add(MovimientoStock(
+        tipo_stock="materia_prima", referencia_producto_id=ing_id,
+        cantidad=-5.0, unidad="g", tipo_movimiento="produccion_consumo",
+        fecha=date(2026, 9, 25),
+    ))
+    db.commit()
+
+    res = client.get("/api/inventario/alertas", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body) == 1
+    assert body[0]["ingrediente_id"] == ing_id
+    assert body[0]["alerta"] == "sin_stock"
+    assert body[0]["cantidad"] == -5.0
+
+
+def test_alertas_sin_registro_cuando_no_hay_nada(client, db):
+    """No ledger movement and no count at all stays sin_registro, not sin_stock."""
+    token, ing_id = _setup(client, db)
+
+    res = client.get("/api/inventario/alertas", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body) == 1
+    assert body[0]["ingrediente_id"] == ing_id
+    assert body[0]["alerta"] == "sin_registro"
+    assert body[0]["cantidad"] is None
+
+
+def test_alertas_usa_el_conteo_cuando_no_hay_ledger(client, db):
+    """An ingredient counted but never produced with has no ledger points at
+    all; it falls back to its last count, so a positive one is not an alert."""
+    token, ing_id = _setup(client, db)
+    client.post(
+        "/api/inventario",
+        json=[{"ingrediente_id": ing_id, "cantidad": 5.0, "unidad": "kg"}],
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    res = client.get("/api/inventario/alertas", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_recomendacion_usa_el_saldo_del_ledger(client, db):
+    """The stock the par level gets compared against is the ledger balance,
+    not the stale (high) stored total."""
+    token, ing_id = _setup(client, db)
+    _con_consumo_backdateado(db, ing_id)
+
+    res = client.get("/api/inventario/recomendacion", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    items = [i for g in res.json()["por_proveedor"] for i in g["items"]]
+    item = next(i for i in items if i["ingrediente_id"] == ing_id)
+    assert item["stock_actual"] == 70.0
+
+
+def test_conteo_de_hoy_manda_sobre_el_ledger(client, db):
+    """A count taken TODAY has to be what these views report.
+
+    historial_movimientos_acumulado only re-anchors from the day AFTER a count
+    (on the count's own date it keeps the pre-count trajectory, so the gap is
+    visible in the historial pivot). Reading its last point raw made a count
+    entered today invisible until tomorrow -- and count-then-order is the
+    normal workflow, so every suggestion on count day would be computed
+    against the numbers the count just replaced.
+    """
+    token, ing_id = _setup(client, db)
+    hoy = date.today()
+    db.add(MovimientoStock(
+        tipo_stock="materia_prima", referencia_producto_id=ing_id,
+        cantidad=-10.0, unidad="g", tipo_movimiento="produccion_consumo",
+        fecha=hoy - timedelta(days=3),
+    ))
+    db.add(InventarioRegistro(
+        ingrediente_id=ing_id, cantidad=50.0, unidad="g", fecha_registro=hoy,
+    ))
+    db.commit()
+
+    assert get_saldos_materia_prima(db, [ing_id])[ing_id] == 50.0
+
+    # ...so a recount to a healthy level clears the alert the same day.
+    res = client.get("/api/inventario/alertas", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    assert res.json() == []

@@ -70,6 +70,24 @@ def registrar_movimiento(
 
 
 def get_saldo_materia_prima(db: Session, ingrediente_id: int) -> float:
+    """Tip of the stored InventarioRegistro chain -- the write-path balance.
+
+    This is the base every consumption/reception chains off (see
+    deducir_materia_prima), NOT a trustworthy "how much is there right now"
+    for a read-only view: it picks the row with the highest fecha_registro,
+    so a backdated entry saved after a later-dated row already exists reads
+    that later row as its base and then writes its result onto an earlier
+    date, where it never becomes the tip again. Read-only callers want
+    get_saldos_materia_prima() instead.
+
+    The (fecha_registro, id) ordering is load-bearing on the write path, but
+    as a hazard to work around rather than a protection: because a later
+    fecha_registro always wins, revertir_consumos() has to date its give-back
+    with the record's own date instead of today (see its docstring), or the
+    give-back would outrank a backdated re-apply and hide the corrected
+    consumption. The id tie-break is what lets a same-date re-apply supersede
+    that give-back.
+    """
     reg = (
         db.query(InventarioRegistro)
         .filter(InventarioRegistro.ingrediente_id == ingrediente_id)
@@ -77,6 +95,63 @@ def get_saldo_materia_prima(db: Session, ingrediente_id: int) -> float:
         .first()
     )
     return reg.cantidad if reg else 0.0
+
+
+def get_saldos_materia_prima(db: Session, ids: list[int]) -> dict[int, float]:
+    """Balance right now per ingrediente_id, read from the ledger.
+
+    What the read-only views (/inventario/alertas, /inventario/recomendacion)
+    report. `ids` is required on purpose -- unlike get_saldos_congelado there
+    is no meaningful "everything" here, because the count-only fallback below
+    needs a caller-supplied universe to look for.
+
+    Deliberately a different source than get_saldo_materia_prima(): the
+    stored chain that one reads has an ordering dependency the ledger does
+    not (found 2026-09-28 -- four registros dated 25/09 loaded on 28/09,
+    after the 28/09 rows, left six ingredients reading 0.1-47.6 units high;
+    Levadura's order suggestion showed 0 when it should have been 0.7 kg).
+
+    An ingredient with counts but no ledger movement at all (a new one
+    counted before it was ever produced with) falls back to its last
+    InventarioRegistro. Ids with neither are left out of the result
+    entirely, so callers can still tell "nothing recorded" from "recorded
+    as zero" -- /alertas distinguishes sin_registro from sin_stock on
+    exactly that.
+    """
+    if not ids:
+        return {}
+
+    saldos = {
+        rid: pts[-1]["cantidad"]
+        for rid, pts in historial_movimientos_acumulado(db, "materia_prima", ids=ids).items()
+        if pts
+    }
+
+    # historial_movimientos_acumulado deliberately still shows the PRE-count
+    # trajectory on a count's own date (that gap against the physical count is
+    # the whole point of the historial pivot) and only re-anchors from the next
+    # day. For "how much is there right now" that reads as flatly ignoring the
+    # count someone just took -- and count-then-order is the normal workflow,
+    # so on count day every suggestion would be computed against the very
+    # numbers the count replaced. A conteo is the last event of its day
+    # (orden_visual_dia, confirmed with Felipe: "el inventario es lo que tiene
+    # que prevalecer al final de dia"), so today's count wins outright here.
+    hoy = str(date.today())
+    for rid, conteos in _conteos_manuales_por_fecha(db, "materia_prima", ids).items():
+        if hoy in conteos:
+            saldos[rid] = conteos[hoy]
+
+    faltantes = [i for i in ids if i not in saldos]
+    if faltantes:
+        # Ascending, so the last row seen per ingredient is its latest one.
+        for reg in (
+            db.query(InventarioRegistro)
+            .filter(InventarioRegistro.ingrediente_id.in_(faltantes))
+            .order_by(InventarioRegistro.fecha_registro, InventarioRegistro.id)
+            .all()
+        ):
+            saldos[reg.ingrediente_id] = reg.cantidad
+    return saldos
 
 
 def get_saldos_congelado(db: Session, ids: Optional[list[int]] = None) -> dict[int, float]:
