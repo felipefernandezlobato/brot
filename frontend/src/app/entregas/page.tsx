@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { PermissionGate } from "@/components/PermissionGate";
 import { formatARS, formatDate } from "@/lib/format";
 
 interface ClienteB2B {
@@ -58,6 +59,202 @@ const ESTADOS_B2B = ["pendiente", "entregado"];
 
 function toLocalISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Shared by TabCalendario and TabEntregas, which render the same card footer.
+function useAccionesEntrega(onReload: () => void) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+
+  // Returns whether it worked, so a caller holding edit state can keep the
+  // editor (and what the user typed) open on failure instead of discarding it.
+  const correr = async (fn: () => Promise<unknown>, ok: string, fallback: string): Promise<boolean> => {
+    setSaving(true);
+    try {
+      await fn();
+      toast(ok);
+      onReload();
+      return true;
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : fallback, "error");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const rutaBase = (e: EntregaUnificada) =>
+    e.tipo === "b2b" ? `/api/entregas-b2b/${e.id}` : `/api/entregas-b2b/pedido-portal/${e.id}`;
+
+  const updateEstado = (e: EntregaUnificada, nuevoEstado: string) =>
+    correr(
+      () => apiFetch(`${rutaBase(e)}/estado`, {
+        method: "PUT",
+        body: JSON.stringify({ estado: nuevoEstado }),
+      }),
+      "Estado actualizado",
+      "Error al actualizar estado",
+    );
+
+  const deleteEntrega = (e: EntregaUnificada) =>
+    correr(
+      () => apiFetch(rutaBase(e), { method: "DELETE" }),
+      "Entrega eliminada",
+      "Error al eliminar",
+    );
+
+  // Hardcoded b2b, unlike the two above: portal orders have no date-edit
+  // endpoint, which is why PieEntrega only renders the editor for b2b.
+  // The backend reverts the stock at the old date and re-deducts at the new
+  // one, so the movements follow the entrega; the re-deduction is date-bound
+  // and can land on different lots, or go negative when the goods weren't in
+  // stock yet -- wanted, it surfaces a production nobody logged.
+  const updateFecha = (e: EntregaUnificada, fecha: string) =>
+    correr(
+      () => apiFetch(`/api/entregas-b2b/${e.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ fecha_entrega: fecha }),
+      }),
+      // Only a delivered entrega has movements to recalculate -- the backend
+      // skips the revert/re-apply entirely when it isn't `entregado`.
+      e.estado === "entregado" ? "Fecha actualizada — stock recalculado" : "Fecha actualizada",
+      "Error al cambiar la fecha",
+    );
+
+  return { saving, updateEstado, deleteEntrega, updateFecha };
+}
+
+function PieEntrega({
+  e,
+  saving,
+  onEstado,
+  onFecha,
+  onDelete,
+}: {
+  e: EntregaUnificada;
+  saving: boolean;
+  onEstado: (e: EntregaUnificada, estado: string) => void;
+  onFecha: (e: EntregaUnificada, fecha: string) => Promise<boolean>;
+  onDelete: (e: EntregaUnificada) => void;
+}) {
+  const estados = e.tipo === "portal" ? ESTADOS_PEDIDO : ESTADOS_B2B;
+  const [editandoFecha, setEditandoFecha] = useState(false);
+  const [fechaDraft, setFechaDraft] = useState("");
+  // Local, not the hook's shared `saving`: this one has to be per-card so one
+  // card's in-flight save doesn't disable another's editor.
+  const [guardando, setGuardando] = useState(false);
+
+  const iniciarEdicion = () => {
+    setFechaDraft(e.fecha_entrega);
+    setEditandoFecha(true);
+  };
+  const cancelarEdicion = () => setEditandoFecha(false);
+  const guardarFecha = async () => {
+    // A same-date save would still trigger a full revert/re-apply on the
+    // backend (it keys on the field being present, not on the value changing)
+    // and could redraw different lots, so treat it as a cancel.
+    if (!fechaDraft || fechaDraft === e.fecha_entrega) {
+      setEditandoFecha(false);
+      return;
+    }
+    if (guardando) return;
+    setGuardando(true);
+    const ok = await onFecha(e, fechaDraft);
+    setGuardando(false);
+    // Stay open on failure so the typed date isn't lost.
+    if (ok) setEditandoFecha(false);
+  };
+
+  return (
+    <div className="px-4 py-3 border-t border-cream-dark flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap">
+        <label className="text-xs text-warm-gray">Estado:</label>
+        <select
+          value={e.estado}
+          disabled={saving}
+          onChange={(ev) => onEstado(e, ev.target.value)}
+          className="px-2 py-1.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+        >
+          {estados.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+
+        {e.tipo === "b2b" && (
+          <div
+            className="group flex items-center gap-2"
+            onBlur={(ev) => {
+              // Blur cancels, never saves -- a stray click outside must not
+              // rewrite the ledger. Only ✓ (or Enter) commits.
+              // Except mid-save: disabling the ✓ button steals focus and fires
+              // a blur with a null relatedTarget, which would close the editor
+              // and throw away the draft we deliberately keep on failure.
+              if (guardando) return;
+              if (!ev.currentTarget.contains(ev.relatedTarget as Node)) {
+                cancelarEdicion();
+              }
+            }}
+          >
+            <label className="text-xs text-warm-gray">Fecha:</label>
+            {editandoFecha ? (
+              <>
+                <input
+                  type="date"
+                  value={fechaDraft}
+                  onChange={(ev) => setFechaDraft(ev.target.value)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter") guardarFecha();
+                    if (ev.key === "Escape") cancelarEdicion();
+                  }}
+                  autoFocus
+                  disabled={guardando}
+                  className="border border-cream-dark rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+                />
+                <button
+                  type="button"
+                  onClick={guardarFecha}
+                  disabled={guardando}
+                  className="text-green-600 hover:text-green-700 px-1 disabled:opacity-50"
+                  title="Guardar"
+                >
+                  ✓
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelarEdicion}
+                  className="text-warm-gray hover:text-red-500 px-1"
+                  title="Cancelar"
+                >
+                  ✕
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="text-sm text-text">{formatDate(e.fecha_entrega)}</span>
+                <PermissionGate module="entregas_b2b" action="edit">
+                  <button
+                    type="button"
+                    onClick={iniciarEdicion}
+                    className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-warm-gray hover:text-brot transition-opacity"
+                    title="Editar fecha de entrega"
+                  >
+                    ✎
+                  </button>
+                </PermissionGate>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={() => onDelete(e)}
+        disabled={saving}
+        className="px-3 py-1.5 text-red-600 text-xs hover:bg-red-50 rounded-lg transition-colors min-h-[36px]"
+      >
+        Eliminar
+      </button>
+    </div>
+  );
 }
 
 export default function EntregasPage() {
@@ -149,13 +346,11 @@ function TabCalendario({
   entregas: EntregaUnificada[];
   onReload: () => void;
 }) {
-  const { toast } = useToast();
   const now = new Date();
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth());
   const [selectedDate, setSelectedDate] = useState(toLocalISO(now));
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const entregasByDate = useMemo(() => {
     const map = new Map<string, EntregaUnificada[]>();
@@ -213,37 +408,7 @@ function TabCalendario({
       .sort((a, b) => a.fecha_entrega.localeCompare(b.fecha_entrega));
   }, [entregas]);
 
-  const updateEstado = async (e: EntregaUnificada, nuevoEstado: string) => {
-    setSaving(true);
-    try {
-      const url = e.tipo === "b2b"
-        ? `/api/entregas-b2b/${e.id}/estado`
-        : `/api/entregas-b2b/pedido-portal/${e.id}/estado`;
-      await apiFetch(url, { method: "PUT", body: JSON.stringify({ estado: nuevoEstado }) });
-      toast("Estado actualizado");
-      onReload();
-    } catch {
-      toast("Error al actualizar estado", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteEntrega = async (e: EntregaUnificada) => {
-    setSaving(true);
-    try {
-      const url = e.tipo === "b2b"
-        ? `/api/entregas-b2b/${e.id}`
-        : `/api/entregas-b2b/pedido-portal/${e.id}`;
-      await apiFetch(url, { method: "DELETE" });
-      toast("Entrega eliminada");
-      onReload();
-    } catch {
-      toast("Error al eliminar", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const { saving, updateEstado, deleteEntrega, updateFecha } = useAccionesEntrega(onReload);
 
   const entregaKey = (e: EntregaUnificada) => `${e.tipo}-${e.id}`;
 
@@ -326,7 +491,6 @@ function TabCalendario({
             {selectedEntregas.map((e) => {
               const key = entregaKey(e);
               const expanded = expandedId === key;
-              const estados = e.tipo === "portal" ? ESTADOS_PEDIDO : ESTADOS_B2B;
 
               return (
                 <div key={key} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
@@ -369,28 +533,13 @@ function TabCalendario({
                         </tbody>
                       </table>
 
-                      <div className="px-4 py-3 border-t border-cream-dark flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <label className="text-xs text-warm-gray">Estado:</label>
-                          <select
-                            value={e.estado}
-                            disabled={saving}
-                            onChange={(ev) => updateEstado(e, ev.target.value)}
-                            className="px-2 py-1.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
-                          >
-                            {estados.map((s) => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <button
-                          onClick={() => deleteEntrega(e)}
-                          disabled={saving}
-                          className="px-3 py-1.5 text-red-600 text-xs hover:bg-red-50 rounded-lg transition-colors min-h-[36px]"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
+                      <PieEntrega
+                        e={e}
+                        saving={saving}
+                        onEstado={updateEstado}
+                        onFecha={updateFecha}
+                        onDelete={deleteEntrega}
+                      />
                     </div>
                   )}
                 </div>
@@ -456,7 +605,7 @@ function TabEntregas({
   onReload: () => void;
 }) {
   const { toast } = useToast();
-  const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [clienteId, setClienteId] = useState("");
@@ -503,7 +652,7 @@ function TabEntregas({
       if (!ok) return;
     }
 
-    setSaving(true);
+    setCreating(true);
     try {
       await apiFetch("/api/entregas-b2b", {
         method: "POST",
@@ -528,7 +677,7 @@ function TabEntregas({
     } catch {
       toast("Error al crear entrega", "error");
     } finally {
-      setSaving(false);
+      setCreating(false);
     }
   };
 
@@ -539,37 +688,7 @@ function TabEntregas({
 
   const entregaKey = (e: EntregaUnificada) => `${e.tipo}-${e.id}`;
 
-  const updateEstado = async (e: EntregaUnificada, nuevoEstado: string) => {
-    setSaving(true);
-    try {
-      const url = e.tipo === "b2b"
-        ? `/api/entregas-b2b/${e.id}/estado`
-        : `/api/entregas-b2b/pedido-portal/${e.id}/estado`;
-      await apiFetch(url, { method: "PUT", body: JSON.stringify({ estado: nuevoEstado }) });
-      toast("Estado actualizado");
-      onReload();
-    } catch {
-      toast("Error al actualizar estado", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteEntrega = async (e: EntregaUnificada) => {
-    setSaving(true);
-    try {
-      const url = e.tipo === "b2b"
-        ? `/api/entregas-b2b/${e.id}`
-        : `/api/entregas-b2b/pedido-portal/${e.id}`;
-      await apiFetch(url, { method: "DELETE" });
-      toast("Entrega eliminada");
-      onReload();
-    } catch {
-      toast("Error al eliminar", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const { saving, updateEstado, deleteEntrega, updateFecha } = useAccionesEntrega(onReload);
 
   return (
     <div className="space-y-3">
@@ -642,9 +761,9 @@ function TabEntregas({
             <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Notas..."
               className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]" />
           </div>
-          <button onClick={submitEntrega} disabled={!clienteId || !fecha || validLineas.length === 0 || saving}
+          <button onClick={submitEntrega} disabled={!clienteId || !fecha || validLineas.length === 0 || creating}
             className="w-full px-4 py-3 bg-brot text-white rounded-xl text-sm font-medium hover:bg-brot-dark transition-colors disabled:opacity-50 min-h-[44px]">
-            {saving ? "Guardando..." : "Crear Entrega"}
+            {creating ? "Guardando..." : "Crear Entrega"}
           </button>
         </div>
       )}
@@ -657,7 +776,6 @@ function TabEntregas({
         sorted.map((e) => {
           const key = entregaKey(e);
           const expanded = expandedKey === key;
-          const estados = e.tipo === "portal" ? ESTADOS_PEDIDO : ESTADOS_B2B;
 
           return (
             <div key={key} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
@@ -700,28 +818,13 @@ function TabEntregas({
                     </tbody>
                   </table>
 
-                  <div className="px-4 py-3 border-t border-cream-dark flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <label className="text-xs text-warm-gray">Estado:</label>
-                      <select
-                        value={e.estado}
-                        disabled={saving}
-                        onChange={(ev) => updateEstado(e, ev.target.value)}
-                        className="px-2 py-1.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
-                      >
-                        {estados.map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <button
-                      onClick={() => deleteEntrega(e)}
-                      disabled={saving}
-                      className="px-3 py-1.5 text-red-600 text-xs hover:bg-red-50 rounded-lg transition-colors min-h-[36px]"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
+                  <PieEntrega
+                    e={e}
+                    saving={saving}
+                    onEstado={updateEstado}
+                    onFecha={updateFecha}
+                    onDelete={deleteEntrega}
+                  />
                 </div>
               )}
             </div>

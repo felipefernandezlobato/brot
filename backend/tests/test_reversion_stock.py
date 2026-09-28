@@ -4,7 +4,7 @@ Both modules deducted on create and gave nothing back on delete, so a mistyped
 waste record or a cancelled delivery quietly ate inventory forever.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from app.auth import hash_pin
 from app.models import (
@@ -216,6 +216,96 @@ def test_editar_lineas_de_entregada_sobrescribe(client, db):
     )
 
     assert _stock(db, prod.id) == 11.0  # 20 - 9, not 20 - 6 - 9
+
+
+def _movs_vivos(db, eid):
+    """The delivery's live (non-reversed) movements."""
+    return [
+        m for m in db.query(MovimientoStock).filter(
+            MovimientoStock.referencia_origen.like(f"entrega_b2b:{eid}:%")
+        )
+        if not m.referencia_origen.endswith(":rev")
+    ]
+
+
+def _crear_entrega(client, headers, cli, catalogo, fecha, cantidad=6):
+    return client.post(
+        "/api/entregas-b2b",
+        json={
+            "cliente_b2b_id": cli.id, "fecha_entrega": fecha, "estado": "entregado",
+            "lineas": [{"producto_id": catalogo.id, "cantidad": cantidad, "precio_unitario": 1262.0}],
+        },
+        headers=headers,
+    ).json()["id"]
+
+
+def test_cambiar_fecha_de_entrega_redata_los_movimientos(client, db):
+    """A delivery entered under the wrong date has to take its ledger with it.
+
+    Leaving the movements parked on the old date is exactly the split the
+    pedido fecha_recepcion fix had to repair by hand: the entrega would say one
+    day while its stock effect said another, and the two reporting paths
+    (/volumen reads fecha_entrega, the historial pivots read MovimientoStock.fecha)
+    would disagree about which period the delivery falls in.
+    """
+    headers = _auth(client, db)
+    prod, catalogo, cli = _catalogo_con_stock(db)
+    eid = _crear_entrega(client, headers, cli, catalogo, HOY)
+    assert _stock(db, prod.id) == 14.0
+
+    despues = date.today() + timedelta(days=2)
+    res = client.put(
+        f"/api/entregas-b2b/{eid}",
+        json={"fecha_entrega": despues.isoformat()},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["fecha_entrega"] == despues.isoformat()
+
+    movs = _movs_vivos(db, eid)
+    assert movs, "la entrega quedo sin movimientos vivos"
+    assert {m.fecha for m in movs} == {despues}
+    # Moved forward, so the original lot is still eligible -- same stock as
+    # before, and drawn from the real lot rather than a synthetic negative one
+    # (which is what separates this case from the backdated one below; _stock
+    # sums both kinds, so the total alone can't tell them apart).
+    assert _stock(db, prod.id) == 14.0
+    assert not db.query(StockCongelado).filter(
+        StockCongelado.producto_congelado_id == prod.id,
+        StockCongelado.cantidad < 0,
+    ).all()
+
+
+def test_mover_entrega_antes_del_lote_deja_el_stock_negativo(client, db):
+    """Backdating past the lot that supplied it books the shortfall as negative.
+
+    deducir_congelado_fifo only draws from lots with fecha_entrada <= fecha, so
+    the real lot is no longer eligible and the quantity lands on a synthetic
+    negative lot. Deliberate: a delivery that predates its own stock means a
+    production was never logged, and that should be visible rather than hidden.
+    """
+    headers = _auth(client, db)
+    prod, catalogo, cli = _catalogo_con_stock(db)  # lote con fecha_entrada = hoy
+    eid = _crear_entrega(client, headers, cli, catalogo, HOY)
+
+    antes = date.today() - timedelta(days=3)
+    res = client.put(
+        f"/api/entregas-b2b/{eid}",
+        json={"fecha_entrega": antes.isoformat()},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+    assert {m.fecha for m in _movs_vivos(db, eid)} == {antes}
+    # Balance is still right: the real lot got its 6 back, a negative lot holds them.
+    assert _stock(db, prod.id) == 14.0
+    negativos = db.query(StockCongelado).filter(
+        StockCongelado.producto_congelado_id == prod.id,
+        StockCongelado.cantidad < 0,
+    ).all()
+    assert len(negativos) == 1
+    assert negativos[0].cantidad == -6.0
+    assert negativos[0].is_active is True
 
 
 def test_entrega_no_entregada_no_toca_stock(client, db):
