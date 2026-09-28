@@ -520,9 +520,17 @@ function TabHistorial({ recibidos }: { recibidos: PedidoListItem[] }) {
     [ingredientes]
   );
 
-  // All unique order dates, most recent first
+  // Un pedido recibido se ubica por su fecha de recepcion (cuando entro la
+  // mercaderia), no por la fecha en que se cargo el pedido: los pedidos se
+  // suelen cargar despues de que llego el reparto, asi que usar p.fecha movia
+  // la entrega a una columna equivocada. Es la misma fecha con la que quedan
+  // dateados el InventarioRegistro y el MovimientoStock de la recepcion.
+  const fechaDeRecepcion = (p: PedidoListItem) =>
+    (p.fecha_recepcion ?? p.fecha).split("T")[0];
+
+  // All unique reception dates, most recent first
   const allDates = useMemo(() => {
-    const dates = new Set(recibidos.map((p) => p.fecha.split("T")[0]));
+    const dates = new Set(recibidos.map(fechaDeRecepcion));
     return Array.from(dates).sort((a, b) => b.localeCompare(a));
   }, [recibidos]);
 
@@ -530,7 +538,7 @@ function TabHistorial({ recibidos }: { recibidos: PedidoListItem[] }) {
   const pivotData = useMemo(() => {
     const map = new Map<string, number>();
     for (const p of recibidos) {
-      const fecha = p.fecha.split("T")[0];
+      const fecha = fechaDeRecepcion(p);
       for (const l of p.lineas) {
         const key = `${l.ingrediente_id}:${fecha}`;
         map.set(key, (map.get(key) ?? 0) + l.cantidad_pedida);
