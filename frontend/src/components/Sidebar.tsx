@@ -8,11 +8,13 @@ const NAV_ITEMS = [
   { href: "/ingredientes", label: "Ingredientes" },
   { href: "/escandallos", label: "Escandallos" },
   { href: "/proveedores", label: "Proveedores" },
-  { href: "/stock", label: "Stock Materia Prima" },
+  // Orden por flujo real del obrador: primero se compra, despues entra a stock;
+  // se produce, se descuenta lo que se pierde, y lo que queda va al congelador.
   { href: "/pedidos", label: "Compras Ingredientes" },
+  { href: "/stock", label: "Stock Materia Prima" },
   { href: "/produccion", label: "Produccion" },
-  { href: "/congelados", label: "Stock Congelado" },
   { href: "/mermas", label: "Mermas" },
+  { href: "/congelados", label: "Stock Congelado" },
   { href: "/entregas", label: "Entregas B2B" },
   { href: "/protocolos", label: "Protocolos" },
   { href: "/competencia", label: "Competencia", admin: true },
