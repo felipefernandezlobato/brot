@@ -508,6 +508,23 @@ Cleaning and packaging supplies are bought and stocked through the same Ingredie
 ### Sidebar / BottomNav order follows the workshop flow (2026-09-29)
 `NAV_ITEMS` in `components/Sidebar.tsx` and `components/BottomNav.tsx` are two separate lists that must stay in the same order. Compras Ingredientes comes before Stock Materia Prima (you buy first, then it enters stock) and Mermas before Stock Congelado.
 
+### Competencia: `receta_id` is a required FK, so a competitor-only product needs a placeholder recipe (2026-09-30)
+`PrecioCompetencia.receta_id` is `ForeignKey("recetas.id")` and **not nullable**, and `create_competencia` 404s on an unknown id. There is no free-text product field, so a price for something the bakery does not make yet cannot be stored at all. Worked around by creating **Receta 49 "Pan Bollito"** in Panes with no lines and `precio_venta = None` — deliberately no PVP so `/competencia/comparar` shows the market prices with `pvp: null` and Escandallos shows "—" for multi instead of a fabricated one.
+- **This is the same empty-recipe shape flagged as dangerous under the PVP section** (Baston Cinnamon Roll). It is safe *only* while it has no `precio_venta`: give it a price without filling in the lines and it becomes the same trap. When the product goes into production, load its real lines.
+- Cleaner fix if this recurs: make `receta_id` nullable and add a free-text product name, so competitor-only products stop polluting Escandallos. Offered 2026-09-30, not yet requested.
+
+### Competitor price sources and what's actually comparable (loaded 2026-09-29/30)
+Four competitors on record. Prices per unit in ARS.
+- **La Granadina** — from the public ola.click menu (`la-granadina-artesanal.ola.click/products`). Sells **no individual pastry prices**: medialunas are "FACTURAS" surtidas, docena $13.200 / media docena $6.600, both = **$1.100 per factura**. Loaded against Medialuna, Sacramento and Cinnamon Roll — all three named explicitly in that assortment's description. NOT loaded: "PALMERA GRANDE" (size mismatch with our Palmerita), "CREMA PASTELERA" and "CON CHOCOLATE" (too generic to map).
+  - **Trap:** their menu lists "CROISSANT $8.000", which the description reveals is *a tray of 2 croissants filled with ham and cheese* — not comparable to our $1.550 croissant. Do not load it.
+  - **Scraping note:** the page is Nuxt/JS-rendered and `WebFetch` only returns a fragment, but the full menu is in a `<script type="application/ld+json">` schema.org `Menu` payload in the initial HTML. Parse that (`MenuSection` → `MenuItem` → `offers.price`). Only ~a third of items carry a `price`; the rest publish `availability` only — including all the bread. So there is no pan hamburguesa / pan bollito price from this source.
+- **BRUTO** — pan de masa madre, passed by WhatsApp: **medio kilo $2.500, kilo $4.000**, seeded version +$500 ($3.000 / $4.500, recorded in the notes rather than as separate rows). Loaded against Pan Blanco 0.5kg and 1kg. Verified comparable first: Pan Blanco/Integral → Masa Pan Blanco/Negro → Masa Madre subreceta, so ours genuinely are sourdough. NOT loaded against Pan Integral — unknown whether BRUTO sells a wholemeal version at all.
+- **Granadino** and **Aroma Frances** — older figures, all dated 2026-06-05.
+- **Pan Bollito** (the placeholder above): Granadino $4.000/kg, BRUTO $1.800/kg. More than 2× apart, so check they mean the same thing before pricing off them — La Granadina's menu describes a bollito as "1kg de pan rinde aproximadamente 24 bollitos", i.e. sold as a kilo of dough, not per roll.
+- **Open question: "Granadino" and "La Granadina" are two separate competitor names in the table.** Felipe called La Granadina "un competidor nuevo", so they were kept apart, but if it's one business its facturas sit on one record and its bollito on the other, and neither shows the full history.
+
+**What the comparison says as of 2026-09-30:** medialuna is at parity with La Granadina (1.110 vs 1.100) but **pan de masa madre is at a third of BRUTO's price** (740 vs 2.500 for the half kilo, 1.330 vs 4.000 for the kilo) — and bread is exactly where the lower ×2.5 multiplier was applied.
+
 ---
 
 ## API Design
