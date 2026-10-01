@@ -204,10 +204,15 @@ export default function CongeladoPage() {
                 label = "bastones producidos";
               } else if (m.referencia_origen) {
                 const parts = m.referencia_origen.split(":");
-                if (parts[0] === "entrega_b2b" && parts.length >= 3) {
-                  label = `Entrega B2B ${parts.slice(2).join(":")}`;
-                } else if (parts[0] === "entrega_b2b") {
-                  label = `Entrega B2B #${parts[1]}`;
+                // Un pedido del portal descuenta stock igual que una entrega
+                // interna (mismo tipo_movimiento), pero lleva su propio prefijo
+                // para que las reversiones no se pisen -- ver _ref_pedido_portal.
+                const esPortal = parts[0] === "pedido_portal";
+                const etiqueta = esPortal ? "Pedido portal" : "Entrega B2B";
+                if ((esPortal || parts[0] === "entrega_b2b") && parts.length >= 3) {
+                  label = `${etiqueta} ${parts.slice(2).join(":")}`;
+                } else if (esPortal || parts[0] === "entrega_b2b") {
+                  label = `${etiqueta} #${parts[1]}`;
                 }
               }
               const esConteo = m.tipo_movimiento === "conteo_fisico";

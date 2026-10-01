@@ -74,7 +74,11 @@ def update_estado(
     pedido = db.query(PedidoCliente).filter(PedidoCliente.id == pedido_id).first()
     if not pedido:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
-    pedido.estado = data.estado
+    # Same shared helper the /entregas screen uses, so a portal order marked
+    # delivered from either place moves stock identically.
+    from app.routers.entregas_b2b import aplicar_cambio_estado_portal
+
+    aplicar_cambio_estado_portal(db, pedido, data.estado, admin.id)
     db.commit()
     db.refresh(pedido)
     return _build_pedido_out(pedido)

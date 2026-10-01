@@ -187,6 +187,77 @@ def list_todas_entregas(
     return result
 
 
+def _ref_pedido_portal(db: Session, pedido: PedidoCliente) -> str:
+    """Distinct prefix from entrega_b2b on purpose.
+
+    Reusing `entrega_b2b:{id}:` would collide: an EntregaB2B and a
+    PedidoCliente can share an id, and _revertir_entrega matches by prefix,
+    so reverting one would pick up the other's movements.
+    """
+    cliente = db.query(ClienteB2B).filter(ClienteB2B.id == pedido.cliente_id).first()
+    return f"pedido_portal:{pedido.id}:{cliente.nombre if cliente else ''}"
+
+
+def _revertir_pedido_portal(db: Session, pedido: PedidoCliente, user_id: int) -> int:
+    """Give back the stock this portal order took out. Mirror of _revertir_entrega."""
+    stored = (
+        db.query(MovimientoStock.referencia_origen)
+        .filter(MovimientoStock.referencia_origen.like(f"pedido_portal:{pedido.id}:%"))
+        .distinct()
+        .all()
+    )
+    total = 0
+    for (ref,) in stored:
+        if ref.endswith(":rev"):
+            continue
+        total += revertir_consumos(db, ref, user_id, fecha=pedido.fecha_entrega)
+    return total
+
+
+def _aplicar_pedido_portal(db: Session, pedido: PedidoCliente, user_id: int) -> None:
+    """Deduct stock for a portal order, exactly like a B2B delivery does.
+
+    Portal orders went live 2026-09-29 and until 2026-09-30 never touched
+    stock at all -- the estado handler was a bare assignment, so Olula's first
+    order (14 products, $265.900) was marked entregado having deducted nothing.
+
+    `tipo_movimiento` is "entrega_b2b" deliberately, not a new type: to the
+    ledger and to every report that buckets by movement type this IS an
+    outbound sale, and it's the same goods leaving the same freezer. Only the
+    `referencia_origen` prefix distinguishes the two, which is what keeps
+    their reversals apart.
+    """
+    ref = _ref_pedido_portal(db, pedido)
+    for l in pedido.lineas:
+        mov = deducir_congelado_por_catalogo(
+            db, l.producto_id, l.cantidad, ref, "entrega_b2b", user_id,
+            fecha=pedido.fecha_entrega,
+        )
+        if mov is None:
+            cat = db.query(ProductoCatalogo).filter(ProductoCatalogo.id == l.producto_id).first()
+            raise HTTPException(
+                status_code=422,
+                detail=f"No se pudo resolver el stock congelado para '{cat.nombre if cat else l.producto_id}'",
+            )
+
+
+def aplicar_cambio_estado_portal(
+    db: Session, pedido: PedidoCliente, nuevo_estado: str, user_id: int
+) -> None:
+    """Move stock when a portal order crosses into or out of `entregado`.
+
+    Shared by both estado endpoints (this router's and pedidos_clientes_admin's)
+    so the two cannot drift -- either one alone would leave a way to mark an
+    order delivered without deducting anything.
+    """
+    era_entregado = pedido.estado == "entregado"
+    pedido.estado = nuevo_estado
+    if nuevo_estado == "entregado" and not era_entregado:
+        _aplicar_pedido_portal(db, pedido, user_id)
+    elif era_entregado and nuevo_estado != "entregado":
+        _revertir_pedido_portal(db, pedido, user_id)
+
+
 @router.put("/pedido-portal/{pedido_id}/estado")
 def update_estado_pedido_portal(
     pedido_id: int,
@@ -199,7 +270,7 @@ def update_estado_pedido_portal(
     pedido = db.query(PedidoCliente).filter(PedidoCliente.id == pedido_id).first()
     if not pedido:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
-    pedido.estado = body.estado
+    aplicar_cambio_estado_portal(db, pedido, body.estado, user.id)
     db.commit()
     return {"id": pedido.id, "estado": pedido.estado}
 
@@ -214,6 +285,10 @@ def delete_pedido_portal(
     pedido = db.query(PedidoCliente).filter(PedidoCliente.id == pedido_id).first()
     if not pedido:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
+    # Give the stock back first: deleting a delivered order without this would
+    # leave its deduction orphaned in the ledger with nothing left to revert it.
+    if pedido.estado == "entregado":
+        _revertir_pedido_portal(db, pedido, user.id)
     db.query(LineaPedidoCliente).filter(LineaPedidoCliente.pedido_cliente_id == pedido_id).delete()
     db.delete(pedido)
     db.commit()

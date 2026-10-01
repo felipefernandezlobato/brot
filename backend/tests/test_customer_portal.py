@@ -5,7 +5,14 @@ from datetime import date, timedelta
 
 from app.auth import hash_pin
 from app.main import app
-from app.models import User
+from app.models import (
+    Categoria,
+    ProductoCatalogo,
+    ProductoCongelado,
+    Receta,
+    StockCongelado,
+    User,
+)
 from app.routers import (
     catalogo,
     catalogo_admin,
@@ -81,6 +88,36 @@ def _create_catalog_product(client, admin_token, nombre="Pan de Centeno", precio
     )
     assert res.status_code == 201, res.text
     return res.json()
+
+
+
+def _dar_cadena_de_stock(db, catalogo_id, unidades=50.0):
+    """Give a catalog product a Receta + terminado ProductoCongelado + stock, so
+    `deducir_congelado_por_catalogo` can resolve it. Mirrors the shape of real
+    rows; `receta_id` is set on the model because no endpoint exposes it."""
+    cat = db.query(Categoria).filter(Categoria.nombre == "Panes", Categoria.tipo == "receta").first()
+    if not cat:
+        cat = Categoria(nombre="Panes", tipo="receta")
+        db.add(cat)
+        db.flush()
+    receta = Receta(nombre=f"Receta catalogo {catalogo_id}", categoria_id=cat.id, porciones_por_lote=1)
+    db.add(receta)
+    db.flush()
+    prod = ProductoCongelado(
+        nombre=f"Producto catalogo {catalogo_id}", categoria="panes", unidad="u",
+        receta_id=receta.id, nivel="terminado",
+    )
+    db.add(prod)
+    db.flush()
+    db.add(StockCongelado(
+        producto_congelado_id=prod.id, cantidad=unidades,
+        cantidad_original=unidades, fecha_entrada=date.today(), is_active=True,
+    ))
+    db.query(ProductoCatalogo).filter(ProductoCatalogo.id == catalogo_id).update(
+        {"receta_id": receta.id}, synchronize_session=False
+    )
+    db.commit()
+    return prod
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +258,11 @@ def test_order_lifecycle(client, db):
     assert order_res.status_code == 201, order_res.text
     order_id = order_res.json()["id"]
 
+    # Marking a portal order `entregado` deducts stock (since 2026-09-30), so the
+    # product needs a resolvable congelado chain -- `POST /api/admin/catalogo`
+    # cannot set receta_id, so wire it up directly the way production rows are.
+    prod_congelado = _dar_cadena_de_stock(db, product["id"])
+
     transitions = ["confirmado", "en_preparacion", "listo", "entregado"]
     for estado in transitions:
         res = client.put(
@@ -230,6 +272,15 @@ def test_order_lifecycle(client, db):
         )
         assert res.status_code == 200, f"Failed on transition to '{estado}': {res.text}"
         assert res.json()["estado"] == estado
+
+    # ...and reaching `entregado` actually took the 3 units out of stock.
+    restante = sum(
+        l.cantidad for l in db.query(StockCongelado).filter(
+            StockCongelado.producto_congelado_id == prod_congelado.id,
+            StockCongelado.is_active.is_(True),
+        )
+    )
+    assert restante == 47.0
 
     # Verify final state visible in admin list
     list_res = client.get(

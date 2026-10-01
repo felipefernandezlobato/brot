@@ -527,3 +527,104 @@ def test_merma_de_receta_movimiento_tipo_es_merma(client, db):
         MovimientoStock.referencia_producto_id == prod.id,
     ).one()
     assert mov.tipo_movimiento == "merma"
+
+
+# ==============================================================
+# Pedidos del portal de clientes — deben mover stock igual que una entrega B2B
+# ==============================================================
+
+
+def _pedido_portal(db, cli, catalogo, cantidad=6.0, estado="pendiente"):
+    """A portal order is created 'pendiente' by the real customer endpoint, so
+    that's the only shape worth setting up here."""
+    from app.models import LineaPedidoCliente, PedidoCliente
+    p = PedidoCliente(
+        cliente_id=cli.id, fecha_entrega=date.today(), estado=estado,
+        total=cantidad * 1262.0,
+    )
+    db.add(p)
+    db.flush()
+    db.add(LineaPedidoCliente(
+        pedido_cliente_id=p.id, producto_id=catalogo.id, cantidad=cantidad,
+        precio_unitario_snapshot=1262.0, subtotal=cantidad * 1262.0,
+    ))
+    db.commit()
+    return p.id
+
+
+def test_marcar_pedido_portal_entregado_descuenta_stock(client, db):
+    """Portal orders never touched stock until 2026-09-30: the estado handler
+    was a bare assignment, so Olula's first order (14 products, $265.900) was
+    marked entregado having deducted nothing at all.
+    """
+    headers = _auth(client, db)
+    prod, catalogo, cli = _catalogo_con_stock(db)
+    pid = _pedido_portal(db, cli, catalogo, cantidad=6.0)
+    assert _stock(db, prod.id) == 20.0  # pendiente todavia no descuenta
+
+    res = client.put(
+        f"/api/entregas-b2b/pedido-portal/{pid}/estado",
+        json={"estado": "entregado"}, headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert _stock(db, prod.id) == 14.0
+
+
+def test_sacar_pedido_portal_de_entregado_devuelve_el_stock(client, db):
+    headers = _auth(client, db)
+    prod, catalogo, cli = _catalogo_con_stock(db)
+    pid = _pedido_portal(db, cli, catalogo, cantidad=6.0)
+    client.put(f"/api/entregas-b2b/pedido-portal/{pid}/estado",
+               json={"estado": "entregado"}, headers=headers)
+    assert _stock(db, prod.id) == 14.0
+
+    client.put(f"/api/entregas-b2b/pedido-portal/{pid}/estado",
+               json={"estado": "listo"}, headers=headers)
+    assert _stock(db, prod.id) == 20.0
+
+
+def test_marcar_entregado_dos_veces_no_descuenta_doble(client, db):
+    """The transition guard, not the target state, is what triggers the
+    deduction -- re-sending 'entregado' must be a no-op for stock."""
+    headers = _auth(client, db)
+    prod, catalogo, cli = _catalogo_con_stock(db)
+    pid = _pedido_portal(db, cli, catalogo, cantidad=6.0)
+    for _ in range(3):
+        client.put(f"/api/entregas-b2b/pedido-portal/{pid}/estado",
+                   json={"estado": "entregado"}, headers=headers)
+    assert _stock(db, prod.id) == 14.0
+
+
+def test_borrar_pedido_portal_entregado_devuelve_el_stock(client, db):
+    """Deleting a delivered order without giving the stock back would orphan
+    its deduction in the ledger with nothing left able to revert it."""
+    headers = _auth(client, db)
+    prod, catalogo, cli = _catalogo_con_stock(db)
+    pid = _pedido_portal(db, cli, catalogo, cantidad=6.0)
+    client.put(f"/api/entregas-b2b/pedido-portal/{pid}/estado",
+               json={"estado": "entregado"}, headers=headers)
+    assert _stock(db, prod.id) == 14.0
+
+    assert client.delete(f"/api/entregas-b2b/pedido-portal/{pid}", headers=headers).status_code == 200
+    assert _stock(db, prod.id) == 20.0
+
+
+def test_pedido_portal_y_entrega_b2b_con_el_mismo_id_no_se_pisan(client, db):
+    """The reason the referencia prefix differs: both tables have their own id
+    sequence, so an EntregaB2B and a PedidoCliente can collide on id. Reverting
+    one must not pick up the other's movements (_revertir_* matches by prefix).
+    """
+    headers = _auth(client, db)
+    prod, catalogo, cli = _catalogo_con_stock(db, unidades=100.0)
+    eid = _crear_entrega(client, headers, cli, catalogo, HOY, cantidad=6)
+    pid = _pedido_portal(db, cli, catalogo, cantidad=9.0)
+    assert eid == pid, "este test necesita ids iguales para ser significativo"
+
+    client.put(f"/api/entregas-b2b/pedido-portal/{pid}/estado",
+               json={"estado": "entregado"}, headers=headers)
+    assert _stock(db, prod.id) == 100.0 - 6 - 9
+
+    # Revertir SOLO el pedido del portal: la entrega B2B debe quedar intacta.
+    client.put(f"/api/entregas-b2b/pedido-portal/{pid}/estado",
+               json={"estado": "listo"}, headers=headers)
+    assert _stock(db, prod.id) == 100.0 - 6
