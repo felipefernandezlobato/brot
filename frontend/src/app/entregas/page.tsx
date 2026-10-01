@@ -5,7 +5,7 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
-import { formatARS, formatDate } from "@/lib/format";
+import { formatARS, formatDate, parseCantidad } from "@/lib/format";
 
 interface ClienteB2B {
   id: number;
@@ -663,7 +663,7 @@ function TabEntregas({
           notas: notas || null,
           lineas: validLineas.map((l) => ({
             producto_id: l.producto_id,
-            cantidad: parseFloat(l.cantidad),
+            cantidad: parseCantidad(l.cantidad),
             precio_unitario: precioDe(l),
           })),
         }),

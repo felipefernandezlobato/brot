@@ -33,3 +33,25 @@ export function formatDuracion(totalMin: number): string {
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
 }
+
+/** Parsea una cantidad tipeada por una persona.
+ *
+ * Devuelve null si no es un numero usable, para que quien llama pueda avisar
+ * QUE fila esta mal en vez de mandar `NaN` al backend: `JSON.stringify` lo
+ * convierte en `null` y la respuesta es un error de Pydantic crudo
+ * ("Input should be a valid number") que no dice de que item se trata.
+ * Acepta la coma como separador decimal, que es como se escribe aca.
+ */
+export function parseCantidad(v: string | number | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = parseFloat(String(v).replace(",", "."));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** Deja solo digitos y un punto decimal, aceptando la coma de entrada.
+ *  Permite estados intermedios como "0." mientras se escribe "0.5". */
+export function limpiarCantidad(v: string): string {
+  const limpio = v.replace(",", ".").replace(/[^0-9.]/g, "");
+  const partes = limpio.split(".");
+  return partes.length > 2 ? `${partes[0]}.${partes.slice(1).join("")}` : limpio;
+}

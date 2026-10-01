@@ -5,7 +5,7 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
-import { formatDate } from "@/lib/format";
+import { formatDate, parseCantidad, limpiarCantidad } from "@/lib/format";
 import {
   ComposedChart,
   Line,
@@ -485,17 +485,28 @@ function TabRegistrar({
   const filledCount = Object.values(cantidades).filter((v) => v !== "").length;
 
   const handleSubmit = async () => {
+    // Avisar que fila esta mal ANTES de enviar: mandar NaN termina en un error
+    // de Pydantic crudo que no nombra el ingrediente, y con ~29 casillas en una
+    // grilla larga encontrar la mala a mano es un suplicio.
+    const invalidos: string[] = [];
     const entries = Object.entries(cantidades)
       .filter(([, v]) => v !== "")
       .map(([id, v]) => {
         const ing = ingredientes.find((i) => i.id === Number(id));
+        const cantidad = parseCantidad(v);
+        if (cantidad === null) invalidos.push(ing?.nombre ?? `#${id}`);
         return {
           ingrediente_id: Number(id),
-          cantidad: parseFloat(v),
+          cantidad,
           unidad: ing?.unidad_uso ?? "kg",
           fecha_registro: fecha,
         };
       });
+
+    if (invalidos.length > 0) {
+      toast(`Revisa la cantidad de: ${invalidos.join(", ")}`, "error");
+      return;
+    }
 
     if (entries.length === 0) {
       toast("Ingresa al menos un ingrediente con cantidad", "error");
@@ -603,7 +614,7 @@ function TabRegistrar({
                           placeholder="0"
                           value={val}
                           onChange={(e) =>
-                            setCantidades((p) => ({ ...p, [ing.id]: e.target.value.replace(",", ".") }))
+                            setCantidades((p) => ({ ...p, [ing.id]: limpiarCantidad(e.target.value) }))
                           }
                           className="w-20 px-2 py-1.5 rounded-lg border border-cream-dark text-sm text-right focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
                         />

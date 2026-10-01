@@ -5,7 +5,7 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
-import { formatDate } from "@/lib/format";
+import { formatDate, parseCantidad } from "@/lib/format";
 import {
   ComposedChart,
   Line,
@@ -610,14 +610,29 @@ function TabNuevaEntrada({
   const filledCount = Object.values(cantidades).filter((v) => v !== "").length;
 
   const handleSubmit = async () => {
+    // Mismo motivo que en /stock: nombrar la fila mala antes de enviar.
+    // `Number("")` daria 0 y `Number("abc")` NaN, ninguno de los dos util.
+    const invalidos: string[] = [];
     const entries = Object.entries(cantidades)
       .filter(([, v]) => v !== "")
-      .map(([id, v]) => ({
-        producto_congelado_id: Number(id),
-        cantidad: Number(v),
-        fecha_entrada: fechaEntrada,
-        fecha_vencimiento: null as string | null,
-      }));
+      .map(([id, v]) => {
+        const cantidad = parseCantidad(v);
+        if (cantidad === null) {
+          const prod = activeProductos.find((x) => x.id === Number(id));
+          invalidos.push(prod?.nombre ?? `#${id}`);
+        }
+        return {
+          producto_congelado_id: Number(id),
+          cantidad,
+          fecha_entrada: fechaEntrada,
+          fecha_vencimiento: null as string | null,
+        };
+      });
+
+    if (invalidos.length > 0) {
+      toast(`Revisa la cantidad de: ${invalidos.join(", ")}`, "error");
+      return;
+    }
 
     if (entries.length === 0) {
       toast("Ingresa al menos un producto con cantidad", "error");

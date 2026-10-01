@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { parseCantidad } from "@/lib/format";
 import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
 
@@ -102,9 +103,17 @@ export default function RegistroStockPage() {
       return;
     }
 
+    const invalidos = filledRows
+      .filter((r) => parseCantidad(r.cantidad) === null)
+      .map((r) => r.nombre ?? `#${r.ingrediente_id}`);
+    if (invalidos.length > 0) {
+      toast(`Revisa la cantidad de: ${invalidos.join(", ")}`, "error");
+      return;
+    }
+
     const payload = filledRows.map((r) => ({
       ingrediente_id: r.ingrediente_id,
-      cantidad: parseFloat(r.cantidad),
+      cantidad: parseCantidad(r.cantidad),
       unidad: r.unidad,
       notas: r.notas || undefined,
       ubicacion: r.ubicacion || undefined,
