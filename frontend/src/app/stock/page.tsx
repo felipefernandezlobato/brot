@@ -58,7 +58,12 @@ interface CalculadoIngrediente {
   historial: CalculadoPunto[];
 }
 
-const DISCREPANCIA_TOLERANCIA_PCT = 10;
+// Bandas de color para la discrepancia entre calculado y contado.
+// Hasta 5% verde (coincide), 5-10% naranja, mas de 10% rojo.
+// Duplicado identico en stock/page.tsx y congelados/page.tsx -- si cambia un
+// umbral hay que cambiarlo en los dos.
+const DISCREPANCIA_PCT_OK = 5;
+const DISCREPANCIA_PCT_MEDIA = 10;
 
 /** Percentage variation between calculado and contado, relative to whichever
  * is nonzero (contado when available, since it's the physical ground truth
@@ -1120,16 +1125,21 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                         const val = registro?.cantidad;
                         const calc = valorCalculadoEnFecha(calculado.get(ing.id), d);
                         const vacio = calc === null && val === undefined;
-                        const discrepaPct = calc !== null && val !== undefined ? discrepanciaPct(calc, val) : 0;
-                        const discrepaAlta = discrepaPct > DISCREPANCIA_TOLERANCIA_PCT;
-                        const discrepaMedia = discrepaPct > 0 && discrepaPct <= DISCREPANCIA_TOLERANCIA_PCT;
-                        const discrepa = discrepaAlta || discrepaMedia;
+                        // El verde solo si hay algo que comparar: sin conteo no hay
+                        // discrepancia que medir, y pintar de verde toda la tabla
+                        // por defecto no diria nada.
+                        const hayComparacion = calc !== null && val !== undefined;
+                        const discrepaPct = hayComparacion ? discrepanciaPct(calc, val) : 0;
+                        const discrepaAlta = hayComparacion && discrepaPct > DISCREPANCIA_PCT_MEDIA;
+                        const discrepaMedia =
+                          hayComparacion && discrepaPct > DISCREPANCIA_PCT_OK && discrepaPct <= DISCREPANCIA_PCT_MEDIA;
+                        const discrepaOk = hayComparacion && discrepaPct <= DISCREPANCIA_PCT_OK;
                         const isEditing = registro !== undefined && editando?.id === registro.id;
                         const isDeleting = registro !== undefined && borrando?.id === registro.id;
                         return (
                           <td
                             key={d}
-                            title={discrepa ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)} (${discrepaPct.toFixed(1)}%)` : undefined}
+                            title={hayComparacion ? `Calculado: ${formatCantidad(calc!)} / Contado: ${formatCantidad(val!)} (${discrepaPct.toFixed(1)}%)` : undefined}
                             className={`group relative text-center px-2 py-1.5 tabular-nums ${
                               vacio
                                 ? "text-cream-dark"
@@ -1137,6 +1147,8 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                                 ? "text-red-600 font-semibold bg-red-50"
                                 : discrepaMedia
                                 ? "text-orange-600 font-semibold bg-orange-50"
+                                : discrepaOk
+                                ? "text-green-700 font-semibold bg-green-50"
                                 : "text-text"
                             }`}
                           >
