@@ -173,12 +173,25 @@ def test_conteo_automatico_no_reancla(db):
 
 
 def test_congelado_suma_lotes_del_mismo_dia_como_una_sola_ancla(db):
-    """Dos lotes contados el mismo dia se suman para formar el ancla, igual
-    que la agregacion que ya hace la tabla pivot del frontend."""
+    """Dos lotes CON vencimiento cargados el mismo dia se suman para formar el
+    ancla, igual que la agregacion que ya hace la tabla pivot del frontend.
+
+    Llevan fecha_vencimiento a proposito: es la unica forma en que dos lotes
+    del mismo producto y del mismo dia pueden convivir de verdad. Sin ella,
+    `POST /api/congelados` llama a reconciliar_lotes_tras_conteo y el segundo
+    desactiva al primero, asi que sumarlos contaria dos veces el mismo stock
+    (lo que paso el 2026-10-01 con 7 envios repetidos del mismo conteo).
+    """
     prod_id = _producto_congelado(db)
     _mov(db, prod_id, 50.0, date(2026, 8, 1))
-    db.add(StockCongelado(producto_congelado_id=prod_id, cantidad=10.0, fecha_entrada=date(2026, 8, 20)))
-    db.add(StockCongelado(producto_congelado_id=prod_id, cantidad=20.0, fecha_entrada=date(2026, 8, 20)))
+    db.add(StockCongelado(
+        producto_congelado_id=prod_id, cantidad=10.0, fecha_entrada=date(2026, 8, 20),
+        fecha_vencimiento=date(2026, 11, 1),
+    ))
+    db.add(StockCongelado(
+        producto_congelado_id=prod_id, cantidad=20.0, fecha_entrada=date(2026, 8, 20),
+        fecha_vencimiento=date(2026, 12, 1),
+    ))
     _mov(db, prod_id, 1.0, date(2026, 8, 21))
     db.commit()
 
@@ -353,3 +366,70 @@ def test_item_nunca_recontado_sigue_acumulando_normal(db):
         {"fecha": "2026-08-01", "cantidad": 100.0},
         {"fecha": "2026-08-21", "cantidad": 95.0},
     ]
+
+
+def test_conteo_repetido_el_mismo_dia_no_se_suma(db):
+    """A headcount submitted twice must read as one count, not as double.
+
+    Found 2026-10-01: the Registrar screen was hit 7 times, so Medialunas had
+    7 identical lots of 555 and the calculado anchor became 3.885. The saldo
+    was right the whole time (reconciliar_lotes_tras_conteo deactivates the
+    earlier lots) -- only this function disagreed with it.
+    """
+    from app.models import Categoria, ProductoCongelado, Receta, StockCongelado
+    from app.services.stock import _conteos_manuales_por_fecha
+
+    cat = Categoria(nombre="Bollería", tipo="receta")
+    db.add(cat)
+    db.flush()
+    receta = Receta(nombre="Medialuna", categoria_id=cat.id, porciones_por_lote=1)
+    db.add(receta)
+    db.flush()
+    prod = ProductoCongelado(
+        nombre="Medialunas Cocinado", categoria="bolleria", unidad="u",
+        receta_id=receta.id, nivel="terminado",
+    )
+    db.add(prod)
+    db.flush()
+    hoy = date(2026, 10, 1)
+    for _ in range(7):
+        db.add(StockCongelado(
+            producto_congelado_id=prod.id, cantidad=555.0, cantidad_original=555.0,
+            fecha_entrada=hoy, is_active=True, fecha_vencimiento=None,
+        ))
+    db.commit()
+
+    anclas = _conteos_manuales_por_fecha(db, "congelado", [prod.id])
+    assert anclas[prod.id][str(hoy)] == 555.0
+
+
+def test_lotes_con_vencimiento_el_mismo_dia_si_se_suman(db):
+    """Two batches WITH different expiry dates are deliberately meant to
+    coexist (reconciliar_lotes_tras_conteo never fires for them), so the
+    anchor has to keep adding those -- the supersede rule above must not
+    swallow this case."""
+    from app.models import Categoria, ProductoCongelado, Receta, StockCongelado
+    from app.services.stock import _conteos_manuales_por_fecha
+
+    cat = Categoria(nombre="Panes", tipo="receta")
+    db.add(cat)
+    db.flush()
+    receta = Receta(nombre="Pan", categoria_id=cat.id, porciones_por_lote=1)
+    db.add(receta)
+    db.flush()
+    prod = ProductoCongelado(
+        nombre="Pan Cocinado", categoria="panes", unidad="u",
+        receta_id=receta.id, nivel="terminado",
+    )
+    db.add(prod)
+    db.flush()
+    hoy = date(2026, 10, 1)
+    for venc in (date(2026, 11, 1), date(2026, 12, 1)):
+        db.add(StockCongelado(
+            producto_congelado_id=prod.id, cantidad=10.0, cantidad_original=10.0,
+            fecha_entrada=hoy, is_active=True, fecha_vencimiento=venc,
+        ))
+    db.commit()
+
+    anclas = _conteos_manuales_por_fecha(db, "congelado", [prod.id])
+    assert anclas[prod.id][str(hoy)] == 20.0

@@ -214,14 +214,34 @@ def _conteos_manuales_por_fecha(db: Session, tipo_stock: str, ids: list[int]) ->
                 continue
             out.setdefault(r.ingrediente_id, {})[str(r.fecha_registro)] = r.cantidad
     else:
-        rows = db.query(StockCongelado).filter(StockCongelado.producto_congelado_id.in_(ids)).all()
+        rows = (
+            db.query(StockCongelado)
+            .filter(StockCongelado.producto_congelado_id.in_(ids))
+            .order_by(StockCongelado.id)
+            .all()
+        )
         for r in rows:
             if not es_conteo_manual("congelado", r.notas):
                 continue
             dia = out.setdefault(r.producto_congelado_id, {})
             key = str(r.fecha_entrada)
             valor = r.cantidad_original if r.cantidad_original is not None else r.cantidad
-            dia[key] = dia.get(key, 0.0) + valor
+            if r.fecha_vencimiento is None:
+                # A headcount (no expiry date) means "this is the total right
+                # now" and SUPERSEDES anything counted earlier that day -- the
+                # same contract reconciliar_lotes_tras_conteo already applies to
+                # the saldo, which deactivates every earlier lot. Summing these
+                # instead made one count submitted twice read as double: found
+                # 2026-10-01 when the Registrar screen got hit 7 times, leaving
+                # the anchor for Medialunas at 3.885 against a real count of 555
+                # (the saldo was right all along, only calculado was poisoned).
+                # Rows are ordered by id, so the last one entered wins.
+                dia[key] = valor
+            else:
+                # WITH an expiry date it's a distinct, separately-tracked batch
+                # that is meant to coexist (see test_alertas_vencimiento), and
+                # reconciliar deliberately never fires for it -- so it adds.
+                dia[key] = dia.get(key, 0.0) + valor
     return out
 
 
