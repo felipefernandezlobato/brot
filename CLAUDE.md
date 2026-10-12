@@ -48,12 +48,41 @@ brot/
 
 ## Branding
 
+Applied from the studio's **Manual de Identidad BROT** on 2026-10-12, replacing
+the earlier placeholder branding (`#004225` + EB Garamond/DM Sans). Source files
+live in `design/identidad/` — read `design/identidad/README.md` before touching
+any brand value.
+
 - **Name:** BROT La Panadería
-- **Logo:** `design/image (1).png` — white text + wheat icon on black
-- **Primary color:** British Racing Green — `#004225` (dark green)
-- **Palette:** Green primary, cream/warm white backgrounds, dark text
-- **Fonts:** EB Garamond (headings/display) + DM Sans (body/UI) — Google Fonts
+- **Logo:** three authorized versions in `frontend/public/logos/`, each in verde /
+  negro / crema. Use via `<BrotLogo variante= color=>`; see that component and
+  `frontend/public/logos/README.md` for which version goes where (manual §3.1)
+  and the 150px minimum width (§3.4). `design/image (1).png` is the OLD logo,
+  superseded — don't use it.
+- **Palette (manual §2):** Verde Brot `#2c412c`, Chocolate `#382b27`, Blanco
+  harina `#ece3d4`, Negro `#000000`, Pistacho `#9ea582`, Trigo Tostado `#7a665c`
+- **Fonts (manual §4):** Gelica (títulos, uppercase) + New Reason (subtítulos
+  Medium, cuerpo Regular). Self-hosted woff2 in `frontend/public/fonts/`, NOT
+  Google Fonts.
 - **Tone:** Artisan, warm, professional
+
+### Two traps in the brand files
+
+**1. Don't sample colour from the manual PDF.** The 76 MB
+`Manual de Identidad BROT (1).pdf` renders its own colour swatches slightly off
+from the hex printed beside them — Verde Brot measures `#25422a` there instead of
+`#2c412c`. The authoritative sources are `design/identidad/Paleta de color
+BROT.pdf` and the fill inside the official logo SVGs, which agree with each other
+on `#2c412c`. If the app and the PDF look different side by side, this is why.
+(Felipe reported exactly this on 2026-10-12; the app was briefly changed to the
+measured value and then reverted.)
+
+**2. The Gelica `.otf` files are mislabeled.** `Gelica-Medium.otf`,
+`Gelica-Semi-Bold.otf` and `Gelica-Extra-Light.otf` are **italics** — ITALIC bit
+set in `OS/2.fsSelection`/`head.macStyle`, ~190 units of real slant vs ~10 for the
+upright faces. So the only upright Gelica weights are **300/400/700/900**; there
+is no upright 500 or 600. Ask the studio rather than deriving one from those
+files. New Reason has no such problem (all five weights upright).
 
 ---
 
@@ -282,13 +311,23 @@ Daily/weekly/monthly operational task tracking.
 - **No `router.push()` for tabs:** Use `useState` + `window.history.replaceState()` for in-page navigation
 
 ### UI Conventions
-- **Color palette:**
-  - Primary: `#004225` (British Racing Green), hover: darker shade
-  - Background: warm cream/off-white
-  - Cards: white with subtle border
+- **Color palette** — all of it lives in `@theme` in `frontend/src/app/globals.css`,
+  which carries the reasoning for every derived value. Use the tokens, never a raw
+  hex: a hardcoded hex silently survives a palette change. (The 2026-10-12 rebrand
+  found ~70 of them — Producción and every Recharts chart were still drawing the
+  old green after the tokens had moved, because Recharts takes colour strings and
+  `produccion/page.tsx` used `bg-[#004225]` arbitrary values instead of `bg-brot`.)
+  - Primary: `bg-brot` `#2c412c` (Verde Brot), hover `brot-dark`
+  - Page background: `bg-cream` `#e2d7c5`
+  - Cards: `bg-card` `#ece3d4` (Blanco harina) + `border-cream-dark`
   - Input focus: green ring
-  - Text: dark near-black
-  - Muted text: warm gray
+  - Text: `text-text` near-black; muted: `text-warm-gray` (5.50:1)
+  - **No pure white.** It isn't in the palette; 339 white cards on the warm
+    background read as boxes stuck on top (Felipe, 2026-10-12). `bg-white/10..20`
+    overlays on Verde Brot are intentional and stay.
+  - `pistacho` is 2.02:1 on the background — fill/background only, never text
+- **Headings:** the `.titulo` utility (Gelica + uppercase + tracking), defined once
+  in `globals.css`. Don't re-spell the font on each page.
 - **Inline editing:** Click value → replace with input → save on Enter/blur. **Exception: any edit that writes to a shared/production data store (e.g. correcting a stock count) must NOT save on blur** — a stray click or a mouse-wheel scroll over a focused `<input type="number">` (which Chrome/Firefox treat as increment/decrement) can silently trigger a real write otherwise. Use the safer pattern instead: a pencil icon visible only on hover to enter edit mode (plain click on the value does nothing), explicit ✓/✕ buttons to confirm/cancel (Enter still works, blur/Escape/✕ all cancel without saving — implemented by checking `e.relatedTarget` against the edit group's container in `onBlur`, not a naive always-cancel), and `onWheel`/`ArrowUp`/`ArrowDown` blocked on the input. See `frontend/src/app/stock/page.tsx` and `congelados/page.tsx`'s `TabHistorial` for the reference implementation (added 2026-08-21 after two accidental production edits with the naive version).
 - **Toast notifications:** Auto-dismiss 3s, stacked, bottom-right, green for success, red for error
 - **Loading state:** Simple `Cargando...` centered text
