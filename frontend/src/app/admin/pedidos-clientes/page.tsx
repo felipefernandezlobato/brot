@@ -151,7 +151,7 @@ export default function AdminPedidosClientesPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h2 className="titulo text-2xl text-brot">
           Pedidos de Clientes
         </h2>
         <p className="text-sm text-warm-gray mt-1">
@@ -193,7 +193,7 @@ export default function AdminPedidosClientesPage() {
         <select
           value={filterEstado}
           onChange={(e) => setFilterEstado(e.target.value)}
-          className="px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
+          className="px-3 py-2 border border-cream-dark rounded-lg bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
         >
           <option value="todos">Todos los estados</option>
           {ESTADOS.map(({ value, label }) => (
@@ -207,7 +207,7 @@ export default function AdminPedidosClientesPage() {
           type="date"
           value={filterFecha}
           onChange={(e) => setFilterFecha(e.target.value)}
-          className="px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
+          className="px-3 py-2 border border-cream-dark rounded-lg bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
           title="Filtrar por fecha de entrega"
         />
 
@@ -229,7 +229,7 @@ export default function AdminPedidosClientesPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+      <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-warm-gray">
             Cargando pedidos...

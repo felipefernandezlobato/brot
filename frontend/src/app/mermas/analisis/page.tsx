@@ -133,13 +133,13 @@ export default function MermasAnalisisPage() {
         >
           ← Volver
         </button>
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Análisis de Mermas
         </h1>
       </div>
 
       {/* Date range filter */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-6">
+      <div className="bg-card rounded-xl border border-cream-dark p-4 mb-6">
         <DateRangeShortcuts
           fechaDesde={fechaDesde}
           fechaHasta={fechaHasta}
@@ -156,26 +156,26 @@ export default function MermasAnalisisPage() {
         <div className="space-y-6">
           {/* KPI cards */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white rounded-xl border border-cream-dark p-5">
+            <div className="bg-card rounded-xl border border-cream-dark p-5">
               <p className="text-xs font-medium text-warm-gray uppercase tracking-wide mb-1">
                 Coste total
               </p>
-              <p className="font-[family-name:var(--font-garamond)] text-3xl text-red-700">
+              <p className="titulo text-3xl text-red-700">
                 {formatARS(analisis.coste_total_global)}
               </p>
             </div>
-            <div className="bg-white rounded-xl border border-cream-dark p-5">
+            <div className="bg-card rounded-xl border border-cream-dark p-5">
               <p className="text-xs font-medium text-warm-gray uppercase tracking-wide mb-1">
                 Registros
               </p>
-              <p className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+              <p className="titulo text-3xl text-brot">
                 {analisis.total_registros}
               </p>
             </div>
           </div>
 
           {/* Evolucion — coste total por semana/mes */}
-          <div className="bg-white rounded-xl border border-cream-dark p-5">
+          <div className="bg-card rounded-xl border border-cream-dark p-5">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <h2 className="font-medium text-text">Evolución</h2>
               <div className="flex gap-1 bg-cream rounded-lg p-1">
@@ -199,16 +199,16 @@ export default function MermasAnalisisPage() {
             ) : (
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={analisis.evolucion}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E8DFD3" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#dfd2bf" vertical={false} />
                   <XAxis
                     dataKey="periodo"
-                    tick={{ fontSize: 11, fill: "#6B5E52" }}
+                    tick={{ fontSize: 11, fill: "#66564d" }}
                     tickFormatter={(v: string) => {
                       const d = new Date(v + "T00:00:00");
                       return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
                     }}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: "#6B5E52" }} width={70} tickFormatter={(v) => formatARS(v)} />
+                  <YAxis tick={{ fontSize: 11, fill: "#66564d" }} width={70} tickFormatter={(v) => formatARS(v)} />
                   <Tooltip
                     labelFormatter={(v) => {
                       const d = new Date(String(v) + "T00:00:00");
@@ -221,18 +221,18 @@ export default function MermasAnalisisPage() {
                     ]}
                     contentStyle={{
                       borderRadius: "8px",
-                      border: "1px solid #E8DFD3",
+                      border: "1px solid #dfd2bf",
                       fontSize: "13px",
                     }}
                   />
-                  <Bar dataKey="coste_total" fill="#004225" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="coste_total" fill="#2c412c" radius={[4, 4, 0, 0]} maxBarSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             )}
           </div>
 
           {/* By motivo — horizontal bar chart */}
-          <div className="bg-white rounded-xl border border-cream-dark p-5">
+          <div className="bg-card rounded-xl border border-cream-dark p-5">
             <h2 className="font-medium text-text mb-4">Por motivo</h2>
             {analisis.por_motivo.length === 0 ? (
               <p className="text-warm-gray text-sm">Sin datos</p>
@@ -310,7 +310,7 @@ export default function MermasAnalisisPage() {
 
           {/* By category — horizontal bar chart, one hue (ranked magnitude, not a
               fixed enum like motivo, so no per-category color assignment) */}
-          <div className="bg-white rounded-xl border border-cream-dark p-5">
+          <div className="bg-card rounded-xl border border-cream-dark p-5">
             <h2 className="font-medium text-text mb-4">Por categoría</h2>
             {analisis.por_categoria.length === 0 ? (
               <p className="text-warm-gray text-sm">Sin datos</p>
@@ -344,7 +344,7 @@ export default function MermasAnalisisPage() {
           </div>
 
           {/* Top items */}
-          <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+          <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
             <div className="px-5 py-4 border-b border-cream-dark">
               <h2 className="font-medium text-text">Top ítems con más merma</h2>
             </div>

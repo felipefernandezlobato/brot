@@ -15,7 +15,7 @@ interface Props {
 
 export function RecetaLineasEditor({ lineas, onAdd, onRemove, onChange, costoTotal }: Props) {
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm">
+    <div className="bg-card rounded-xl p-6 shadow-sm">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
           Ingredientes
@@ -51,12 +51,12 @@ export function RecetaLineasEditor({ lineas, onAdd, onRemove, onChange, costoTot
                 onChange={(e) => onChange(l.key, "cantidad", e.target.value)}
                 min="0"
                 step="0.01"
-                className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                className="w-24 border border-cream-dark rounded-lg px-2 py-1.5 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
               />
               <select
                 value={l.unidad}
                 onChange={(e) => onChange(l.key, "unidad", e.target.value)}
-                className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                className="border border-cream-dark rounded-lg px-2 py-1.5 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
               >
                 {UNIDADES.map((u) => (
                   <option key={u} value={u}>

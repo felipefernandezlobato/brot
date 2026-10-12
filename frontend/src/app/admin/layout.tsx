@@ -55,7 +55,7 @@ export default function AdminLayout({
   return (
     <div>
       {/* Page heading */}
-      <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot mb-4">
+      <h1 className="titulo text-3xl text-brot mb-4">
         Administración
       </h1>
 

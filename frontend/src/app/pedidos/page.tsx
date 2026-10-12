@@ -103,7 +103,7 @@ export default function ComprasPage() {
   return (
     <div>
       <div className="flex items-center justify-between gap-4 mb-6">
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Compras Ingredientes
         </h1>
         <PermissionGate module="pedidos_proveedores" action="create">
@@ -116,7 +116,7 @@ export default function ComprasPage() {
         </PermissionGate>
       </div>
 
-      <div className="flex gap-1 bg-white rounded-xl border border-cream-dark p-1 mb-6">
+      <div className="flex gap-1 bg-card rounded-xl border border-cream-dark p-1 mb-6">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -136,7 +136,7 @@ export default function ComprasPage() {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>
       ) : (
         <>
           {tab === "activos" && (
@@ -204,7 +204,7 @@ function TabActivos({
   };
 
   const PedidoCard = ({ p, actions }: { p: PedidoListItem; actions: React.ReactNode }) => (
-    <div className="bg-white rounded-xl border border-cream-dark p-4">
+    <div className="bg-card rounded-xl border border-cream-dark p-4">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <div className="flex items-center gap-2">
@@ -233,7 +233,7 @@ function TabActivos({
 
   if (borradores.length === 0 && enviados.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+      <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
         No hay pedidos activos. Ve a "Propuesta Pedido" para crear uno basado en el stock actual.
       </div>
     );
@@ -363,7 +363,7 @@ function TabPropuesta({ onCreated }: { onCreated: () => void }) {
   };
 
   if (loading) {
-    return <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Calculando recomendacion...</div>;
+    return <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Calculando recomendacion...</div>;
   }
   if (!data) return null;
 
@@ -371,7 +371,7 @@ function TabPropuesta({ onCreated }: { onCreated: () => void }) {
 
   return (
     <>
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+      <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">
         <p className="text-sm text-warm-gray">
           Basado en el stock actual y el consumo de las ultimas 8 semanas.
           Ajusta las cantidades y crea pedidos por proveedor.
@@ -390,7 +390,7 @@ function TabPropuesta({ onCreated }: { onCreated: () => void }) {
           const resolvedId = needsOverride ? (overrideVal ? parseInt(overrideVal) : null) : matched!.id;
 
           return (
-            <div key={group.proveedor} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+            <div key={group.proveedor} className="bg-card rounded-xl border border-cream-dark overflow-hidden">
               <div className="px-4 py-3 bg-cream/50 border-b border-cream-dark flex items-center justify-between gap-3 flex-wrap">
                 <div>
                   <p className="font-medium text-text">{group.proveedor}</p>
@@ -403,7 +403,7 @@ function TabPropuesta({ onCreated }: { onCreated: () => void }) {
                       onChange={(e) =>
                         setOverrideProveedorId((prev) => ({ ...prev, [group.proveedor]: e.target.value }))
                       }
-                      className="border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
+                      className="border border-cream-dark rounded-lg px-2 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
                     >
                       <option value="">Elegir proveedor...</option>
                       {proveedores.map((p) => (
@@ -575,14 +575,14 @@ function TabHistorial({ recibidos }: { recibidos: PedidoListItem[] }) {
 
   if (recibidos.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+      <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
         No hay pedidos recibidos.
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+    <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
       <div className="overflow-x-auto">
         <table className="text-xs w-full">
           <thead>
@@ -616,7 +616,7 @@ function TabHistorial({ recibidos }: { recibidos: PedidoListItem[] }) {
                     key={ing.id}
                     className={idx < ings.length - 1 ? "border-b border-cream-dark" : "border-b border-brot/10"}
                   >
-                    <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-white z-10 whitespace-nowrap">
+                    <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-card z-10 whitespace-nowrap">
                       <Link href={`/ingredientes/${ing.id}`} className="hover:text-brot hover:underline">
                         {ing.nombre}
                       </Link>

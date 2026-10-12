@@ -113,7 +113,7 @@ export default function CongeladoPage() {
         <Link href="/congelados" className="text-warm-gray hover:text-brot transition-colors text-sm min-h-[44px] flex items-center">
           ← Stock Congelado
         </Link>
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">{data.nombre}</h1>
+        <h1 className="titulo text-3xl text-brot">{data.nombre}</h1>
         <span className={`text-xs px-2 py-0.5 rounded-full ${NIVEL_COLORS[data.nivel] || "bg-cream text-warm-gray"}`}>
           {NIVEL_LABELS[data.nivel] || data.nivel}
         </span>
@@ -126,14 +126,14 @@ export default function CongeladoPage() {
           <p className="text-lg font-bold text-text">{data.stock_actual} {data.unidad}</p>
         </div>
         {data.padre && (
-          <div className="bg-white border border-cream-dark rounded-xl p-4">
+          <div className="bg-card border border-cream-dark rounded-xl p-4">
             <p className="text-xs text-warm-gray">Consume</p>
             <Link href={data.padre.receta_id ? `/escandallos/${data.padre.receta_id}` : `/congelados/${data.padre.id}`}
               className="text-sm font-medium text-brot hover:underline">{data.padre.nombre}</Link>
           </div>
         )}
         {data.hijos.length > 0 && (
-          <div className="bg-white border border-cream-dark rounded-xl p-4">
+          <div className="bg-card border border-cream-dark rounded-xl p-4">
             <p className="text-xs text-warm-gray">Produce</p>
             <p className="text-sm font-medium text-text">{data.hijos.map(h => h.nombre).join(", ")}</p>
           </div>
@@ -141,7 +141,7 @@ export default function CongeladoPage() {
       </div>
 
       {/* Full chain as tree */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+      <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">
         <p className="text-xs font-medium text-warm-gray mb-2">Cadena de produccion completa</p>
         <div className="flex items-start gap-1.5 overflow-x-auto pb-2">
           {data.ancestors.map((a) => (
@@ -169,20 +169,20 @@ export default function CongeladoPage() {
 
       {/* Chart */}
       {chartData.length > 1 && (
-        <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4">
           <h2 className="font-medium text-text mb-3">Evolucion de stock y consumo</h2>
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E8DFD3" />
-              <XAxis dataKey="fecha" tick={{ fontSize: 11, fill: "#6B5E52" }}
+              <CartesianGrid strokeDasharray="3 3" stroke="#dfd2bf" />
+              <XAxis dataKey="fecha" tick={{ fontSize: 11, fill: "#66564d" }}
                 tickFormatter={(v: string) => new Date(v + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })} />
-              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6B5E52" }} />
+              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#66564d" }} />
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#dc2626" }} />
               <Tooltip labelFormatter={(v) => formatDate(String(v))}
-                contentStyle={{ borderRadius: "8px", border: "1px solid #E8DFD3", fontSize: "13px" }} />
+                contentStyle={{ borderRadius: "8px", border: "1px solid #dfd2bf", fontSize: "13px" }} />
               <Legend wrapperStyle={{ fontSize: "12px" }} />
               <Bar yAxisId="right" dataKey="consumo" name="Consumo/sem" fill="#dc2626" opacity={0.3} barSize={16} />
-              <Line yAxisId="left" type="monotone" dataKey="stock" name="Stock" stroke="#004225" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              <Line yAxisId="left" type="monotone" dataKey="stock" name="Stock" stroke="#2c412c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -190,7 +190,7 @@ export default function CongeladoPage() {
 
       {/* Movements */}
       {data.movimientos.length > 0 && (
-        <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+        <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
           <div className="px-4 py-3 border-b border-cream-dark">
             <p className="text-sm font-medium text-text">Movimientos recientes</p>
           </div>

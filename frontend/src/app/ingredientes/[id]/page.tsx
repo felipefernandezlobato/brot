@@ -256,7 +256,7 @@ export default function IngredienteDetailPage() {
           >
             ← Volver
           </button>
-          <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+          <h1 className="titulo text-3xl text-brot">
             {ingrediente.nombre}
           </h1>
           {!ingrediente.activo && (
@@ -268,7 +268,7 @@ export default function IngredienteDetailPage() {
         {!editing && (
           <button
             onClick={() => setEditing(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-cream-dark bg-white text-warm-gray hover:border-brot hover:text-brot transition-colors min-h-[44px] text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-cream-dark bg-card text-warm-gray hover:border-brot hover:text-brot transition-colors min-h-[44px] text-sm font-medium"
             title="Editar"
           >
             Editar
@@ -281,17 +281,17 @@ export default function IngredienteDetailPage() {
         <>
           {/* Stat cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <div className="bg-white border border-cream-dark rounded-xl p-4">
+            <div className="bg-card border border-cream-dark rounded-xl p-4">
               <p className="text-xs text-warm-gray">Precio compra</p>
               <p className="text-lg font-bold text-text">{formatARS(ingrediente.precio_compra)}</p>
               <p className="text-xs text-warm-gray">/ {ingrediente.cantidad_compra} {ingrediente.unidad_compra}</p>
             </div>
-            <div className="bg-white border border-brot/30 rounded-xl p-4">
+            <div className="bg-card border border-brot/30 rounded-xl p-4">
               <p className="text-xs text-warm-gray">Costo / {ingrediente.unidad_uso}</p>
               <p className="text-lg font-bold text-brot">{formatARS(ingrediente.costo_por_unidad_uso)}</p>
             </div>
             <div className={`border rounded-xl p-4 ${
-              !stockInfo ? "bg-white border-cream-dark" : stockInfo.stock_actual > 0 ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
+              !stockInfo ? "bg-card border-cream-dark" : stockInfo.stock_actual > 0 ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
             }`}>
               <p className="text-xs text-warm-gray">Stock actual</p>
               <p className="text-lg font-bold text-text">
@@ -301,14 +301,14 @@ export default function IngredienteDetailPage() {
                 <p className="text-xs text-warm-gray">{formatDate(stockInfo.fecha_ultimo_conteo)}</p>
               )}
             </div>
-            <div className="bg-white border border-cream-dark rounded-xl p-4">
+            <div className="bg-card border border-cream-dark rounded-xl p-4">
               <p className="text-xs text-warm-gray">Recetas</p>
               <p className="text-lg font-bold text-text">{recetas.length}</p>
             </div>
           </div>
 
           {/* Info row */}
-          <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+          <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
               <span><span className="text-warm-gray">Categoria:</span> <span className="font-medium text-text">{ingrediente.categoria_nombre}</span></span>
               <span><span className="text-warm-gray">Proveedor:</span> <span className="font-medium text-text">{ingrediente.proveedor ?? "--"}</span></span>
@@ -323,7 +323,7 @@ export default function IngredienteDetailPage() {
 
           {/* Recipes using this ingredient */}
           {recetas.length > 0 && (
-            <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+            <div className="bg-card rounded-xl border border-cream-dark overflow-hidden mb-4">
               <div className="px-4 py-3 border-b border-cream-dark">
                 <h2 className="font-medium text-text text-sm">Recetas que lo usan ({recetas.length})</h2>
               </div>
@@ -368,7 +368,7 @@ export default function IngredienteDetailPage() {
 
           {/* Supplier prices */}
           {preciosProveedores.length > 0 && (
-            <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+            <div className="bg-card rounded-xl border border-cream-dark overflow-hidden mb-4">
               <div className="px-4 py-3 border-b border-cream-dark">
                 <h2 className="font-medium text-text text-sm">Precios por proveedor</h2>
               </div>
@@ -426,24 +426,24 @@ export default function IngredienteDetailPage() {
               return { fecha: r.fecha_registro, stock: Math.round(r.cantidad * 100) / 100, consumo };
             });
             return (
-            <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">
+            <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4">
               <h2 className="font-medium text-text mb-3">Evolucion de stock y consumo semanal</h2>
               <ResponsiveContainer width="100%" height={280}>
                 <ComposedChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E8DFD3" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#dfd2bf" />
                   <XAxis
                     dataKey="fecha"
-                    tick={{ fontSize: 11, fill: "#6B5E52" }}
+                    tick={{ fontSize: 11, fill: "#66564d" }}
                     tickFormatter={(v: string) => {
                       const d = new Date(v + "T00:00:00");
                       return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
                     }}
                   />
-                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6B5E52" }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#66564d" }} />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#dc2626" }} />
                   <Tooltip
                     labelFormatter={(v) => formatDate(String(v))}
-                    contentStyle={{ borderRadius: "8px", border: "1px solid #E8DFD3", fontSize: "13px" }}
+                    contentStyle={{ borderRadius: "8px", border: "1px solid #dfd2bf", fontSize: "13px" }}
                   />
                   <Legend wrapperStyle={{ fontSize: "12px" }} />
                   <Bar yAxisId="right" dataKey="consumo" name="Consumo/sem" fill="#dc2626" opacity={0.3} barSize={20} />
@@ -452,9 +452,9 @@ export default function IngredienteDetailPage() {
                     type="monotone"
                     dataKey="stock"
                     name="Stock"
-                    stroke="#004225"
+                    stroke="#2c412c"
                     strokeWidth={2}
-                    dot={{ r: 3, fill: "#004225" }}
+                    dot={{ r: 3, fill: "#2c412c" }}
                     connectNulls
                   />
                 </ComposedChart>
@@ -465,7 +465,7 @@ export default function IngredienteDetailPage() {
 
           {/* Recent movements */}
           {movimientos.length > 0 && (
-            <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+            <div className="bg-card rounded-xl border border-cream-dark overflow-hidden mb-4">
               <div className="px-4 py-3 border-b border-cream-dark">
                 <h2 className="font-medium text-text">Movimientos recientes</h2>
               </div>
@@ -514,7 +514,7 @@ export default function IngredienteDetailPage() {
           )}
 
           {/* Price history */}
-          <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">
+          <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4">
             <h2 className="font-medium text-text mb-3">
               Historial de precios
             </h2>
@@ -559,7 +559,7 @@ export default function IngredienteDetailPage() {
 
           {/* Delete */}
           <PermissionGate module="ingredientes" action="delete">
-            <div className="bg-white rounded-xl border border-cream-dark p-5">
+            <div className="bg-card rounded-xl border border-cream-dark p-5">
               <h2 className="font-medium text-text mb-2">Zona de peligro</h2>
               <p className="text-sm text-warm-gray mb-3">
                 Eliminar este ingrediente de forma permanente.
@@ -583,7 +583,7 @@ export default function IngredienteDetailPage() {
             handleSave();
           }}
         >
-          <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
+          <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
             <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
               Información básica
             </h2>
@@ -596,7 +596,7 @@ export default function IngredienteDetailPage() {
                 type="text"
                 value={editForm.nombre}
                 onChange={(e) => setField("nombre", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
               />
             </div>
 
@@ -607,7 +607,7 @@ export default function IngredienteDetailPage() {
               <select
                 value={editForm.categoria_id}
                 onChange={(e) => setField("categoria_id", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
               >
                 {categorias.map((cat) => (
                   <option key={cat.id} value={cat.id}>
@@ -625,12 +625,12 @@ export default function IngredienteDetailPage() {
                 type="text"
                 value={editForm.proveedor}
                 onChange={(e) => setField("proveedor", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
               />
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
+          <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
             <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
               Datos de compra
             </h2>
@@ -645,7 +645,7 @@ export default function IngredienteDetailPage() {
                   inputMode="decimal"
                   value={editForm.cantidad_compra}
                   onChange={(e) => setField("cantidad_compra", e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                  className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
                 />
               </div>
               <div>
@@ -655,7 +655,7 @@ export default function IngredienteDetailPage() {
                 <select
                   value={editForm.unidad_compra}
                   onChange={(e) => setField("unidad_compra", e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                  className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
                 >
                   {UNIDADES.map((u) => (
                     <option key={u} value={u}>
@@ -675,12 +675,12 @@ export default function IngredienteDetailPage() {
                 inputMode="decimal"
                 value={editForm.precio_compra}
                 onChange={(e) => setField("precio_compra", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
               />
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
+          <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
             <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
               Datos de uso
             </h2>
@@ -692,7 +692,7 @@ export default function IngredienteDetailPage() {
               <select
                 value={editForm.unidad_uso}
                 onChange={(e) => setField("unidad_uso", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
               >
                 {UNIDADES.map((u) => (
                   <option key={u} value={u}>
@@ -711,12 +711,12 @@ export default function IngredienteDetailPage() {
                 inputMode="decimal"
                 value={editForm.merma_porcentaje}
                 onChange={(e) => setField("merma_porcentaje", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
               />
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
+          <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
             <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
               Notas
             </h2>
@@ -724,12 +724,12 @@ export default function IngredienteDetailPage() {
               value={editForm.notas}
               onChange={(e) => setField("notas", e.target.value)}
               rows={3}
-              className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
+              className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
             />
           </div>
 
           {/* Activo toggle */}
-          <div className="bg-white rounded-xl border border-cream-dark p-5 mb-6">
+          <div className="bg-card rounded-xl border border-cream-dark p-5 mb-6">
             <label className="flex items-center gap-3 cursor-pointer min-h-[44px]">
               <input
                 type="checkbox"
@@ -750,7 +750,7 @@ export default function IngredienteDetailPage() {
             <button
               type="button"
               onClick={cancelEdit}
-              className="flex-1 px-4 py-3 rounded-lg border border-cream-dark bg-white text-warm-gray hover:bg-cream transition-colors min-h-[44px] font-medium"
+              className="flex-1 px-4 py-3 rounded-lg border border-cream-dark bg-card text-warm-gray hover:bg-cream transition-colors min-h-[44px] font-medium"
             >
               Cancelar
             </button>
@@ -768,8 +768,8 @@ export default function IngredienteDetailPage() {
       {/* Delete confirmation modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
-            <h2 className="font-[family-name:var(--font-garamond)] text-xl text-text mb-2">
+          <div className="bg-card rounded-2xl p-6 max-w-sm w-full shadow-xl">
+            <h2 className="titulo text-xl text-text mb-2">
               ¿Eliminar ingrediente?
             </h2>
             <p className="text-sm text-warm-gray mb-6">
@@ -780,7 +780,7 @@ export default function IngredienteDetailPage() {
               <button
                 onClick={() => setShowDeleteModal(false)}
                 disabled={deleting}
-                className="flex-1 px-4 py-3 rounded-lg border border-cream-dark bg-white text-warm-gray hover:bg-cream transition-colors min-h-[44px] font-medium"
+                className="flex-1 px-4 py-3 rounded-lg border border-cream-dark bg-card text-warm-gray hover:bg-cream transition-colors min-h-[44px] font-medium"
               >
                 Cancelar
               </button>

@@ -195,18 +195,18 @@ export default function ProduccionAnalytics() {
       <div className="flex items-center gap-3 mb-4">
         <Link
           href="/produccion"
-          className="flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-lg text-gray-600 shrink-0"
+          className="flex items-center justify-center w-10 h-10 rounded-lg border border-cream-dark bg-card hover:bg-cream text-lg text-gray-600 shrink-0"
           style={{ touchAction: "manipulation" }}
         >
           &lsaquo;
         </Link>
-        <h1 className="font-[family-name:var(--font-garamond)] text-2xl text-gray-900">
+        <h1 className="titulo text-2xl text-gray-900">
           Analytics de Produccion
         </h1>
       </div>
 
       {/* Date range picker */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+      <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">
         {/* Preset buttons */}
         <div className="flex flex-wrap gap-2 mb-3">
           {presets.map((p) => (
@@ -215,8 +215,8 @@ export default function ProduccionAnalytics() {
               onClick={() => applyPreset(p.key)}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activePreset === p.key
-                  ? "bg-[#004225] text-white"
-                  : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  ? "bg-brot text-white"
+                  : "border border-cream-dark text-gray-600 hover:bg-cream"
               }`}
               style={{ touchAction: "manipulation", minHeight: 44 }}
             >
@@ -233,7 +233,7 @@ export default function ProduccionAnalytics() {
               type="date"
               value={desde}
               onChange={(e) => handleDesdeChange(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+              className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none"
               style={{ minHeight: 44 }}
             />
           </div>
@@ -243,7 +243,7 @@ export default function ProduccionAnalytics() {
               type="date"
               value={hasta}
               onChange={(e) => handleHastaChange(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+              className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none"
               style={{ minHeight: 44 }}
             />
           </div>
@@ -264,7 +264,7 @@ export default function ProduccionAnalytics() {
           {/* Summary cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
             {/* Completadas */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="bg-card rounded-xl border border-cream-dark p-4">
               <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">
                 Completadas
               </p>
@@ -295,7 +295,7 @@ export default function ProduccionAnalytics() {
             </div>
 
             {/* Dias registrados */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="bg-card rounded-xl border border-cream-dark p-4">
               <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">
                 Dias registrados
               </p>
@@ -307,8 +307,8 @@ export default function ProduccionAnalytics() {
 
           {/* Daily chart */}
           {data.por_dia.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-              <h2 className="font-[family-name:var(--font-garamond)] text-lg text-gray-900 mb-4">
+            <div className="bg-card rounded-xl border border-cream-dark p-4 mb-6">
+              <h2 className="titulo text-lg text-gray-900 mb-4">
                 Por dia
               </h2>
               <div className="space-y-2">
@@ -357,11 +357,11 @@ export default function ProduccionAnalytics() {
                             : `${dia.completadas}/${dia.planificadas} planificadas`;
                           return (
                             <div
-                              className="flex-1 h-7 bg-gray-100 rounded-md overflow-hidden relative"
+                              className="flex-1 h-7 bg-cream rounded-md overflow-hidden relative"
                               title={label}
                             >
                               <div
-                                className="h-full bg-[#004225] absolute left-0 top-0 transition-all duration-300"
+                                className="h-full bg-brot absolute left-0 top-0 transition-all duration-300"
                                 style={{ width: `${greenPct}%` }}
                               />
                               {bluePct > 0 && (
@@ -402,8 +402,8 @@ export default function ProduccionAnalytics() {
 
           {/* Per-task breakdown */}
           {data.por_tarea.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-              <h2 className="font-[family-name:var(--font-garamond)] text-lg text-gray-900 mb-4">
+            <div className="bg-card rounded-xl border border-cream-dark p-4 mb-6">
+              <h2 className="titulo text-lg text-gray-900 mb-4">
                 Por tarea
               </h2>
 
@@ -411,7 +411,7 @@ export default function ProduccionAnalytics() {
               <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-200 text-left text-xs text-gray-400 uppercase tracking-wide">
+                    <tr className="border-b border-cream-dark text-left text-xs text-gray-400 uppercase tracking-wide">
                       <th className="pb-2 pr-4 font-medium">Tarea</th>
                       <th className="pb-2 pr-4 font-medium text-center">Completadas</th>
                       <th className="pb-2 pr-4 font-medium text-right">Cant. Promedio</th>
@@ -490,7 +490,7 @@ export default function ProduccionAnalytics() {
                   return (
                     <div
                       key={tarea.tarea_id}
-                      className="border border-gray-200 rounded-lg p-3"
+                      className="border border-cream-dark rounded-lg p-3"
                     >
                       <div className="flex items-start justify-between mb-2">
                         <p className="text-sm font-medium text-gray-900">
@@ -555,8 +555,8 @@ export default function ProduccionAnalytics() {
               compare it against, so it's excluded from cumplimiento above,
               but still shown here so it doesn't just disappear. */}
           {data.no_programada.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-              <h2 className="font-[family-name:var(--font-garamond)] text-lg text-gray-900 mb-1">
+            <div className="bg-card rounded-xl border border-cream-dark p-4 mb-6">
+              <h2 className="titulo text-lg text-gray-900 mb-1">
                 Produccion no programada
               </h2>
               <p className="text-xs text-gray-400 mb-4">
@@ -587,7 +587,7 @@ export default function ProduccionAnalytics() {
           {data.por_dia.length === 0 &&
             data.por_tarea.length === 0 &&
             data.no_programada.length === 0 && (
-              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
+              <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-gray-400">
                 Sin datos de produccion en este periodo
               </div>
             )}

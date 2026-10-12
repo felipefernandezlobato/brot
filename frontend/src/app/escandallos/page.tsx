@@ -32,7 +32,7 @@ function MargenBadge({
 }) {
   if (margen === null) {
     return (
-      <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">
+      <span className="px-2 py-0.5 rounded-full text-xs bg-cream text-gray-500">
         —
       </span>
     );
@@ -95,7 +95,7 @@ export default function EscandallsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Escandallos
         </h1>
         <PermissionGate module="recetas" action="create">
@@ -115,7 +115,7 @@ export default function EscandallsPage() {
           placeholder="Buscar receta..."
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+          className="w-full border border-cream-dark rounded-lg px-3 py-2 bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
         />
       </div>
 
@@ -126,7 +126,7 @@ export default function EscandallsPage() {
           className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
             categoriaFiltro === null
               ? "bg-brot text-white"
-              : "bg-white text-warm-gray border border-gray-200 hover:bg-cream"
+              : "bg-card text-warm-gray border border-cream-dark hover:bg-cream"
           }`}
         >
           Todas
@@ -140,7 +140,7 @@ export default function EscandallsPage() {
             className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
               categoriaFiltro === c.id
                 ? "bg-brot text-white"
-                : "bg-white text-warm-gray border border-gray-200 hover:bg-cream"
+                : "bg-card text-warm-gray border border-cream-dark hover:bg-cream"
             }`}
           >
             {c.nombre}
@@ -149,7 +149,7 @@ export default function EscandallsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-card rounded-xl shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-warm-gray text-sm">
             Cargando...

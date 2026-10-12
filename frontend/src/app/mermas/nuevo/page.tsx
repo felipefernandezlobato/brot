@@ -27,7 +27,7 @@ export default function NuevaMermaPage() {
         >
           ← Volver
         </button>
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Registrar Merma
         </h1>
       </div>

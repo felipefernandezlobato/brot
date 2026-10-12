@@ -185,7 +185,7 @@ export default function TemperaturasPage() {
           ← Protocolos
         </Link>
         <span className="text-cream-dark">|</span>
-        <h1 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h1 className="titulo text-2xl text-brot">
           Temperaturas
         </h1>
       </div>
@@ -197,7 +197,7 @@ export default function TemperaturasPage() {
       ) : (
         <>
           {/* Recording form */}
-          <div className="bg-white rounded-xl border border-cream-dark p-5 mb-6">
+          <div className="bg-card rounded-xl border border-cream-dark p-5 mb-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-medium text-text">Turno {shiftLabel}</h2>
               <span className="text-xs text-warm-gray bg-cream rounded-full px-3 py-1">
@@ -252,8 +252,8 @@ export default function TemperaturasPage() {
                           }
                           className={`w-20 text-right px-2 py-1.5 rounded border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brot/30 ${
                             isAlert
-                              ? "border-red-300 bg-white text-red-700"
-                              : "border-cream-dark bg-white"
+                              ? "border-red-300 bg-card text-red-700"
+                              : "border-cream-dark bg-card"
                           }`}
                         />
                         <span className="text-xs text-warm-gray">°C</span>
@@ -277,7 +277,7 @@ export default function TemperaturasPage() {
 
           {/* History chart */}
           {historial.length > 0 && (
-            <div className="bg-white rounded-xl border border-cream-dark p-5">
+            <div className="bg-card rounded-xl border border-cream-dark p-5">
               <h2 className="font-medium text-text mb-1">Últimos 7 días</h2>
               <p className="text-xs text-warm-gray mb-4">
                 Barras más altas = temperatura más elevada. Rojo = sobre máximo.

@@ -141,12 +141,12 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot mb-6">
+      <h1 className="titulo text-3xl text-brot mb-6">
         Panel de Control
       </h1>
 
       {/* Period selector */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+      <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex gap-1">
             {PRESETS.map((p) => (
@@ -169,14 +169,14 @@ export default function DashboardPage() {
                 type="date"
                 value={fechaDesde}
                 onChange={(e) => setFechaDesde(e.target.value)}
-                className="px-2 py-1.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+                className="px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
               />
               <span className="text-warm-gray text-xs">a</span>
               <input
                 type="date"
                 value={fechaHasta}
                 onChange={(e) => setFechaHasta(e.target.value)}
-                className="px-2 py-1.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+                className="px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
               />
             </div>
           )}
@@ -186,7 +186,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex gap-1 bg-white rounded-xl border border-cream-dark p-1 mb-6">
+      <div className="flex gap-1 bg-card rounded-xl border border-cream-dark p-1 mb-6">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -222,7 +222,7 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
   }, [fechaDesde, fechaHasta]);
 
   if (loading) {
-    return <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>;
+    return <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>;
   }
   if (!data) return null;
 
@@ -242,21 +242,21 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
     <>
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div className="bg-white border border-cream-dark rounded-xl p-4">
+        <div className="bg-card border border-cream-dark rounded-xl p-4">
           <p className="text-xs text-warm-gray">Comprado</p>
           <p className="text-xl font-bold text-text">{formatARS(r.comprado_total_ars)}</p>
         </div>
-        <div className="bg-white border border-cream-dark rounded-xl p-4">
+        <div className="bg-card border border-cream-dark rounded-xl p-4">
           <p className="text-xs text-warm-gray">Stock Materia Prima</p>
           <p className="text-xl font-bold text-text">{formatARS(r.stock_mp_valor_ars)}</p>
           <p className="text-xs text-warm-gray">{r.stock_mp_items} ingredientes</p>
         </div>
-        <div className="bg-white border border-cream-dark rounded-xl p-4">
+        <div className="bg-card border border-cream-dark rounded-xl p-4">
           <p className="text-xs text-warm-gray">Producido</p>
           <p className="text-xl font-bold text-text">{r.producido_total_unidades}</p>
           <p className="text-xs text-warm-gray">unidades</p>
         </div>
-        <div className="bg-white border border-cream-dark rounded-xl p-4">
+        <div className="bg-card border border-cream-dark rounded-xl p-4">
           <p className="text-xs text-warm-gray">Entregado B2B</p>
           <p className="text-xl font-bold text-text">{r.entregado_b2b_total}</p>
           <p className="text-xs text-warm-gray">unidades</p>
@@ -264,7 +264,7 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
       </div>
 
       {/* Flow arrow */}
-      <div className="bg-white border border-cream-dark rounded-xl p-4 mb-6">
+      <div className="bg-card border border-cream-dark rounded-xl p-4 mb-6">
         <p className="text-xs font-medium text-warm-gray mb-3">Flujo de productos</p>
         <div className="flex items-center justify-between gap-2 overflow-x-auto text-center">
           <div className="flex-1 min-w-[80px]">
@@ -296,7 +296,7 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
 
       {/* Stock congelado by product */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white border border-cream-dark rounded-xl p-4">
+        <div className="bg-card border border-cream-dark rounded-xl p-4">
           <p className="text-sm font-medium text-text mb-3">Stock Congelado</p>
           <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
             {data.stock_congelado
@@ -310,7 +310,7 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
           </div>
         </div>
 
-        <div className="bg-white border border-cream-dark rounded-xl p-4">
+        <div className="bg-card border border-cream-dark rounded-xl p-4">
           <p className="text-sm font-medium text-text mb-3">Materia Prima (top 10 por valor)</p>
           <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
             {data.stock_materia_prima
@@ -331,7 +331,7 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
 
       {/* Recent movements */}
       {data.movimientos_recientes.length > 0 && (
-        <div className="bg-white border border-cream-dark rounded-xl overflow-hidden">
+        <div className="bg-card border border-cream-dark rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-cream-dark">
             <p className="text-sm font-medium text-text">Movimientos recientes</p>
           </div>
@@ -357,7 +357,7 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
       )}
 
       {data.movimientos_recientes.length === 0 && (
-        <div className="bg-white border border-cream-dark rounded-xl p-6 text-center text-warm-gray text-sm">
+        <div className="bg-card border border-cream-dark rounded-xl p-6 text-center text-warm-gray text-sm">
           No hay movimientos de stock registrados todavia.
           Los movimientos se crean automaticamente al producir, recibir pedidos, entregar o registrar mermas.
         </div>
@@ -380,7 +380,7 @@ function TabReconciliacion({ fechaDesde, fechaHasta }: { fechaDesde: string; fec
   }, [fechaDesde, fechaHasta]);
 
   if (loading) {
-    return <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>;
+    return <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>;
   }
   if (!data) return null;
 
@@ -414,7 +414,7 @@ function TabReconciliacion({ fechaDesde, fechaHasta }: { fechaDesde: string; fec
       </p>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+      <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

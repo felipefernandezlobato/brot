@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { BrotLogo } from "@/components/BrotLogo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8003";
 
@@ -38,14 +39,16 @@ export default function ClienteLoginPage() {
 
   return (
     <div className="min-h-screen bg-brot flex flex-col items-center justify-center p-4">
-      <div className="mb-8 text-center">
-        <h1 className="font-[family-name:var(--font-garamond)] text-4xl text-white mb-1">
-          BROT
-        </h1>
-        <p className="text-white/60 text-sm">Tienda en línea · La Panadería</p>
+      <div className="mb-8 flex flex-col items-center text-center">
+        {/* Logo principal, que es el que el manual pide por defecto (3.1).
+            Ya dice PANADERIA, asi que el subtitulo solo aclara que esto es
+            la tienda y no el panel del obrador. */}
+        <BrotLogo variante="principal" color="crema" className="h-28 w-auto" />
+        <h1 className="sr-only">BROT Panadería</h1>
+        <p className="text-white/60 text-sm mt-3">Tienda en línea</p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm">
+      <div className="bg-card rounded-2xl shadow-xl p-8 w-full max-w-sm">
         <h2 className="text-xl font-semibold text-text mb-6">Iniciar sesión</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">

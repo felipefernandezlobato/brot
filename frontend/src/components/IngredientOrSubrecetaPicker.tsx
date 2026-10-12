@@ -61,7 +61,7 @@ export function IngredientOrSubrecetaPicker({
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-xl">
+      <div className="bg-card rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-xl">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
           <h3 className="font-medium text-text">{title}</h3>
           <button
@@ -103,7 +103,7 @@ export function IngredientOrSubrecetaPicker({
             value={buscar}
             onChange={(e) => setBuscar(e.target.value)}
             autoFocus
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+            className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
           />
         </div>
 

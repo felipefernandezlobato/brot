@@ -247,7 +247,7 @@ export default function ClientesB2BPage() {
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
         <div>
-          <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+          <h2 className="titulo text-2xl text-brot">
             Clientes B2B
           </h2>
           <p className="text-sm text-warm-gray mt-1">
@@ -265,18 +265,18 @@ export default function ClientesB2BPage() {
       {/* Client list */}
       <div className="space-y-3 mb-6">
         {loading ? (
-          <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+          <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
             Cargando...
           </div>
         ) : clientes.length === 0 ? (
-          <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+          <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
             Sin clientes registrados.
           </div>
         ) : (
           clientes.map((c) => {
             if (editId === c.id) {
               return (
-                <div key={c.id} className="bg-white rounded-xl border border-brot/30 p-5">
+                <div key={c.id} className="bg-card rounded-xl border border-brot/30 p-5">
                   <h3 className="font-medium mb-4 text-sm">Editando: {c.nombre}</h3>
                   <ClienteForm
                     form={editForm}
@@ -314,7 +314,7 @@ export default function ClientesB2BPage() {
             }
 
             return (
-              <div key={c.id} className="bg-white rounded-xl border border-cream-dark p-4">
+              <div key={c.id} className="bg-card rounded-xl border border-cream-dark p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -359,7 +359,7 @@ export default function ClientesB2BPage() {
       </div>
 
       {/* Create form */}
-      <div className="bg-white rounded-xl border border-cream-dark p-5">
+      <div className="bg-card rounded-xl border border-cream-dark p-5">
         <h3 className="font-medium mb-4">Nuevo cliente</h3>
         <ClienteForm
           form={newForm}

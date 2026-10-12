@@ -71,7 +71,7 @@ export default function NuevaRecetaPage() {
         >
           ← Volver
         </button>
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Nueva Receta
         </h1>
       </div>
@@ -108,7 +108,7 @@ export default function NuevaRecetaPage() {
           <button
             type="button"
             onClick={() => router.back()}
-            className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
+            className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
           >
             Cancelar
           </button>

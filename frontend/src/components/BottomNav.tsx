@@ -24,7 +24,7 @@ export function BottomNav({ role }: { role: string }) {
   const items = NAV_ITEMS.filter((item) => !item.admin || role === "admin");
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-cream-dark z-40 pb-[env(safe-area-inset-bottom)]">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-cream-dark z-40 pb-[env(safe-area-inset-bottom)]">
       <div className="flex justify-around">
         {items.map((item) => {
           const active =

@@ -114,14 +114,14 @@ export default function NuevoIngredientePage() {
         >
           ← Volver
         </button>
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Nuevo Ingrediente
         </h1>
       </div>
 
       <form onSubmit={handleSubmit} noValidate>
         {/* Basic info card */}
-        <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
           <h2 className="font-medium text-text text-sm uppercase tracking-wide text-warm-gray">
             Información básica
           </h2>
@@ -136,7 +136,7 @@ export default function NuevoIngredientePage() {
               value={form.nombre}
               onChange={(e) => setField("nombre", e.target.value)}
               placeholder="Ej. Harina de trigo"
-              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+              className={`w-full px-3 py-2.5 rounded-lg border bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.nombre ? "border-red-400" : "border-cream-dark"
               }`}
             />
@@ -153,7 +153,7 @@ export default function NuevoIngredientePage() {
             <select
               value={form.categoria_id}
               onChange={(e) => setField("categoria_id", e.target.value)}
-              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+              className={`w-full px-3 py-2.5 rounded-lg border bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.categoria_id ? "border-red-400" : "border-cream-dark"
               }`}
             >
@@ -179,13 +179,13 @@ export default function NuevoIngredientePage() {
               value={form.proveedor}
               onChange={(e) => setField("proveedor", e.target.value)}
               placeholder="Nombre del proveedor"
-              className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+              className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
             />
           </div>
         </div>
 
         {/* Purchase info card */}
-        <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
           <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
             Datos de compra
           </h2>
@@ -202,7 +202,7 @@ export default function NuevoIngredientePage() {
                 value={form.cantidad_compra}
                 onChange={(e) => setField("cantidad_compra", e.target.value)}
                 placeholder="1"
-                className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+                className={`w-full px-3 py-2.5 rounded-lg border bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                   errors.cantidad_compra ? "border-red-400" : "border-cream-dark"
                 }`}
               />
@@ -221,7 +221,7 @@ export default function NuevoIngredientePage() {
               <select
                 value={form.unidad_compra}
                 onChange={(e) => setField("unidad_compra", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
               >
                 {UNIDADES_COMPRA.map((u) => (
                   <option key={u} value={u}>
@@ -243,7 +243,7 @@ export default function NuevoIngredientePage() {
               value={form.precio_compra}
               onChange={(e) => setField("precio_compra", e.target.value)}
               placeholder="0.00"
-              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+              className={`w-full px-3 py-2.5 rounded-lg border bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.precio_compra ? "border-red-400" : "border-cream-dark"
               }`}
             />
@@ -254,7 +254,7 @@ export default function NuevoIngredientePage() {
         </div>
 
         {/* Usage info card */}
-        <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
           <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
             Datos de uso
           </h2>
@@ -267,7 +267,7 @@ export default function NuevoIngredientePage() {
             <select
               value={form.unidad_uso}
               onChange={(e) => setField("unidad_uso", e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+              className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
             >
               {UNIDADES_USO.map((u) => (
                 <option key={u} value={u}>
@@ -288,7 +288,7 @@ export default function NuevoIngredientePage() {
               value={form.merma_porcentaje}
               onChange={(e) => setField("merma_porcentaje", e.target.value)}
               placeholder="0"
-              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+              className={`w-full px-3 py-2.5 rounded-lg border bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.merma_porcentaje ? "border-red-400" : "border-cream-dark"
               }`}
             />
@@ -304,7 +304,7 @@ export default function NuevoIngredientePage() {
         </div>
 
         {/* Notes card */}
-        <div className="bg-white rounded-xl border border-cream-dark p-5 mb-6 space-y-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-5 mb-6 space-y-4">
           <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
             Notas
           </h2>
@@ -313,7 +313,7 @@ export default function NuevoIngredientePage() {
             onChange={(e) => setField("notas", e.target.value)}
             placeholder="Observaciones adicionales..."
             rows={3}
-            className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
+            className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
           />
         </div>
 
@@ -322,7 +322,7 @@ export default function NuevoIngredientePage() {
           <button
             type="button"
             onClick={() => router.push("/ingredientes")}
-            className="flex-1 px-4 py-3 rounded-lg border border-cream-dark bg-white text-warm-gray hover:bg-cream transition-colors min-h-[44px] font-medium"
+            className="flex-1 px-4 py-3 rounded-lg border border-cream-dark bg-card text-warm-gray hover:bg-cream transition-colors min-h-[44px] font-medium"
           >
             Cancelar
           </button>

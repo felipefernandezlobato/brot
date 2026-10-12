@@ -194,7 +194,7 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
               min="1"
               value={editCantidad}
               onChange={(e) => setEditCantidad(e.target.value)}
-              className="w-20 px-2 py-1.5 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+              className="w-20 px-2 py-1.5 border border-cream-dark rounded-lg bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
             />
           </div>
           <div className="flex items-center gap-2 mt-4">
@@ -301,7 +301,7 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
   };
 
   const renderGroup = (title: string, items: PedidoRecurrente[]) => (
-    <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+    <div className="bg-card rounded-xl border border-cream-dark overflow-hidden mb-4">
       <div className="px-4 py-2.5 bg-cream-dark flex items-center justify-between">
         <h3 className="text-xs font-semibold text-warm-gray uppercase tracking-widest">
           {title}
@@ -326,7 +326,7 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
 
       <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-6">
         <div className="flex items-center justify-between mb-6 gap-3">
-          <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+          <h1 className="titulo text-3xl text-brot">
             Pedidos Recurrentes
           </h1>
           <button
@@ -344,7 +344,7 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
 
         {/* Create form */}
         {showForm && (
-          <div className="bg-white rounded-xl border border-cream-dark p-5 mb-6">
+          <div className="bg-card rounded-xl border border-cream-dark p-5 mb-6">
             <h3 className="font-medium mb-4">Nuevo pedido recurrente</h3>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>

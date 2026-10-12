@@ -260,7 +260,7 @@ export default function CategoriasPage() {
     items: Categoria[],
     tipo: "ingrediente" | "receta"
   ) => (
-    <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-6">
+    <div className="bg-card rounded-xl border border-cream-dark overflow-hidden mb-6">
       <div className="px-4 py-2.5 bg-cream-dark flex items-center justify-between">
         <h3 className="text-xs font-semibold text-warm-gray uppercase tracking-widest">
           {title}
@@ -303,7 +303,7 @@ export default function CategoriasPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h2 className="titulo text-2xl text-brot">
           Categorías
         </h2>
         <p className="text-sm text-warm-gray mt-1">
@@ -321,7 +321,7 @@ export default function CategoriasPage() {
       )}
 
       {/* Create form */}
-      <div className="bg-white rounded-xl border border-cream-dark p-5">
+      <div className="bg-card rounded-xl border border-cream-dark p-5">
         <h3 className="font-medium mb-4">Nueva Categoría</h3>
         <form onSubmit={handleCreate}>
           <div className="flex gap-3 flex-wrap items-end">

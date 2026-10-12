@@ -96,7 +96,7 @@ function ChecklistSection({
       <h3 className="text-xs font-semibold uppercase tracking-wider text-warm-gray mb-2 px-1">
         {title}
       </h3>
-      <div className="bg-white rounded-xl overflow-hidden border border-cream-dark">
+      <div className="bg-card rounded-xl overflow-hidden border border-cream-dark">
         {items.map((item, idx) => {
           const done = !!item.completion;
           const isLast = idx === items.length - 1;
@@ -315,7 +315,7 @@ export default function ProtocolosPage() {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Protocolos
         </h1>
         <Link
@@ -373,7 +373,7 @@ export default function ProtocolosPage() {
           {(activeTab === "apertura" || activeTab === "cierre") && (
             <Link
               href="/protocolos/temperaturas"
-              className="flex items-center justify-between bg-white border border-cream-dark rounded-xl px-4 py-3 mb-4 hover:bg-cream transition-colors group"
+              className="flex items-center justify-between bg-card border border-cream-dark rounded-xl px-4 py-3 mb-4 hover:bg-cream transition-colors group"
             >
               <div className="flex items-center gap-3">
                 <div>

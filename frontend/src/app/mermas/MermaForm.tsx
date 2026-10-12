@@ -243,7 +243,7 @@ export default function MermaForm({
   return (
     <form onSubmit={handleSubmit} noValidate>
       {/* Item source toggle */}
-      <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
+      <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
         <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
           Ítem
         </h2>
@@ -256,7 +256,7 @@ export default function MermaForm({
             className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
               form.modo === "producto"
                 ? "bg-brot text-white"
-                : "bg-white text-warm-gray hover:bg-cream"
+                : "bg-card text-warm-gray hover:bg-cream"
             }`}
           >
             Producto
@@ -267,7 +267,7 @@ export default function MermaForm({
             className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
               form.modo === "ingrediente"
                 ? "bg-brot text-white"
-                : "bg-white text-warm-gray hover:bg-cream"
+                : "bg-card text-warm-gray hover:bg-cream"
             }`}
           >
             Ingrediente
@@ -278,7 +278,7 @@ export default function MermaForm({
             className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
               form.modo === "libre"
                 ? "bg-brot text-white"
-                : "bg-white text-warm-gray hover:bg-cream"
+                : "bg-card text-warm-gray hover:bg-cream"
             }`}
           >
             Otro
@@ -294,7 +294,7 @@ export default function MermaForm({
             <button
               type="button"
               onClick={() => setPickerOpen(true)}
-              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-left focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+              className={`w-full px-3 py-2.5 rounded-lg border bg-card text-left focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.producto_congelado_id ? "border-red-400" : "border-cream-dark"
               } ${selectedProducto ? "text-text" : "text-warm-gray"}`}
             >
@@ -320,7 +320,7 @@ export default function MermaForm({
             <button
               type="button"
               onClick={() => setPickerOpen(true)}
-              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-left focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+              className={`w-full px-3 py-2.5 rounded-lg border bg-card text-left focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.ingrediente_id ? "border-red-400" : "border-cream-dark"
               } ${selectedIngredient ? "text-text" : "text-warm-gray"}`}
             >
@@ -352,7 +352,7 @@ export default function MermaForm({
               value={form.nombre_libre}
               onChange={(e) => setField("nombre_libre", e.target.value)}
               placeholder="Ej. Pan artesanal, Brioche..."
-              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+              className={`w-full px-3 py-2.5 rounded-lg border bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.nombre_libre ? "border-red-400" : "border-cream-dark"
               }`}
             />
@@ -364,7 +364,7 @@ export default function MermaForm({
       </div>
 
       {/* Quantity, unit & date */}
-      <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
+      <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
         <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
           Cantidad y fecha
         </h2>
@@ -380,7 +380,7 @@ export default function MermaForm({
               value={form.cantidad}
               onChange={(e) => setField("cantidad", e.target.value.replace(",", "."))}
               placeholder="0"
-              className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+              className={`w-full px-3 py-2.5 rounded-lg border bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
                 errors.cantidad ? "border-red-400" : "border-cream-dark"
               }`}
             />
@@ -405,7 +405,7 @@ export default function MermaForm({
               <select
                 value={form.unidad}
                 onChange={(e) => setField("unidad", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
               >
                 {UNIDADES.map((u) => (
                   <option key={u} value={u}>
@@ -426,7 +426,7 @@ export default function MermaForm({
             value={form.fecha}
             max={today()}
             onChange={(e) => setField("fecha", e.target.value)}
-            className={`w-full px-3 py-2.5 rounded-lg border bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
+            className={`w-full px-3 py-2.5 rounded-lg border bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] ${
               errors.fecha ? "border-red-400" : "border-cream-dark"
             }`}
           />
@@ -450,7 +450,7 @@ export default function MermaForm({
       </div>
 
       {/* Motivo */}
-      <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
+      <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4 space-y-4">
         <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
           Motivo
         </h2>
@@ -464,7 +464,7 @@ export default function MermaForm({
               className={`py-2.5 px-3 rounded-lg border text-sm font-medium transition-colors min-h-[44px] ${
                 form.motivo === value
                   ? "bg-brot border-brot text-white"
-                  : "bg-white border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+                  : "bg-card border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
               }`}
             >
               {label}
@@ -474,7 +474,7 @@ export default function MermaForm({
       </div>
 
       {/* Notes */}
-      <div className="bg-white rounded-xl border border-cream-dark p-5 mb-6 space-y-4">
+      <div className="bg-card rounded-xl border border-cream-dark p-5 mb-6 space-y-4">
         <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
           Notas
         </h2>
@@ -483,7 +483,7 @@ export default function MermaForm({
           onChange={(e) => setField("notas", e.target.value)}
           placeholder="Observaciones adicionales..."
           rows={3}
-          className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
+          className="w-full px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
         />
       </div>
 
@@ -492,7 +492,7 @@ export default function MermaForm({
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 px-4 py-3 rounded-lg border border-cream-dark bg-white text-warm-gray hover:bg-cream transition-colors min-h-[44px] font-medium"
+          className="flex-1 px-4 py-3 rounded-lg border border-cream-dark bg-card text-warm-gray hover:bg-cream transition-colors min-h-[44px] font-medium"
         >
           Cancelar
         </button>

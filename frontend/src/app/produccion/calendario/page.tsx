@@ -43,7 +43,7 @@ const TIPO_COLORS: Record<
   { dot: string; bg: string; border: string }
 > = {
   produccion: {
-    dot: "bg-[#004225]",
+    dot: "bg-brot",
     bg: "bg-green-50",
     border: "border-green-200",
   },
@@ -63,9 +63,9 @@ const TIPO_COLORS: Record<
     border: "border-purple-200",
   },
   admin: {
-    dot: "bg-gray-500",
-    bg: "bg-gray-100",
-    border: "border-gray-300",
+    dot: "bg-cream0",
+    bg: "bg-cream",
+    border: "border-cream-dark",
   },
 };
 
@@ -162,7 +162,7 @@ export default function CalendarioProduccion() {
       <div>
         <Link
           href="/produccion"
-          className="text-sm text-[#004225] hover:underline"
+          className="text-sm text-brot hover:underline"
         >
           &larr; Volver a Produccion
         </Link>
@@ -183,12 +183,12 @@ export default function CalendarioProduccion() {
       <div className="mb-4">
         <Link
           href="/produccion"
-          className="text-sm text-[#004225] hover:underline inline-block"
+          className="text-sm text-brot hover:underline inline-block"
           style={{ touchAction: "manipulation", minHeight: 44, display: "inline-flex", alignItems: "center" }}
         >
           &larr; Volver a Produccion
         </Link>
-        <h1 className="font-[family-name:var(--font-garamond)] text-2xl text-gray-900 mt-1">
+        <h1 className="titulo text-2xl text-gray-900 mt-1">
           Calendario Semanal
         </h1>
       </div>
@@ -198,7 +198,7 @@ export default function CalendarioProduccion() {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
-              <th className="w-16 p-2 text-left text-xs text-gray-400 font-medium border-b border-gray-200">
+              <th className="w-16 p-2 text-left text-xs text-gray-400 font-medium border-b border-cream-dark">
                 Hora
               </th>
               {DAY_KEYS.map((dk) => {
@@ -207,19 +207,19 @@ export default function CalendarioProduccion() {
                   return (
                     <th
                       key={dk}
-                      className="p-2 border-b border-gray-200"
+                      className="p-2 border-b border-cream-dark"
                     />
                   );
                 }
                 const totalMin = getTotalMinutes(dia.tareas);
                 return (
-                  <th key={dk} className="p-2 border-b border-gray-200 text-left">
+                  <th key={dk} className="p-2 border-b border-cream-dark text-left">
                     <button
                       onClick={() => navigateToDay(dk)}
-                      className="text-left hover:text-[#004225] transition-colors group w-full"
+                      className="text-left hover:text-brot transition-colors group w-full"
                       style={{ touchAction: "manipulation", minHeight: 44 }}
                     >
-                      <span className="text-sm font-semibold text-gray-800 group-hover:text-[#004225]">
+                      <span className="text-sm font-semibold text-gray-800 group-hover:text-brot">
                         {dia.nombre}
                       </span>
                       <br />
@@ -290,7 +290,7 @@ export default function CalendarioProduccion() {
 
             {/* Notas row */}
             {hasAnyNotes && (
-              <tr className="border-t-2 border-gray-200">
+              <tr className="border-t-2 border-cream-dark">
                 <td className="p-2 text-xs text-gray-500 font-medium align-top">
                   Notas
                 </td>
@@ -352,8 +352,8 @@ export default function CalendarioProduccion() {
                 onClick={() => setActiveDay(dk)}
                 className={`px-3 py-2 rounded-lg text-sm font-medium shrink-0 transition-colors ${
                   isActive
-                    ? "bg-[#004225] text-white"
-                    : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    ? "bg-brot text-white"
+                    : "bg-card border border-cream-dark text-gray-600 hover:bg-cream"
                 }`}
                 style={{ touchAction: "manipulation", minHeight: 44 }}
               >
@@ -387,7 +387,7 @@ export default function CalendarioProduccion() {
                   </div>
                   <button
                     onClick={() => navigateToDay(activeDay)}
-                    className="text-sm text-[#004225] border border-[#004225]/30 px-3 py-2 rounded-lg hover:bg-[#004225]/5 transition-colors"
+                    className="text-sm text-brot border border-brot/30 px-3 py-2 rounded-lg hover:bg-brot/5 transition-colors"
                     style={{ touchAction: "manipulation", minHeight: 44 }}
                   >
                     Ver dia
@@ -396,7 +396,7 @@ export default function CalendarioProduccion() {
 
                 {/* Tasks list */}
                 {timedTareas.length === 0 && noteTareas.length === 0 ? (
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-400 text-sm">
+                  <div className="bg-card rounded-xl border border-cream-dark p-6 text-center text-gray-400 text-sm">
                     Sin tareas para este dia
                   </div>
                 ) : (

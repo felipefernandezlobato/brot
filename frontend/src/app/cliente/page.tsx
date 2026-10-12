@@ -238,7 +238,7 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6">
         {/* Greeting */}
         <div className="mb-6">
-          <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+          <h1 className="titulo text-3xl text-brot">
             Hola, {cliente.nombre.split(" ")[0]}
           </h1>
           <p className="text-warm-gray text-sm mt-1">
@@ -247,7 +247,7 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
         </div>
 
         {/* Delivery calendar */}
-        <div className="bg-white rounded-xl border border-cream-dark p-4 mb-6">
+        <div className="bg-card rounded-xl border border-cream-dark p-4 mb-6">
           <p className="text-sm font-medium text-warm-gray mb-1">
             Fecha de entrega
           </p>
@@ -332,7 +332,7 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
                     return (
                       <div
                         key={p.id}
-                        className={`bg-white rounded-xl border p-4 flex flex-col gap-3 transition-colors ${
+                        className={`bg-card rounded-xl border p-4 flex flex-col gap-3 transition-colors ${
                           qty > 0
                             ? "border-brot/40 bg-brot/5"
                             : "border-cream-dark"
@@ -400,7 +400,7 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
 
       {/* Floating cart bar */}
       {cartCount > 0 && (
-        <div className="sticky bottom-0 bg-white border-t border-cream-dark shadow-lg">
+        <div className="sticky bottom-0 bg-card border-t border-cream-dark shadow-lg">
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
             <button
               onClick={() => setShowCart((v) => !v)}

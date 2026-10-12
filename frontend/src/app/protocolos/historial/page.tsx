@@ -148,13 +148,13 @@ export default function HistorialPage() {
           ← Protocolos
         </Link>
         <span className="text-cream-dark">|</span>
-        <h1 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h1 className="titulo text-2xl text-brot">
           Historial
         </h1>
       </div>
 
       {/* Mode selector */}
-      <div className="flex gap-1 bg-white border border-cream-dark rounded-xl p-1 mb-4 w-fit">
+      <div className="flex gap-1 bg-card border border-cream-dark rounded-xl p-1 mb-4 w-fit">
         {(["day", "week", "month"] as Mode[]).map((m) => (
           <button
             key={m}
@@ -174,7 +174,7 @@ export default function HistorialPage() {
       </div>
 
       {/* Date navigator */}
-      <div className="flex items-center justify-between bg-white border border-cream-dark rounded-xl px-4 py-3 mb-6">
+      <div className="flex items-center justify-between bg-card border border-cream-dark rounded-xl px-4 py-3 mb-6">
         <button
           onClick={() => setDate((d) => navDelta(mode, d, -1))}
           className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-cream transition-colors text-warm-gray hover:text-text text-lg"
@@ -210,11 +210,11 @@ export default function HistorialPage() {
       ) : (
         <>
           {/* Summary */}
-          <div className="bg-white border border-cream-dark rounded-xl p-5 mb-6">
+          <div className="bg-card border border-cream-dark rounded-xl p-5 mb-6">
             <div className="flex items-center gap-5">
               <div className="flex-shrink-0">
                 <p
-                  className={`text-5xl font-[family-name:var(--font-garamond)] ${
+                  className={`text-5xl titulo ${
                     pct >= 80
                       ? "text-brot"
                       : pct >= 50
@@ -261,7 +261,7 @@ export default function HistorialPage() {
                     {done}/{tipoItems.length}
                   </span>
                 </div>
-                <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+                <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
                   {tipoItems.map((item, idx) => {
                     const tmpl = templateMap.get(item.template_id);
                     return (

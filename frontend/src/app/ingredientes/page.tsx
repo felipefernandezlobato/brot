@@ -73,7 +73,7 @@ export default function IngredientesPage() {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Ingredientes
         </h1>
         <button
@@ -91,12 +91,12 @@ export default function IngredientesPage() {
           placeholder="Buscar ingrediente..."
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
-          className="flex-1 px-4 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+          className="flex-1 px-4 py-2.5 rounded-lg border border-cream-dark bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
         />
         <select
           value={proveedorFiltro}
           onChange={(e) => setProveedorFiltro(e.target.value)}
-          className="px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+          className="px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
         >
           <option value="">Todos los proveedores</option>
           {proveedores.map((p) => (
@@ -112,7 +112,7 @@ export default function IngredientesPage() {
           className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap min-h-[36px] transition-colors ${
             categoriaId === null
               ? "bg-brot text-white"
-              : "bg-white border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+              : "bg-card border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
           }`}
         >
           Todas
@@ -126,7 +126,7 @@ export default function IngredientesPage() {
             className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap min-h-[36px] transition-colors ${
               categoriaId === cat.id
                 ? "bg-brot text-white"
-                : "bg-white border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+                : "bg-card border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
             }`}
           >
             {cat.nombre}
@@ -135,7 +135,7 @@ export default function IngredientesPage() {
       </div>
 
       {/* Table card */}
-      <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+      <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-warm-gray">Cargando...</div>
         ) : filtrados.length === 0 ? (

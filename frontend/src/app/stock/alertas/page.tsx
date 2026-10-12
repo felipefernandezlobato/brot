@@ -88,7 +88,7 @@ export default function AlertasStockPage() {
         >
           ←
         </button>
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Alertas de Stock
         </h1>
         <button
@@ -100,11 +100,11 @@ export default function AlertasStockPage() {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           Cargando...
         </div>
       ) : alertas.length === 0 ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center">
           <p className="text-text font-medium">Todo en orden</p>
           <p className="text-warm-gray text-sm mt-1">
             No hay ingredientes con stock bajo o sin stock.
@@ -130,7 +130,7 @@ export default function AlertasStockPage() {
               <h2 className="text-sm font-semibold text-red-700 mb-2 uppercase tracking-wide">
                 Sin stock ({sinStock.length})
               </h2>
-              <div className="bg-white rounded-xl border border-red-200 overflow-hidden divide-y divide-red-100">
+              <div className="bg-card rounded-xl border border-red-200 overflow-hidden divide-y divide-red-100">
                 {sinStock.map((a) => (
                   <AlertaCard key={a.ingrediente_id} alerta={a} />
                 ))}
@@ -144,7 +144,7 @@ export default function AlertasStockPage() {
               <h2 className="text-sm font-semibold text-amber-700 mb-2 uppercase tracking-wide">
                 Sin registro ({sinRegistro.length})
               </h2>
-              <div className="bg-white rounded-xl border border-amber-200 overflow-hidden divide-y divide-amber-100">
+              <div className="bg-card rounded-xl border border-amber-200 overflow-hidden divide-y divide-amber-100">
                 {sinRegistro.map((a) => (
                   <AlertaCard key={a.ingrediente_id} alerta={a} />
                 ))}

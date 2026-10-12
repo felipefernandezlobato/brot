@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { BrotLogo } from "./BrotLogo";
 
 export function CustomerNav({ nombre }: { nombre?: string }) {
   const pathname = usePathname();
@@ -22,11 +23,10 @@ export function CustomerNav({ nombre }: { nombre?: string }) {
     <header className="bg-brot text-white shadow-md">
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
         {/* Logo */}
-        <Link
-          href="/cliente"
-          className="font-[family-name:var(--font-garamond)] text-2xl tracking-wide"
-        >
-          BROT
+        {/* Reducido: la barra mide 56px de alto, y dentro de la tienda la
+            marca ya esta contextualizada (seccion 3.1 del manual). */}
+        <Link href="/cliente" aria-label="BROT Panadería — Inicio">
+          <BrotLogo variante="reducido" color="crema" className="h-6 w-auto" />
         </Link>
 
         {/* Nav links */}

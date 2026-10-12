@@ -68,7 +68,7 @@ function ProductoRow({
               type="text"
               value={editForm.nombre}
               onChange={(e) => onEditChange("nombre", e.target.value)}
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
               autoFocus
             />
           </div>
@@ -80,7 +80,7 @@ function ProductoRow({
               step="0.01"
               value={editForm.precio}
               onChange={(e) => onEditChange("precio", e.target.value)}
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
             />
           </div>
         </div>
@@ -91,7 +91,7 @@ function ProductoRow({
             value={editForm.descripcion}
             onChange={(e) => onEditChange("descripcion", e.target.value)}
             placeholder="Opcional"
-            className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+            className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
           />
         </div>
         <div className="flex gap-3 flex-wrap">
@@ -102,7 +102,7 @@ function ProductoRow({
               value={editForm.categoria}
               onChange={(e) => onEditChange("categoria", e.target.value)}
               placeholder="Ej: pan"
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
             />
           </div>
           <div className="w-24">
@@ -112,7 +112,7 @@ function ProductoRow({
               min="0"
               value={editForm.posicion}
               onChange={(e) => onEditChange("posicion", e.target.value)}
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
             />
           </div>
         </div>
@@ -123,7 +123,7 @@ function ProductoRow({
             value={editForm.imagen_url}
             onChange={(e) => onEditChange("imagen_url", e.target.value)}
             placeholder="Opcional"
-            className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+            className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -361,7 +361,7 @@ export default function AdminCatalogoPage() {
   const noDisponibles = productos.filter((p) => !p.disponible);
 
   const renderSection = (title: string, items: Producto[]) => (
-    <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+    <div className="bg-card rounded-xl border border-cream-dark overflow-hidden mb-4">
       <div className="px-4 py-2.5 bg-cream-dark flex items-center justify-between">
         <h3 className="text-xs font-semibold text-warm-gray uppercase tracking-widest">
           {title}
@@ -401,7 +401,7 @@ export default function AdminCatalogoPage() {
     <div>
       <div className="flex items-center justify-between mb-6 gap-3">
         <div>
-          <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+          <h2 className="titulo text-2xl text-brot">
             Catálogo de Productos
           </h2>
           <p className="text-sm text-warm-gray mt-1">
@@ -421,7 +421,7 @@ export default function AdminCatalogoPage() {
 
       {/* Create form */}
       {showCreate && (
-        <div className="bg-white rounded-xl border border-cream-dark p-5 mb-6">
+        <div className="bg-card rounded-xl border border-cream-dark p-5 mb-6">
           <h3 className="font-medium mb-4">Nuevo Producto</h3>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="flex gap-3 flex-wrap">

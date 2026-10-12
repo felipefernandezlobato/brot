@@ -1,15 +1,163 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Tipografia de marca — Manual de Identidad BROT, seccion 4
+   ---------------------------------------------------------------------------
+   4.1 Institucional        Gelica, para titulos y textos especiales.
+   4.2 Familia complementaria  New Reason, para subtitulos (Medium) y
+                               cuerpo de texto (Regular).
+   4.3 Estructura de textos    titulo = Gelica en mayusculas (ver .titulo).
+
+   Los .otf que envio el estudio vienen mal nombrados: Gelica-Medium,
+   Gelica-Semi-Bold y Gelica-Extra-Light son italicas (tienen el bit ITALIC
+   y una inclinacion real de ~190 unidades), no pesos rectos. Por eso los
+   unicos pesos rectos de Gelica son 300/400/700/900 — no hay 500 ni 600.
+   Si alguna vez hace falta un Gelica 500/600 recto hay que pedirselo al
+   estudio, no derivarlo de esos archivos.
+--------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: "Gelica";
+  src: url("/fonts/Gelica-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gelica";
+  src: url("/fonts/Gelica-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gelica";
+  src: url("/fonts/Gelica-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gelica";
+  src: url("/fonts/Gelica-Black.woff2") format("woff2");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gelica";
+  src: url("/fonts/Gelica-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "New Reason";
+  src: url("/fonts/NewReason-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "New Reason";
+  src: url("/fonts/NewReason-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "New Reason";
+  src: url("/fonts/NewReason-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "New Reason";
+  src: url("/fonts/NewReason-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "New Reason";
+  src: url("/fonts/NewReason-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --color-brot: #004225;
-  --color-brot-dark: #00331C;
-  --color-brot-light: #005C34;
-  --color-cream: #F5F0E8;
-  --color-cream-dark: #E8DFD3;
-  --color-warm-gray: #6B5E52;
-  --color-text: #1A1A1A;
-  --font-garamond: var(--font-eb-garamond);
-  --font-sans: var(--font-dm-sans);
+  /* Sistema cromatico — Manual de Identidad BROT, seccion 2.
+     Los cinco valores de marca son los HEX que escribe el estudio, y
+     coinciden exactamente con los SVG de logo que entregaron.
+
+     Nota para el futuro: el PDF del manual (el de 76 MB) RENDERIZA sus
+     recuadros de color un poco corridos respecto a su propio hex escrito
+     — el Verde Brot sale #25422a en pantalla en vez de #2c412c, y el
+     Blanco harina #eee3d2 en vez de #ece3d4. Es un artefacto de como esa
+     presentacion dibuja los recuadros. Si alguien compara la app contra
+     el PDF lado a lado va a ver una diferencia chica y real; la fuente
+     de verdad es "Paleta de color BROT.pdf" + los SVG de los logos, que
+     son los dos consistentes entre si. No muestrear pixeles del deck. */
+
+  /* Verde Brot — color protagonista */
+  --color-brot: #2c412c;
+  --color-brot-dark: #1f2e1f; /* -30%, para hover */
+
+  /* Chocolate — peso visual y contraste */
+  --color-chocolate: #382b27;
+
+  /* Fondos. La app no usa blanco puro en ningun lado: no esta en la paleta,
+     y 339 tarjetas blancas sobre fondo calido se veian como cajas pegadas
+     encima (Felipe, 12/10/2026). En su lugar:
+
+       card   Blanco harina, el color de marca, para tarjetas y tablas
+       cream  un paso mas oscuro, para el fondo de pagina y los paneles
+              embutidos DENTRO de una tarjeta
+       cream-dark  el borde
+
+     El manual define Blanco harina como "color de fondo", y lo es — el
+     fondo de la marca. Aca hace de tarjeta porque una pantalla necesita
+     una jerarquia mas que una hoja impresa; #e2d7c5 es un paso derivado
+     de Blanco harina, no un color del manual. Las fichas del propio
+     manual (3.1, 4.3) van sin relleno y solo con contorno: se probo, y
+     en tablas de datos densas las tarjetas desaparecian. */
+  --color-card: #ece3d4;
+  --color-cream: #e2d7c5;
+  --color-cream-dark: #cdbda4;
+
+  /* Acentos. Ojo: Pistacho da 2.02:1 sobre Blanco harina, asi que sirve
+     como relleno o fondo pero NUNCA como color de texto. Trigo tostado
+     puro (4.24:1) tampoco llega a AA para texto chico — para eso esta
+     warm-gray, que es el mismo tono oscurecido. */
+  --color-pistacho: #9ea582;
+  --color-trigo: #7a665c;
+
+  /* Texto. warm-gray (707 usos, texto chico atenuado) es Trigo tostado
+     -16%: da 5.50:1 sobre el fondo, practicamente lo mismo que daba el
+     par anterior (#6B5E52 sobre #F5F0E8 = 5.53:1), asi que al cambiar de
+     paleta no se pierde legibilidad.
+
+     El manual no define un color de texto; su paleta incluye Negro
+     #000000. Se usa un casi-negro para el cuerpo de texto en lugar de
+     Chocolate: teniendo Chocolate en cada palabra, toda la pantalla se va
+     a marron y el Verde Brot pierde fuerza. Chocolate queda disponible
+     como --color-chocolate para fondos y acentos. */
+  --color-warm-gray: #66564d;
+  --color-text: #1a1a1a;
+
+  --font-display: "Gelica", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "New Reason", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Titulos: Gelica en mayusculas (seccion 4.3). Se define una sola vez aca
+   en lugar de repetir font-family + uppercase en cada pagina. */
+@utility titulo {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.015em;
 }
 
 html {

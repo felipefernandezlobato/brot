@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PinPad } from "@/components/PinPad";
+import { BrotLogo } from "@/components/BrotLogo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8003";
 
@@ -43,10 +44,11 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-brot flex flex-col items-center justify-center p-4">
-      <h1 className="font-[family-name:var(--font-garamond)] text-4xl text-white mb-2">
-        BROT
-      </h1>
-      <p className="text-white/60 mb-8">La Panadería</p>
+      {/* Pantalla completa: entra el logo principal, que es el que el manual
+          pide por defecto (seccion 3.1). Ya dice PANADERIA, no hace falta
+          repetirlo debajo. */}
+      <BrotLogo variante="principal" color="crema" className="h-32 w-auto mb-8" />
+      <h1 className="sr-only">BROT Panadería</h1>
 
       {!selected ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-md">
@@ -64,7 +66,7 @@ export default function LoginPage() {
           ))}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl p-8 shadow-xl max-w-sm w-full">
+        <div className="bg-card rounded-2xl p-8 shadow-xl max-w-sm w-full">
           <div className="flex items-center justify-between mb-6">
             <button
               onClick={() => {

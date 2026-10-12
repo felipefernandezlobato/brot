@@ -156,13 +156,13 @@ export default function RegistroStockPage() {
           >
             ←
           </button>
-          <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+          <h1 className="titulo text-3xl text-brot">
             Registrar Stock
           </h1>
         </div>
 
         {/* Date picker */}
-        <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">
           <label className="block text-sm font-medium text-warm-gray mb-1">
             Fecha del conteo
           </label>
@@ -170,7 +170,7 @@ export default function RegistroStockPage() {
             type="date"
             value={fecha}
             onChange={(e) => setFecha(e.target.value)}
-            className="w-full md:w-56 px-4 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+            className="w-full md:w-56 px-4 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
           />
         </div>
 
@@ -186,7 +186,7 @@ export default function RegistroStockPage() {
             placeholder="Buscar ingrediente..."
             value={buscar}
             onChange={(e) => setBuscar(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+            className="w-full px-4 py-2.5 rounded-lg border border-cream-dark bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
           />
         </div>
 
@@ -199,7 +199,7 @@ export default function RegistroStockPage() {
         )}
 
         {/* Ingredient rows */}
-        <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-6">
+        <div className="bg-card rounded-xl border border-cream-dark overflow-hidden mb-6">
           {loading ? (
             <div className="p-8 text-center text-warm-gray">Cargando...</div>
           ) : filteredRows.length === 0 ? (

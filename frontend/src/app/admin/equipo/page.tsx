@@ -63,7 +63,7 @@ export default function EquipoPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h2 className="titulo text-2xl text-brot">
           Equipo
         </h2>
         <button
@@ -76,7 +76,7 @@ export default function EquipoPage() {
 
       {/* Create form */}
       {showForm && (
-        <div className="bg-white rounded-xl border border-cream-dark p-5 mb-6">
+        <div className="bg-card rounded-xl border border-cream-dark p-5 mb-6">
           <h3 className="font-medium mb-4">Nuevo Usuario</h3>
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
@@ -159,7 +159,7 @@ export default function EquipoPage() {
           {usuarios.map((u) => (
             <div
               key={u.id}
-              className="flex items-center gap-4 bg-white rounded-xl border border-cream-dark p-4"
+              className="flex items-center gap-4 bg-card rounded-xl border border-cream-dark p-4"
             >
               {/* Avatar */}
               <div className="w-11 h-11 rounded-full bg-brot flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">

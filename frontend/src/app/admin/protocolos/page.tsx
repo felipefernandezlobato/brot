@@ -158,7 +158,7 @@ export default function AdminProtocolosPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h2 className="titulo text-2xl text-brot">
           Plantillas de Protocolos
         </h2>
         <button
@@ -176,7 +176,7 @@ export default function AdminProtocolosPage() {
           className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
             filtroTipo === "all"
               ? "bg-brot text-white"
-              : "bg-white text-warm-gray border border-cream-dark hover:bg-cream"
+              : "bg-card text-warm-gray border border-cream-dark hover:bg-cream"
           }`}
         >
           Todas
@@ -188,7 +188,7 @@ export default function AdminProtocolosPage() {
             className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
               filtroTipo === t
                 ? "bg-brot text-white"
-                : "bg-white text-warm-gray border border-cream-dark hover:bg-cream"
+                : "bg-card text-warm-gray border border-cream-dark hover:bg-cream"
             }`}
           >
             {TIPO_LABELS[t]}
@@ -198,7 +198,7 @@ export default function AdminProtocolosPage() {
 
       {/* Create / Edit form */}
       {showForm && (
-        <div className="bg-white rounded-xl border border-cream-dark p-5 mb-6">
+        <div className="bg-card rounded-xl border border-cream-dark p-5 mb-6">
           <h3 className="font-medium mb-4">
             {editing ? "Editar Plantilla" : "Nueva Plantilla"}
           </h3>
@@ -340,7 +340,7 @@ export default function AdminProtocolosPage() {
                 ({tipoItems.length})
               </span>
             </h3>
-            <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+            <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
               {tipoItems
                 .slice()
                 .sort((a, b) => a.position - b.position)

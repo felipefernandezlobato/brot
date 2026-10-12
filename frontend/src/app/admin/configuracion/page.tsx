@@ -55,7 +55,7 @@ export default function ConfiguracionPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h2 className="titulo text-2xl text-brot">
           Configuración
         </h2>
         <p className="text-sm text-warm-gray mt-1">
@@ -65,7 +65,7 @@ export default function ConfiguracionPage() {
 
       <div className="space-y-5 max-w-xl">
         {/* App info */}
-        <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+        <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
           <div className="px-4 py-2.5 bg-cream-dark">
             <h3 className="text-xs font-semibold text-warm-gray uppercase tracking-widest">
               Aplicación
@@ -79,7 +79,7 @@ export default function ConfiguracionPage() {
         </div>
 
         {/* Database info */}
-        <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+        <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
           <div className="px-4 py-2.5 bg-cream-dark">
             <h3 className="text-xs font-semibold text-warm-gray uppercase tracking-widest">
               Base de Datos
@@ -129,7 +129,7 @@ export default function ConfiguracionPage() {
         </div>
 
         {/* Backup */}
-        <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+        <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
           <div className="px-4 py-2.5 bg-cream-dark">
             <h3 className="text-xs font-semibold text-warm-gray uppercase tracking-widest">
               Backup

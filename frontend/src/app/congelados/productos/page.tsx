@@ -216,7 +216,7 @@ export default function ProductosCongeladosPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h2 className="titulo text-2xl text-brot">
           Productos Congelados
         </h2>
         <p className="text-sm text-warm-gray mt-1">
@@ -224,7 +224,7 @@ export default function ProductosCongeladosPage() {
         </p>
       </div>
 
-      <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-6">
+      <div className="bg-card rounded-xl border border-cream-dark overflow-hidden mb-6">
         {loading ? (
           <div className="p-8 text-center text-warm-gray">Cargando...</div>
         ) : productos.length === 0 ? (
@@ -257,7 +257,7 @@ export default function ProductosCongeladosPage() {
       </div>
 
       {/* Create form */}
-      <div className="bg-white rounded-xl border border-cream-dark p-5">
+      <div className="bg-card rounded-xl border border-cream-dark p-5">
         <h3 className="font-medium mb-4">Nuevo Producto</h3>
         <form onSubmit={handleCreate}>
           <div className="flex gap-3 flex-wrap items-end">

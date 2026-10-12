@@ -166,7 +166,7 @@ export default function ProveedoresPage() {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Proveedores
         </h1>
         <PermissionGate module="pedidos_proveedores" action="create">
@@ -186,7 +186,7 @@ export default function ProveedoresPage() {
       {showCreate && (
         <form
           onSubmit={handleCreate}
-          className="bg-white rounded-xl border border-cream-dark p-5 mb-6 space-y-4"
+          className="bg-card rounded-xl border border-cream-dark p-5 mb-6 space-y-4"
         >
           <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
             Nuevo proveedor
@@ -203,7 +203,7 @@ export default function ProveedoresPage() {
                   setCreateForm((f) => ({ ...f, nombre: e.target.value }))
                 }
                 placeholder="Ej: Harinera del Norte"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
                 required
                 autoFocus
               />
@@ -220,7 +220,7 @@ export default function ProveedoresPage() {
                 }
                 placeholder="Ej: 3"
                 min="0"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
               />
             </div>
             <div>
@@ -234,7 +234,7 @@ export default function ProveedoresPage() {
                   setCreateForm((f) => ({ ...f, telefono: e.target.value }))
                 }
                 placeholder="+54 11 ..."
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
               />
             </div>
             <div>
@@ -248,7 +248,7 @@ export default function ProveedoresPage() {
                   setCreateForm((f) => ({ ...f, email: e.target.value }))
                 }
                 placeholder="proveedor@ejemplo.com"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
               />
             </div>
             <div className="sm:col-span-2">
@@ -262,7 +262,7 @@ export default function ProveedoresPage() {
                 }
                 rows={2}
                 placeholder="Observaciones adicionales"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
+                className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
               />
             </div>
           </div>
@@ -273,7 +273,7 @@ export default function ProveedoresPage() {
                 setShowCreate(false);
                 setCreateForm(EMPTY_FORM);
               }}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
+              className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
             >
               Cancelar
             </button>
@@ -295,12 +295,12 @@ export default function ProveedoresPage() {
           placeholder="Buscar por nombre o email..."
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+          className="w-full px-4 py-2.5 rounded-lg border border-cream-dark bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
         />
       </div>
 
       {/* List */}
-      <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+      <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-warm-gray">Cargando...</div>
         ) : filtrados.length === 0 ? (
@@ -328,7 +328,7 @@ export default function ProveedoresPage() {
                         onChange={(e) =>
                           setEditForm((f) => ({ ...f, nombre: e.target.value }))
                         }
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                        className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
                         required
                         autoFocus
                       />
@@ -347,7 +347,7 @@ export default function ProveedoresPage() {
                           }))
                         }
                         min="0"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                        className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
                       />
                     </div>
                     <div>
@@ -363,7 +363,7 @@ export default function ProveedoresPage() {
                             telefono: e.target.value,
                           }))
                         }
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                        className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
                       />
                     </div>
                     <div>
@@ -376,7 +376,7 @@ export default function ProveedoresPage() {
                         onChange={(e) =>
                           setEditForm((f) => ({ ...f, email: e.target.value }))
                         }
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                        className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
                       />
                     </div>
                     <div className="sm:col-span-2">
@@ -389,7 +389,7 @@ export default function ProveedoresPage() {
                           setEditForm((f) => ({ ...f, notas: e.target.value }))
                         }
                         rows={2}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
+                        className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
                       />
                     </div>
                   </div>
@@ -397,7 +397,7 @@ export default function ProveedoresPage() {
                     <button
                       type="button"
                       onClick={() => setEditId(null)}
-                      className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
+                      className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
                     >
                       Cancelar
                     </button>
@@ -419,7 +419,7 @@ export default function ProveedoresPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-text">{p.nombre}</p>
-                      <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+                      <span className="text-xs bg-cream text-gray-500 px-1.5 py-0.5 rounded">
                         Lead time: {p.lead_time_dias}d
                       </span>
                     </div>
@@ -467,7 +467,7 @@ export default function ProveedoresPage() {
       {/* Delete confirm modal */}
       {deleteId !== null && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+          <div className="bg-card rounded-2xl p-6 max-w-sm w-full shadow-xl">
             <h3 className="font-medium text-text text-lg mb-2">
               Eliminar proveedor
             </h3>
@@ -479,7 +479,7 @@ export default function ProveedoresPage() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setDeleteId(null)}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
+                className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
               >
                 Cancelar
               </button>

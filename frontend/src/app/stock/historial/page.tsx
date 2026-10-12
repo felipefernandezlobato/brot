@@ -89,13 +89,13 @@ export default function HistorialStockPage() {
         >
           ←
         </button>
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Historial de Stock
         </h1>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-6">
+      <div className="bg-card rounded-xl border border-cream-dark p-4 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-medium text-warm-gray mb-1">Desde</label>
@@ -103,7 +103,7 @@ export default function HistorialStockPage() {
               type="date"
               value={fechaDesde}
               onChange={(e) => setFechaDesde(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
             />
           </div>
           <div>
@@ -112,7 +112,7 @@ export default function HistorialStockPage() {
               type="date"
               value={fechaHasta}
               onChange={(e) => setFechaHasta(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
             />
           </div>
           <div>
@@ -120,7 +120,7 @@ export default function HistorialStockPage() {
             <select
               value={ingredienteId ?? ""}
               onChange={(e) => setIngredienteId(e.target.value ? Number(e.target.value) : null)}
-              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+              className="w-full px-3 py-2 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
             >
               <option value="">Todos</option>
               {ingredientes
@@ -135,17 +135,17 @@ export default function HistorialStockPage() {
 
       {/* Results */}
       {loading ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           Cargando...
         </div>
       ) : registros.length === 0 ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           No hay registros en este periodo.
         </div>
       ) : (
         <div className="space-y-4">
           {groupedByDate.map(([fecha, regs]) => (
-            <div key={fecha} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+            <div key={fecha} className="bg-card rounded-xl border border-cream-dark overflow-hidden">
               <div className="px-4 py-2.5 bg-cream/50 border-b border-cream-dark">
                 <p className="text-sm font-medium text-text">{formatDate(fecha)}</p>
                 <p className="text-xs text-warm-gray">{regs.length} registro{regs.length !== 1 ? "s" : ""}</p>

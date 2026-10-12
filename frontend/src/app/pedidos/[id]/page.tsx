@@ -43,7 +43,7 @@ const ESTADO_LABELS: Record<EstadoPedido, string> = {
 };
 
 const ESTADO_CLASSES: Record<EstadoPedido, string> = {
-  borrador: "bg-gray-100 text-gray-600",
+  borrador: "bg-cream text-gray-600",
   enviado: "bg-blue-50 text-blue-700",
   recibido: "bg-green-50 text-green-700",
 };
@@ -245,7 +245,7 @@ export default function PedidoDetailPage() {
             ← Pedidos
           </Link>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+            <h1 className="titulo text-3xl text-brot">
               Pedido #{pedido.id}
             </h1>
             <EstadoBadge estado={pedido.estado} />
@@ -294,7 +294,7 @@ export default function PedidoDetailPage() {
       </div>
 
       {/* Summary card */}
-      <div className="bg-white rounded-xl p-5 shadow-sm mb-6">
+      <div className="bg-card rounded-xl p-5 shadow-sm mb-6">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="bg-cream rounded-lg p-4">
             <p className="text-xs text-warm-gray mb-1">Proveedor</p>
@@ -336,7 +336,7 @@ export default function PedidoDetailPage() {
                       if (e.key === "Escape") cancelEditFecha();
                     }}
                     autoFocus
-                    className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                    className="border border-cream-dark rounded-lg px-2 py-1 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
                   />
                   <button
                     type="button"
@@ -386,7 +386,7 @@ export default function PedidoDetailPage() {
       {/* Reception date — set at the moment of confirming, so a delivery
           entered late lands on the day it actually arrived. */}
       {receiveMode && (
-        <div className="bg-white rounded-xl p-5 shadow-sm mb-4">
+        <div className="bg-card rounded-xl p-5 shadow-sm mb-4">
           <label
             htmlFor="fecha-recepcion"
             className="block text-xs text-warm-gray mb-1"
@@ -399,7 +399,7 @@ export default function PedidoDetailPage() {
             value={fechaRecepcion}
             max={hoyISO()}
             onChange={(e) => setFechaRecepcion(e.target.value)}
-            className="w-full sm:w-56 border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+            className="w-full sm:w-56 border border-cream-dark rounded-lg px-3 py-2 min-h-[44px] text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
           />
           <p className="text-xs text-warm-gray mt-2">
             El día en que llegó el pedido. El stock y los movimientos se
@@ -409,7 +409,7 @@ export default function PedidoDetailPage() {
       )}
 
       {/* Line items */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-card rounded-xl shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
             Ítems del pedido
@@ -481,7 +481,7 @@ export default function PedidoDetailPage() {
                             }
                             min="0"
                             step="0.01"
-                            className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 text-right"
+                            className="w-24 border border-cream-dark rounded-lg px-2 py-1.5 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 text-right"
                           />
                         </td>
                       )}
@@ -497,7 +497,7 @@ export default function PedidoDetailPage() {
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t border-gray-200 bg-cream/50">
+                <tr className="border-t border-cream-dark bg-cream/50">
                   <td
                     colSpan={receiveMode || pedido.estado === "recibido" ? 5 : 4}
                     className="px-6 py-3 text-right font-medium text-text text-sm"
@@ -525,7 +525,7 @@ export default function PedidoDetailPage() {
           <button
             type="button"
             onClick={() => setReceiveMode(false)}
-            className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
+            className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
           >
             Cancelar
           </button>
@@ -542,7 +542,7 @@ export default function PedidoDetailPage() {
       {/* Delete confirm modal */}
       {showDelete && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+          <div className="bg-card rounded-2xl p-6 max-w-sm w-full shadow-xl">
             <h3 className="font-medium text-text text-lg mb-2">
               Eliminar pedido
             </h3>
@@ -554,7 +554,7 @@ export default function PedidoDetailPage() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowDelete(false)}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
+                className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
               >
                 Cancelar
               </button>

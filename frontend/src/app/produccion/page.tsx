@@ -73,11 +73,11 @@ interface RecetaDropdown {
 }
 
 const TIPO_DOT: Record<string, string> = {
-  produccion: "bg-[#004225]",
+  produccion: "bg-brot",
   limpieza: "bg-amber-500",
   nota: "bg-blue-500",
   entrega: "bg-purple-500",
-  admin: "bg-gray-500",
+  admin: "bg-cream0",
 };
 
 function toLocalISO(d: Date): string {
@@ -518,7 +518,7 @@ export default function ProduccionHoy() {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <h1 className="font-[family-name:var(--font-garamond)] text-2xl text-gray-900">
+        <h1 className="titulo text-2xl text-gray-900">
           Produccion
         </h1>
         <div className="flex gap-2">
@@ -531,14 +531,14 @@ export default function ProduccionHoy() {
           </Link>
           <Link
             href="/produccion/calendario"
-            className="text-sm text-[#004225] border border-[#004225]/30 px-3 py-2 rounded-lg hover:bg-[#004225]/5 transition-colors"
+            className="text-sm text-brot border border-brot/30 px-3 py-2 rounded-lg hover:bg-brot/5 transition-colors"
             style={{ minHeight: 44, display: "flex", alignItems: "center" }}
           >
             Calendario
           </Link>
           <Link
             href="/produccion/analytics"
-            className="text-sm text-[#004225] border border-[#004225]/30 px-3 py-2 rounded-lg hover:bg-[#004225]/5 transition-colors"
+            className="text-sm text-brot border border-brot/30 px-3 py-2 rounded-lg hover:bg-brot/5 transition-colors"
             style={{ minHeight: 44, display: "flex", alignItems: "center" }}
           >
             Analytics
@@ -550,7 +550,7 @@ export default function ProduccionHoy() {
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <button
           onClick={() => changeDay(-1)}
-          className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-lg"
+          className="w-10 h-10 flex items-center justify-center rounded-lg border border-cream-dark bg-card hover:bg-cream text-lg"
           style={{ touchAction: "manipulation" }}
         >
           &lsaquo;
@@ -559,8 +559,8 @@ export default function ProduccionHoy() {
           onClick={goToday}
           className={`px-3 py-2 rounded-lg text-sm transition-colors ${
             isToday
-              ? "bg-[#004225] text-white"
-              : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              ? "bg-brot text-white"
+              : "border border-cream-dark bg-card text-gray-600 hover:bg-cream"
           }`}
           style={{ touchAction: "manipulation", minHeight: 40 }}
         >
@@ -568,7 +568,7 @@ export default function ProduccionHoy() {
         </button>
         <button
           onClick={() => changeDay(1)}
-          className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-lg"
+          className="w-10 h-10 flex items-center justify-center rounded-lg border border-cream-dark bg-card hover:bg-cream text-lg"
           style={{ touchAction: "manipulation" }}
         >
           &rsaquo;
@@ -581,7 +581,7 @@ export default function ProduccionHoy() {
             setFecha(e.target.value);
             window.history.replaceState(null, "", `/produccion?fecha=${e.target.value}`);
           }}
-          className="px-2 h-10 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#004225]/30"
+          className="px-2 h-10 rounded-lg border border-cream-dark bg-card text-sm text-gray-700 hover:bg-cream focus:outline-none focus:ring-2 focus:ring-brot/30"
           style={{ touchAction: "manipulation" }}
           title="Ir a una fecha especifica"
         />
@@ -598,9 +598,9 @@ export default function ProduccionHoy() {
 
       {/* Progress bar */}
       {totalCount > 0 && (
-        <div className="h-2 bg-gray-100 rounded-full mb-4 overflow-hidden">
+        <div className="h-2 bg-cream rounded-full mb-4 overflow-hidden">
           <div
-            className="h-full bg-[#004225] rounded-full transition-all duration-300"
+            className="h-full bg-brot rounded-full transition-all duration-300"
             style={{ width: `${(completedCount / totalCount) * 100}%` }}
           />
         </div>
@@ -608,7 +608,7 @@ export default function ProduccionHoy() {
 
       {/* No tasks for Sunday */}
       {!data || data.tareas.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-gray-400">
           Sin tareas planificadas para este dia
         </div>
       ) : (
@@ -627,8 +627,8 @@ export default function ProduccionHoy() {
               return (
                 <div
                   key={tarea.tarea_id}
-                  className={`bg-white rounded-xl border p-3 transition-all ${
-                    guardado ? "border-green-200 bg-green-50/50" : "border-gray-200"
+                  className={`bg-card rounded-xl border p-3 transition-all ${
+                    guardado ? "border-green-200 bg-green-50/50" : "border-cream-dark"
                   }`}
                 >
                   {/* Row 1: status + title + time */}
@@ -636,8 +636,8 @@ export default function ProduccionHoy() {
                     <div
                       className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 mt-0.5 ${
                         guardado
-                          ? "bg-[#004225] border-[#004225] text-white"
-                          : "border-gray-300"
+                          ? "bg-brot border-brot text-white"
+                          : "border-cream-dark"
                       }`}
                     >
                       {guardado && (
@@ -686,7 +686,7 @@ export default function ProduccionHoy() {
                       </div>
                       <button
                         onClick={() => editar(tarea)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#004225] border border-[#004225]/30 hover:bg-[#004225]/5 transition-colors"
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-brot border border-brot/30 hover:bg-brot/5 transition-colors"
                         style={{ touchAction: "manipulation", minHeight: 36 }}
                       >
                         Editar
@@ -718,7 +718,7 @@ export default function ProduccionHoy() {
                               placeholder={String(tarea.cantidad_planificada)}
                               value={d.cantidad}
                               onChange={(e) => setDraft(tarea, { cantidad: e.target.value })}
-                              className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                              className="w-16 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none"
                               style={{ minHeight: 36 }}
                             />
                             <span className="text-xs text-gray-400">
@@ -733,7 +733,7 @@ export default function ProduccionHoy() {
                             placeholder={tarea.duracion_planificada ? String(tarea.duracion_planificada) : "-"}
                             value={d.duracion}
                             onChange={(e) => setDraft(tarea, { duracion: e.target.value })}
-                            className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                            className="w-14 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none"
                             style={{ minHeight: 36 }}
                           />
                           <span className="text-xs text-gray-400">min</span>
@@ -741,7 +741,7 @@ export default function ProduccionHoy() {
                         <button
                           onClick={() => toggleNotes(tarea.tarea_id)}
                           className={`ml-auto px-2 py-1 rounded text-xs transition-colors ${
-                            d.notas ? "text-[#004225] bg-[#004225]/10" : "text-gray-400 hover:text-gray-600"
+                            d.notas ? "text-brot bg-brot/10" : "text-gray-400 hover:text-gray-600"
                           }`}
                           style={{ touchAction: "manipulation", minHeight: 36 }}
                         >
@@ -756,7 +756,7 @@ export default function ProduccionHoy() {
                             onChange={(e) => setDraft(tarea, { notas: e.target.value })}
                             placeholder="Agregar nota..."
                             rows={2}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none resize-none"
+                            className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none resize-none"
                           />
                         </div>
                       )}
@@ -772,7 +772,7 @@ export default function ProduccionHoy() {
                         <button
                           onClick={() => guardar(tarea)}
                           disabled={!habilitado || isSaving}
-                          className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[#004225] text-white hover:bg-[#00331C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="px-4 py-1.5 rounded-lg text-xs font-medium bg-brot text-white hover:bg-brot-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{ touchAction: "manipulation", minHeight: 36 }}
                         >
                           {isSaving ? "Guardando..." : "Guardar"}
@@ -781,7 +781,7 @@ export default function ProduccionHoy() {
                           <>
                             <button
                               onClick={() => cancelarEdicion(tarea)}
-                              className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 border border-cream-dark hover:bg-cream transition-colors"
                               style={{ touchAction: "manipulation", minHeight: 36 }}
                             >
                               Cancelar
@@ -817,7 +817,7 @@ export default function ProduccionHoy() {
                 return (
                   <div
                     key={tarea.tarea_id}
-                    className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 px-3 py-2"
+                    className="flex items-center gap-2 bg-card rounded-lg border border-cream-dark px-3 py-2"
                   >
                     <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
                     <span className="text-sm text-gray-700">{tarea.titulo}</span>
@@ -854,8 +854,8 @@ export default function ProduccionHoy() {
               return (
                 <div
                   key={extra.registro_id}
-                  className={`bg-white rounded-xl border p-3 transition-all ${
-                    guardado ? "border-green-200 bg-green-50/50" : "border-dashed border-gray-300"
+                  className={`bg-card rounded-xl border p-3 transition-all ${
+                    guardado ? "border-green-200 bg-green-50/50" : "border-dashed border-cream-dark"
                   }`}
                 >
                   {/* Row 1: status + title */}
@@ -904,7 +904,7 @@ export default function ProduccionHoy() {
                       </div>
                       <button
                         onClick={() => editarExtra(extra)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#004225] border border-[#004225]/30 hover:bg-[#004225]/5 transition-colors"
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-brot border border-brot/30 hover:bg-brot/5 transition-colors"
                         style={{ touchAction: "manipulation", minHeight: 36 }}
                       >
                         Editar
@@ -942,7 +942,7 @@ export default function ProduccionHoy() {
                             placeholder="0"
                             value={d.cantidad}
                             onChange={(e) => setExtraDraft(extra, { cantidad: e.target.value })}
-                            className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                            className="w-16 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none"
                             style={{ minHeight: 36 }}
                           />
                           <span className="text-xs text-gray-400">{extra.unidad_cantidad}</span>
@@ -955,7 +955,7 @@ export default function ProduccionHoy() {
                           placeholder="-"
                           value={d.duracion}
                           onChange={(e) => setExtraDraft(extra, { duracion: e.target.value })}
-                          className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                          className="w-14 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none"
                           style={{ minHeight: 36 }}
                         />
                         <span className="text-xs text-gray-400">min</span>
@@ -963,7 +963,7 @@ export default function ProduccionHoy() {
                       <button
                         onClick={() => guardarExtra(extra)}
                         disabled={!habilitado || isSaving}
-                        className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[#004225] text-white hover:bg-[#00331C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="px-4 py-1.5 rounded-lg text-xs font-medium bg-brot text-white hover:bg-brot-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         style={{ touchAction: "manipulation", minHeight: 36 }}
                       >
                         {isSaving ? "Guardando..." : "Guardar"}
@@ -971,7 +971,7 @@ export default function ProduccionHoy() {
                       {enEdicion && (
                         <button
                           onClick={() => cancelarEdicionExtra(extra)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 border border-cream-dark hover:bg-cream transition-colors"
                           style={{ touchAction: "manipulation", minHeight: 36 }}
                         >
                           Cancelar
@@ -998,13 +998,13 @@ export default function ProduccionHoy() {
         {!showExtraForm ? (
           <button
             onClick={() => setShowExtraForm(true)}
-            className="w-full border-2 border-dashed border-gray-300 text-gray-400 rounded-xl py-3 text-sm hover:border-[#004225] hover:text-[#004225] transition-colors"
+            className="w-full border-2 border-dashed border-cream-dark text-gray-400 rounded-xl py-3 text-sm hover:border-brot hover:text-brot transition-colors"
             style={{ touchAction: "manipulation", minHeight: 48 }}
           >
             + Agregar produccion extra
           </button>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="bg-card rounded-xl border border-cream-dark p-4">
             <p className="text-sm font-medium text-gray-700 mb-3">
               Nueva produccion extra
             </p>
@@ -1012,7 +1012,7 @@ export default function ProduccionHoy() {
               <select
                 value={extraProductoId}
                 onChange={(e) => { setExtraProductoId(e.target.value); setExtraBastones(""); }}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none"
                 style={{ minHeight: 44 }}
               >
                 <option value="">Seleccionar...</option>
@@ -1060,7 +1060,7 @@ export default function ProduccionHoy() {
                     placeholder="Cantidad"
                     value={extraCantidad}
                     onChange={(e) => setExtraCantidad(e.target.value)}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                    className="border border-cream-dark rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none"
                     style={{ minHeight: 44 }}
                   />
                 )}
@@ -1070,7 +1070,7 @@ export default function ProduccionHoy() {
                   placeholder="Minutos"
                   value={extraDuracion}
                   onChange={(e) => setExtraDuracion(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none"
+                  className="border border-cream-dark rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none"
                   style={{ minHeight: 44 }}
                 />
               </div>
@@ -1079,7 +1079,7 @@ export default function ProduccionHoy() {
                 value={extraNotas}
                 onChange={(e) => setExtraNotas(e.target.value)}
                 rows={2}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#004225]/30 focus:border-[#004225] outline-none resize-none"
+                className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none resize-none"
               />
               <div className="flex gap-2">
                 <button
@@ -1088,14 +1088,14 @@ export default function ProduccionHoy() {
                     !extraProductoId ||
                     (extraProductoId.startsWith("tarea:") ? !extraDuracion : !extraCantidad)
                   }
-                  className="flex-1 bg-[#004225] text-white py-2.5 rounded-lg text-sm font-medium hover:bg-[#003319] disabled:opacity-50 transition-colors"
+                  className="flex-1 bg-brot text-white py-2.5 rounded-lg text-sm font-medium hover:bg-brot-dark disabled:opacity-50 transition-colors"
                   style={{ touchAction: "manipulation", minHeight: 44 }}
                 >
                   Guardar
                 </button>
                 <button
                   onClick={() => setShowExtraForm(false)}
-                  className="px-4 py-2.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2.5 rounded-lg text-sm text-gray-500 border border-cream-dark hover:bg-cream transition-colors"
                   style={{ touchAction: "manipulation", minHeight: 44 }}
                 >
                   Cancelar

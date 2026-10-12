@@ -137,7 +137,7 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 const CHART_COLORS = [
-  "#004225", "#2563eb", "#dc2626", "#d97706", "#7c3aed",
+  "#2c412c", "#2563eb", "#dc2626", "#d97706", "#7c3aed",
   "#059669", "#db2777", "#0891b2", "#65a30d", "#ea580c",
 ];
 
@@ -183,7 +183,7 @@ export default function CongeladosPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Stock Congelado
         </h1>
         <Link
@@ -195,7 +195,7 @@ export default function CongeladosPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white rounded-xl border border-cream-dark p-1 mb-6">
+      <div className="flex gap-1 bg-card rounded-xl border border-cream-dark p-1 mb-6">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -212,7 +212,7 @@ export default function CongeladosPage() {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           Cargando...
         </div>
       ) : (
@@ -345,7 +345,7 @@ function TabStockActual({
       )}
 
       {/* Stock list */}
-      <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+      <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
         {stock.length === 0 ? (
           <div className="p-8 text-center text-warm-gray">
             No hay entradas de stock congelado.
@@ -668,7 +668,7 @@ function TabNuevaEntrada({
       module="congelados"
       action="create"
       fallback={
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           No tenes permisos para agregar entradas.
         </div>
       }
@@ -680,7 +680,7 @@ function TabNuevaEntrada({
           className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap min-h-[36px] transition-colors border ${
             categoriaFiltro === null
               ? "bg-brot text-white border-transparent"
-              : "bg-white border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+              : "bg-card border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
           }`}
         >
           Todas las categorias
@@ -692,7 +692,7 @@ function TabNuevaEntrada({
             className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap min-h-[36px] transition-colors border ${
               categoriaFiltro === cat
                 ? "bg-brot text-white border-transparent"
-                : "bg-white border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+                : "bg-card border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
             }`}
           >
             {cat}
@@ -707,7 +707,7 @@ function TabNuevaEntrada({
           placeholder="Buscar producto..."
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
-          className="flex-1 px-4 py-2.5 rounded-lg border border-cream-dark bg-white text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+          className="flex-1 px-4 py-2.5 rounded-lg border border-cream-dark bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
         />
         <span className="text-sm text-warm-gray whitespace-nowrap">
           {filledCount} / {activeProductos.length}
@@ -729,7 +729,7 @@ function TabNuevaEntrada({
                 return (
                   <div
                     key={p.id}
-                    className={`bg-white rounded-xl border px-4 py-3 transition-colors ${
+                    className={`bg-card rounded-xl border px-4 py-3 transition-colors ${
                       hasCantidad ? "border-brot/40 bg-brot/5" : "border-cream-dark"
                     }`}
                   >
@@ -764,7 +764,7 @@ function TabNuevaEntrada({
 
       {/* Submit bar */}
       <div className="sticky bottom-20 md:bottom-4 z-20">
-        <div className="flex items-center justify-between gap-4 bg-white rounded-xl border border-cream-dark p-4 shadow-lg">
+        <div className="flex items-center justify-between gap-4 bg-card rounded-xl border border-cream-dark p-4 shadow-lg">
           <div>
             <p className="text-sm font-medium text-text">
               {filledCount > 0
@@ -1058,7 +1058,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors min-h-[36px] ${
               rango === key
                 ? "bg-brot text-white"
-                : "bg-white border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+                : "bg-card border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
             }`}
           >
             {label}
@@ -1067,17 +1067,17 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           Cargando...
         </div>
       ) : entries.length === 0 ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           No hay registros en este periodo.
         </div>
       ) : (
         <>
           {/* Category + product selector */}
-          <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+          <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-medium text-warm-gray">Grafica</p>
               <button
@@ -1101,7 +1101,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                         ? "bg-brot text-white border-transparent"
                         : selectedInCat > 0
                         ? "bg-brot/10 border-brot/30 text-brot"
-                        : "bg-white border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+                        : "bg-card border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
                     }`}
                   >
                     {cat}
@@ -1125,7 +1125,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                         className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap min-h-[32px] transition-colors border ${
                           active
                             ? "bg-brot text-white border-transparent"
-                            : "bg-white border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+                            : "bg-card border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
                         }`}
                       >
                         {p.nombre}
@@ -1139,7 +1139,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
 
           {/* Chart */}
           {selectedIds.size > 0 && chartData.length > 0 && (
-            <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+            <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">
               <p className="text-sm font-medium text-text mb-3">
                 Evolucion de stock congelado
                 <span className="text-warm-gray font-normal ml-2 text-xs">
@@ -1148,22 +1148,22 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
               </p>
               <ResponsiveContainer width="100%" height={280}>
                 <ComposedChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E8DFD3" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#dfd2bf" />
                   <XAxis
                     dataKey="fecha"
-                    tick={{ fontSize: 11, fill: "#6B5E52" }}
+                    tick={{ fontSize: 11, fill: "#66564d" }}
                     tickFormatter={(v: string) => {
                       const d = new Date(v + "T00:00:00");
                       return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
                     }}
                   />
-                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6B5E52" }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#66564d" }} />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#dc2626" }} />
                   <Tooltip
                     labelFormatter={(v) => formatDate(String(v))}
                     contentStyle={{
                       borderRadius: "8px",
-                      border: "1px solid #E8DFD3",
+                      border: "1px solid #dfd2bf",
                       fontSize: "13px",
                     }}
                   />
@@ -1187,7 +1187,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
           )}
 
           {/* Pivot table: products (rows) x dates (columns, most recent first) */}
-          <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+          <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
             <div className="overflow-x-auto">
               <table className="text-xs w-full">
                 <thead>
@@ -1214,7 +1214,7 @@ function TabHistorial({ productos }: { productos: ProductoCongelado[] }) {
                       key={prod.id}
                       className={`${idx < allProductsWithData.length - 1 ? "border-b border-cream-dark" : ""} ${idx % 2 === 0 ? "" : "bg-cream/30"}`}
                     >
-                      <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-white z-10 whitespace-nowrap" style={idx % 2 !== 0 ? { backgroundColor: "rgb(245 240 232 / 0.3)" } : undefined}>
+                      <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-card z-10 whitespace-nowrap" style={idx % 2 !== 0 ? { backgroundColor: "rgb(245 240 232 / 0.3)" } : undefined}>
                         <Link href={prod.receta_id && prod.nivel === "terminado" ? `/escandallos/${prod.receta_id}` : `/congelados/${prod.id}`} className="hover:text-brot hover:underline">{prod.nombre}</Link>
                       </td>
                       <td className="px-2 py-1.5 text-warm-gray sticky z-10" style={idx % 2 !== 0 ? { backgroundColor: "rgb(245 240 232 / 0.3)" } : { backgroundColor: "white" }}>

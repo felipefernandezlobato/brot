@@ -130,13 +130,13 @@ export default function ProducirPage() {
         >
           ← Calendario
         </Link>
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Producir
         </h1>
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Product selection */}
@@ -164,7 +164,7 @@ export default function ProducirPage() {
                           className={`text-left px-3 py-2.5 rounded-xl border transition-colors min-h-[44px] ${
                             isSelected
                               ? "border-brot bg-brot/5"
-                              : "border-cream-dark bg-white hover:border-brot/50"
+                              : "border-cream-dark bg-card hover:border-brot/50"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -196,11 +196,11 @@ export default function ProducirPage() {
           {/* Right: Production form */}
           <div>
             {!selected ? (
-              <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+              <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
                 Selecciona un producto de la izquierda para producir.
               </div>
             ) : (
-              <div className="bg-white rounded-xl border border-cream-dark p-5 sticky top-6">
+              <div className="bg-card rounded-xl border border-cream-dark p-5 sticky top-6">
                 <h2 className="font-medium text-text text-lg mb-1">{selected.nombre}</h2>
                 <p className="text-xs text-warm-gray mb-4">
                   Nivel: {NIVEL_LABELS[selected.nivel]}
@@ -238,7 +238,7 @@ export default function ProducirPage() {
                         value={bastones}
                         onChange={(e) => setBastones(e.target.value)}
                         placeholder="0"
-                        className="flex-1 px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+                        className="flex-1 px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
                       />
                       <span className="text-sm text-warm-gray">bastones de {padre?.nombre}</span>
                     </div>
@@ -264,7 +264,7 @@ export default function ProducirPage() {
                       value={cantidad}
                       onChange={(e) => setCantidad(e.target.value)}
                       placeholder="0"
-                      className="flex-1 px-3 py-2.5 rounded-lg border border-cream-dark bg-white text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] text-lg font-medium"
+                      className="flex-1 px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] text-lg font-medium"
                     />
                     <span className="text-sm text-warm-gray">{selected.unidad}</span>
                   </div>

@@ -38,7 +38,7 @@ export function RecetaInfoFields({
   onNotasChange,
 }: Props) {
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
+    <div className="bg-card rounded-xl p-6 shadow-sm space-y-4">
       <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
         Información básica
       </h2>
@@ -50,7 +50,7 @@ export function RecetaInfoFields({
           value={nombre}
           onChange={(e) => onNombreChange(e.target.value)}
           placeholder="Ej: Pan de masa madre 400g"
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+          className="w-full border border-cream-dark rounded-lg px-3 py-2 bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
           required
         />
       </div>
@@ -61,7 +61,7 @@ export function RecetaInfoFields({
           <select
             value={categoriaId}
             onChange={(e) => onCategoriaIdChange(e.target.value)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+            className="w-full border border-cream-dark rounded-lg px-3 py-2 bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
             required
           >
             <option value="">Seleccionar...</option>
@@ -81,7 +81,7 @@ export function RecetaInfoFields({
             onChange={(e) => onPorcionesChange(e.target.value)}
             min="0.01"
             step="0.01"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+            className="w-full border border-cream-dark rounded-lg px-3 py-2 bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
           />
         </div>
       </div>
@@ -96,7 +96,7 @@ export function RecetaInfoFields({
             min="0"
             step="0.01"
             placeholder="Opcional"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+            className="w-full border border-cream-dark rounded-lg px-3 py-2 bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
           />
         </div>
 
@@ -122,7 +122,7 @@ export function RecetaInfoFields({
             value={unidadRendimiento}
             onChange={(e) => onUnidadRendimientoChange(e.target.value)}
             placeholder="Ej: g, ml, unidad..."
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+            className="w-full border border-cream-dark rounded-lg px-3 py-2 bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
           />
         </div>
       )}
@@ -134,7 +134,7 @@ export function RecetaInfoFields({
           onChange={(e) => onNotasChange(e.target.value)}
           rows={3}
           placeholder="Observaciones, instrucciones especiales..."
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
+          className="w-full border border-cream-dark rounded-lg px-3 py-2 bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
         />
       </div>
     </div>

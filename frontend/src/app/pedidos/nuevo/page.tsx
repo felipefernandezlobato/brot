@@ -150,14 +150,14 @@ export default function NuevoPedidoPage() {
         >
           ← Volver
         </button>
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Nuevo Pedido
         </h1>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic info */}
-        <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
+        <div className="bg-card rounded-xl p-6 shadow-sm space-y-4">
           <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
             Información del pedido
           </h2>
@@ -169,7 +169,7 @@ export default function NuevoPedidoPage() {
             <select
               value={proveedorId}
               onChange={(e) => setProveedorId(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+              className="w-full border border-cream-dark rounded-lg px-3 py-2 bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
               required
             >
               <option value="">Seleccionar proveedor...</option>
@@ -190,13 +190,13 @@ export default function NuevoPedidoPage() {
               onChange={(e) => setNotas(e.target.value)}
               rows={2}
               placeholder="Instrucciones, observaciones..."
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
+              className="w-full border border-cream-dark rounded-lg px-3 py-2 bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 resize-none"
             />
           </div>
         </div>
 
         {/* Line items */}
-        <div className="bg-white rounded-xl p-6 shadow-sm">
+        <div className="bg-card rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-medium text-sm uppercase tracking-wide text-warm-gray">
               Ítems del pedido
@@ -241,14 +241,14 @@ export default function NuevoPedidoPage() {
                     min="0"
                     step="0.01"
                     placeholder="Cant."
-                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 text-right"
+                    className="w-full border border-cream-dark rounded-lg px-2 py-1.5 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 text-right"
                   />
                   <select
                     value={l.unidad}
                     onChange={(e) =>
                       updateLinea(l.key, "unidad", e.target.value)
                     }
-                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30"
+                    className="w-full border border-cream-dark rounded-lg px-2 py-1.5 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30"
                   >
                     {UNIDADES_COMPRA.map((u) => (
                       <option key={u} value={u}>
@@ -265,7 +265,7 @@ export default function NuevoPedidoPage() {
                     min="0"
                     step="0.01"
                     placeholder="Precio"
-                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 text-right"
+                    className="w-full border border-cream-dark rounded-lg px-2 py-1.5 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 text-right"
                   />
                   <button
                     type="button"
@@ -295,7 +295,7 @@ export default function NuevoPedidoPage() {
           <button
             type="button"
             onClick={() => router.back()}
-            className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
+            className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
           >
             Cancelar
           </button>

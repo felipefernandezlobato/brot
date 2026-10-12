@@ -74,9 +74,9 @@ function AgregarModal({ recetas, onClose, onSaved }: AgregarModalProps) {
       className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+      <div className="bg-card rounded-2xl w-full max-w-md shadow-xl">
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-cream-dark">
-          <h2 className="font-[family-name:var(--font-garamond)] text-xl text-brot">
+          <h2 className="titulo text-xl text-brot">
             Agregar Precio Competencia
           </h2>
           <button
@@ -232,7 +232,7 @@ export default function CompetenciaPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Precios Competencia
         </h1>
         <button
@@ -256,7 +256,7 @@ export default function CompetenciaPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-card rounded-xl shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-warm-gray text-sm">
             Cargando...

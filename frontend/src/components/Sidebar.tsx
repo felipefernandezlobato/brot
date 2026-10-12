@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrotLogo } from "./BrotLogo";
 
 const NAV_ITEMS = [
   { href: "/", label: "Inicio" },
@@ -28,11 +29,14 @@ export function Sidebar({ role }: { role: string }) {
 
   return (
     <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-56 bg-brot flex-col z-40">
+      {/* Secundario: la barra tiene 224px de ancho, el principal no entra con
+          su espacio de respeto (secciones 3.1 y 3.3 del manual). El ancho es
+          150px porque esa es la reduccion minima que permite la seccion 3.4
+          para digital — mas chico, "PANADERIA" deja de leerse. */}
       <div className="p-4 border-b border-white/10">
-        <h1 className="font-[family-name:var(--font-garamond)] text-2xl text-white tracking-wider">
-          BROT
-        </h1>
-        <p className="text-white/60 text-xs mt-1">La Panadería</p>
+        <Link href="/" aria-label="BROT Panadería — Inicio">
+          <BrotLogo variante="secundario" color="crema" className="w-[150px] h-auto" />
+        </Link>
       </div>
       <nav className="flex-1 p-3 space-y-1">
         {items.map((item) => {

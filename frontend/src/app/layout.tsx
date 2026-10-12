@@ -1,16 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { EB_Garamond, DM_Sans } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
-
-const garamond = EB_Garamond({
-  subsets: ["latin"],
-  variable: "--font-eb-garamond",
-});
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-dm-sans",
-});
 
 export const metadata: Metadata = {
   title: "BROT — La Panadería",
@@ -20,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#004225",
+  themeColor: "#2c412c",
   viewportFit: "cover",
 };
 
@@ -30,7 +20,26 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es" className={`${garamond.variable} ${dmSans.variable}`}>
+    <html lang="es">
+      <head>
+        {/* Las fuentes son self-hosted, asi que Next no las precarga solo.
+            Se precargan las dos que aparecen en cuanto carga cualquier
+            pagina: el cuerpo de texto y el peso de los titulos. */}
+        <link
+          rel="preload"
+          href="/fonts/NewReason-Regular.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
+          href="/fonts/Gelica-Bold.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className="antialiased">
         <AppShell>{children}</AppShell>
       </body>

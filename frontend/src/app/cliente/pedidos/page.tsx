@@ -117,7 +117,7 @@ function MisPedidosList({ cliente }: { cliente: Cliente }) {
       <CustomerNav nombre={cliente.nombre} />
 
       <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-6">
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot mb-6">
+        <h1 className="titulo text-3xl text-brot mb-6">
           Mis Pedidos
         </h1>
 
@@ -140,7 +140,7 @@ function MisPedidosList({ cliente }: { cliente: Cliente }) {
               return (
                 <div
                   key={key}
-                  className="bg-white rounded-xl border border-cream-dark overflow-hidden"
+                  className="bg-card rounded-xl border border-cream-dark overflow-hidden"
                 >
                   {/* Header row */}
                   <button

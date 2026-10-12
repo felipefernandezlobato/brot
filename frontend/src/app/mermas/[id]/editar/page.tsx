@@ -72,17 +72,17 @@ export default function EditarMermaPage() {
         >
           ← Volver
         </button>
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Editar Merma
         </h1>
       </div>
 
       {notFound ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           No se encontró este registro de merma.
         </div>
       ) : !initialValues ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           Cargando...
         </div>
       ) : (

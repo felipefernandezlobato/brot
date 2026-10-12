@@ -173,7 +173,7 @@ function PieEntrega({
           value={e.estado}
           disabled={saving}
           onChange={(ev) => onEstado(e, ev.target.value)}
-          className="px-2 py-1.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+          className="px-2 py-1.5 border border-cream-dark rounded-lg text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
         >
           {estados.map((s) => (
             <option key={s} value={s}>{s}</option>
@@ -208,7 +208,7 @@ function PieEntrega({
                   }}
                   autoFocus
                   disabled={guardando}
-                  className="border border-cream-dark rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+                  className="border border-cream-dark rounded-lg px-2 py-1 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
                 />
                 <button
                   type="button"
@@ -296,7 +296,7 @@ export default function EntregasPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Entregas
         </h1>
         <Link href="/entregas/clientes" className="text-sm text-brot hover:text-brot-dark transition-colors">
@@ -304,7 +304,7 @@ export default function EntregasPage() {
         </Link>
       </div>
 
-      <div className="flex gap-1 bg-white rounded-xl border border-cream-dark p-1 mb-6 overflow-x-auto">
+      <div className="flex gap-1 bg-card rounded-xl border border-cream-dark p-1 mb-6 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -319,7 +319,7 @@ export default function EntregasPage() {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">Cargando...</div>
       ) : (
         <>
           {tab === "calendario" && (
@@ -417,7 +417,7 @@ function TabCalendario({
   return (
     <div className="space-y-6">
       {/* Calendar grid */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4">
+      <div className="bg-card rounded-xl border border-cream-dark p-4">
         <div className="flex items-center justify-between mb-4">
           <button onClick={prevMonth} className="p-2 hover:bg-cream rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center text-warm-gray">
             &lt;
@@ -483,7 +483,7 @@ function TabCalendario({
         </h2>
 
         {selectedEntregas.length === 0 ? (
-          <div className="bg-white rounded-xl border border-cream-dark p-6 text-center text-warm-gray text-sm">
+          <div className="bg-card rounded-xl border border-cream-dark p-6 text-center text-warm-gray text-sm">
             No hay entregas para este dia.
           </div>
         ) : (
@@ -493,7 +493,7 @@ function TabCalendario({
               const expanded = expandedId === key;
 
               return (
-                <div key={key} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+                <div key={key} className="bg-card rounded-xl border border-cream-dark overflow-hidden">
                   <button
                     onClick={() => setExpandedId(expanded ? null : key)}
                     className="w-full text-left px-4 py-3 hover:bg-cream/30 transition-colors"
@@ -565,7 +565,7 @@ function TabCalendario({
                   setCalMonth(m - 1);
                   setSelectedDate(e.fecha_entrega);
                 }}
-                className="w-full bg-white rounded-xl border border-cream-dark px-4 py-3 text-left hover:bg-cream/30 transition-colors"
+                className="w-full bg-card rounded-xl border border-cream-dark px-4 py-3 text-left hover:bg-cream/30 transition-colors"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -700,12 +700,12 @@ function TabEntregas({
       </button>
 
       {showForm && (
-        <div className="bg-white rounded-xl border border-cream-dark p-4 space-y-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-warm-gray mb-1">Cliente</label>
               <select value={clienteId} onChange={(e) => setClienteId(e.target.value)}
-                className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]">
+                className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]">
                 <option value="">Seleccionar cliente...</option>
                 {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
@@ -722,7 +722,7 @@ function TabEntregas({
               {lineas.map((l, idx) => (
                 <div key={idx} className="flex gap-2 items-center">
                   <select value={l.producto_id ?? ""} onChange={(e) => selectProducto(idx, e.target.value ? parseInt(e.target.value) : null)}
-                    className="flex-1 px-3 py-2.5 border border-cream-dark rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]">
+                    className="flex-1 px-3 py-2.5 border border-cream-dark rounded-lg text-sm bg-card focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]">
                     <option value="">Producto...</option>
                     {productos.map((p) => <option key={p.id} value={p.id} disabled={usedProductIds.has(p.id) && l.producto_id !== p.id}>{p.nombre}</option>)}
                   </select>
@@ -769,7 +769,7 @@ function TabEntregas({
       )}
 
       {sorted.length === 0 ? (
-        <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
           No hay entregas.
         </div>
       ) : (
@@ -778,7 +778,7 @@ function TabEntregas({
           const expanded = expandedKey === key;
 
           return (
-            <div key={key} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+            <div key={key} className="bg-card rounded-xl border border-cream-dark overflow-hidden">
               <button
                 onClick={() => setExpandedKey(expanded ? null : key)}
                 className="w-full text-left px-4 py-3 hover:bg-cream/30 transition-colors"
@@ -872,7 +872,7 @@ function TabHistorial({
 
   if (byClient.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+      <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
         No hay entregas completadas.
       </div>
     );
@@ -903,7 +903,7 @@ function TabHistorial({
         }
 
         return (
-          <div key={clienteId} className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+          <div key={clienteId} className="bg-card rounded-xl border border-cream-dark overflow-hidden">
             <div className="px-4 py-3 bg-cream/50 border-b border-cream-dark">
               <p className="font-medium text-brot">{clienteNombre}</p>
               <p className="text-xs text-warm-gray">{dates.length} entregas · {clienteProducts.length} productos</p>
@@ -912,7 +912,7 @@ function TabHistorial({
               <table className="text-xs w-full">
                 <thead>
                   <tr className="border-b border-cream-dark">
-                    <th className="text-left px-3 py-2 font-medium text-warm-gray sticky left-0 bg-white z-10 whitespace-nowrap">
+                    <th className="text-left px-3 py-2 font-medium text-warm-gray sticky left-0 bg-card z-10 whitespace-nowrap">
                       Producto
                     </th>
                     {dates.map((d) => (
@@ -928,7 +928,7 @@ function TabHistorial({
                       key={prod.id}
                       className={idx < clienteProducts.length - 1 ? "border-b border-cream-dark" : ""}
                     >
-                      <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-white z-10 whitespace-nowrap">
+                      <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-card z-10 whitespace-nowrap">
                         {prod.receta_id ? (
                           <Link href={`/escandallos/${prod.receta_id}`} className="hover:text-brot hover:underline">{prod.nombre}</Link>
                         ) : prod.nombre}

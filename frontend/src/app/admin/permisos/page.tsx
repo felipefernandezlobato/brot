@@ -38,7 +38,7 @@ function ToggleSwitch({ enabled, loading, label, onToggle }: ToggleSwitchProps) 
       } ${loading ? "opacity-50 cursor-wait" : "cursor-pointer"}`}
     >
       <span
-        className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
+        className={`absolute top-1 left-1 w-4 h-4 bg-card rounded-full shadow transition-transform duration-200 ${
           enabled ? "translate-x-5" : "translate-x-0"
         }`}
       />
@@ -119,7 +119,7 @@ export default function PermisosPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h2 className="titulo text-2xl text-brot">
           Permisos
         </h2>
         <p className="text-sm text-warm-gray mt-1">
@@ -131,7 +131,7 @@ export default function PermisosPage() {
         {allGroups.map((group) => (
           <div
             key={group.label}
-            className="bg-white rounded-xl border border-cream-dark overflow-hidden"
+            className="bg-card rounded-xl border border-cream-dark overflow-hidden"
           >
             {/* Group header */}
             <div className="px-4 py-2.5 bg-cream-dark">

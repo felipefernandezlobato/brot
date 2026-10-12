@@ -242,7 +242,7 @@ export default function RecetaCompletoPage() {
           <button onClick={() => router.push("/escandallos")} className="text-warm-gray hover:text-brot transition-colors text-sm min-h-[44px] flex items-center">
             ← Escandallos
           </button>
-          <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">{receta.nombre}</h1>
+          <h1 className="titulo text-3xl text-brot">{receta.nombre}</h1>
           {receta.es_subreceta && <span className="text-xs text-brot bg-brot/10 px-2 py-0.5 rounded-full">subreceta</span>}
           {producto && (
             <span className={`text-xs px-2 py-0.5 rounded-full ${NIVEL_COLORS[producto.nivel] || "bg-cream text-warm-gray"}`}>
@@ -255,7 +255,7 @@ export default function RecetaCompletoPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => setEditing(false)}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
+                className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-warm-gray hover:bg-cream transition-colors min-h-[44px]"
               >
                 Cancelar
               </button>
@@ -270,7 +270,7 @@ export default function RecetaCompletoPage() {
           ) : (
             <button
               onClick={startEditing}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-text hover:bg-cream transition-colors min-h-[44px]"
+              className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-text hover:bg-cream transition-colors min-h-[44px]"
             >
               Editar
             </button>
@@ -302,21 +302,21 @@ export default function RecetaCompletoPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-        <div className="bg-white border border-cream-dark rounded-xl p-4">
+        <div className="bg-card border border-cream-dark rounded-xl p-4">
           <p className="text-xs text-warm-gray">Costo / porcion</p>
           <p className="text-lg font-bold text-brot">{formatARS(receta.costo_por_porcion)}</p>
           <p className="text-xs text-warm-gray">{receta.porciones_por_lote} porciones/lote</p>
         </div>
-        <div className="bg-white border border-cream-dark rounded-xl p-4">
+        <div className="bg-card border border-cream-dark rounded-xl p-4">
           <p className="text-xs text-warm-gray">PVP</p>
           <p className="text-lg font-bold text-text">{receta.precio_venta ? formatARS(receta.precio_venta) : "--"}</p>
         </div>
-        <div className="bg-white border border-cream-dark rounded-xl p-4">
+        <div className="bg-card border border-cream-dark rounded-xl p-4">
           <p className="text-xs text-warm-gray">Multi</p>
           <p className="text-lg font-bold text-text">{receta.multi ? `${receta.multi.toFixed(1)}x` : "--"}</p>
           <MargenBadge margen={receta.margen} />
         </div>
-        <div className="bg-white border border-cream-dark rounded-xl p-4">
+        <div className="bg-card border border-cream-dark rounded-xl p-4">
           <p className="text-xs text-warm-gray">Costo lote</p>
           <p className="text-lg font-bold text-text">{formatARS(receta.costo_total)}</p>
         </div>
@@ -330,7 +330,7 @@ export default function RecetaCompletoPage() {
 
       {/* Production chain */}
       {(ancestors.length > 0 || hijos.length > 0 || consume_productos.length > 0) && (
-        <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">
           <p className="text-xs font-medium text-warm-gray mb-3">Cadena de produccion completa</p>
 
           {/* Full chain visualization as tree */}
@@ -408,7 +408,7 @@ export default function RecetaCompletoPage() {
           />
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+        <div className="bg-card rounded-xl border border-cream-dark overflow-hidden mb-4">
           <div className="px-4 py-3 border-b border-cream-dark">
             <h2 className="font-medium text-text text-sm">Ingredientes / Lineas de receta</h2>
           </div>
@@ -451,20 +451,20 @@ export default function RecetaCompletoPage() {
 
       {/* Stock chart */}
       {chartData.length > 1 && (
-        <div className="bg-white rounded-xl border border-cream-dark p-5 mb-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4">
           <h2 className="font-medium text-text mb-3">Evolucion de stock y consumo</h2>
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E8DFD3" />
-              <XAxis dataKey="fecha" tick={{ fontSize: 11, fill: "#6B5E52" }}
+              <CartesianGrid strokeDasharray="3 3" stroke="#dfd2bf" />
+              <XAxis dataKey="fecha" tick={{ fontSize: 11, fill: "#66564d" }}
                 tickFormatter={(v: string) => new Date(v + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })} />
-              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6B5E52" }} />
+              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#66564d" }} />
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#dc2626" }} />
               <Tooltip labelFormatter={(v) => formatDate(String(v))}
-                contentStyle={{ borderRadius: "8px", border: "1px solid #E8DFD3", fontSize: "13px" }} />
+                contentStyle={{ borderRadius: "8px", border: "1px solid #dfd2bf", fontSize: "13px" }} />
               <Legend wrapperStyle={{ fontSize: "12px" }} />
               <Bar yAxisId="right" dataKey="consumo" name="Consumo/sem" fill="#dc2626" opacity={0.3} barSize={16} />
-              <Line yAxisId="left" type="monotone" dataKey="stock" name="Stock" stroke="#004225" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              <Line yAxisId="left" type="monotone" dataKey="stock" name="Stock" stroke="#2c412c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -472,7 +472,7 @@ export default function RecetaCompletoPage() {
 
       {/* Movements */}
       {movimientos.length > 0 && (
-        <div className="bg-white rounded-xl border border-cream-dark overflow-hidden mb-4">
+        <div className="bg-card rounded-xl border border-cream-dark overflow-hidden mb-4">
           <div className="px-4 py-3 border-b border-cream-dark">
             <p className="text-sm font-medium text-text">Movimientos recientes</p>
           </div>
@@ -521,7 +521,7 @@ export default function RecetaCompletoPage() {
 
       {/* Notes */}
       {!editing && receta.notas && (
-        <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">
           <p className="text-xs font-medium text-warm-gray mb-1">Notas</p>
           <p className="text-sm text-text whitespace-pre-line">{receta.notas}</p>
         </div>
@@ -538,7 +538,7 @@ export default function RecetaCompletoPage() {
 
       {/* Delete */}
       <PermissionGate module="recetas" action="delete">
-        <div className="bg-white rounded-xl border border-cream-dark p-4">
+        <div className="bg-card rounded-xl border border-cream-dark p-4">
           <p className="text-xs text-warm-gray">Zona de peligro</p>
           <button
             onClick={() => {

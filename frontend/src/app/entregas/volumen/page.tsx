@@ -17,7 +17,7 @@ function formatCurrency(value: number) {
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-white rounded-xl border border-cream-dark p-4">
+    <div className="bg-card rounded-xl border border-cream-dark p-4">
       <p className="text-xs font-medium text-warm-gray uppercase tracking-wide">{label}</p>
       <p className="text-2xl font-medium text-brot mt-1">{value}</p>
     </div>
@@ -99,7 +99,7 @@ export default function VolumenPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h2 className="titulo text-2xl text-brot">
           Analisis de Volumen
         </h2>
         <p className="text-sm text-warm-gray mt-1">
@@ -108,7 +108,7 @@ export default function VolumenPage() {
       </div>
 
       {/* Date range form */}
-      <div className="bg-white rounded-xl border border-cream-dark p-5 mb-6">
+      <div className="bg-card rounded-xl border border-cream-dark p-5 mb-6">
         <form onSubmit={handleFetch}>
           <div className="flex flex-wrap gap-4 items-end">
             <div>
@@ -155,7 +155,7 @@ export default function VolumenPage() {
       {searched && !loading && (
         <div className="space-y-6">
           {data.length === 0 ? (
-            <div className="bg-white rounded-xl border border-cream-dark p-6 text-center text-warm-gray text-sm">
+            <div className="bg-card rounded-xl border border-cream-dark p-6 text-center text-warm-gray text-sm">
               No hay datos de volumen para el periodo seleccionado.
             </div>
           ) : (
@@ -180,7 +180,7 @@ export default function VolumenPage() {
                     className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap min-h-[36px] transition-colors ${
                       vista === key
                         ? "bg-brot text-white"
-                        : "bg-white border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+                        : "bg-card border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
                     }`}
                   >
                     {label}
@@ -190,7 +190,7 @@ export default function VolumenPage() {
 
               {/* Detail view - all items */}
               {vista === "todo" && (
-                <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+                <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -240,7 +240,7 @@ export default function VolumenPage() {
 
               {/* By client view */}
               {vista === "por_cliente" && (
-                <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+                <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -283,7 +283,7 @@ export default function VolumenPage() {
 
               {/* By product view */}
               {vista === "por_producto" && (
-                <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+                <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>

@@ -80,7 +80,7 @@ function SectionCard({ section, active, onClick }: SectionCardProps) {
       className={`text-left w-full p-4 rounded-xl border transition-colors ${
         active
           ? "border-brot bg-brot/5"
-          : "border-cream-dark bg-white hover:bg-cream"
+          : "border-cream-dark bg-card hover:bg-cream"
       }`}
     >
       <p
@@ -116,7 +116,7 @@ function PreviewTable({ headers, rows }: PreviewTableProps) {
   if (headers.length === 0) return null;
 
   return (
-    <div className="overflow-x-auto bg-white rounded-xl border border-cream-dark">
+    <div className="overflow-x-auto bg-card rounded-xl border border-cream-dark">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-cream-dark bg-cream">
@@ -202,7 +202,7 @@ export default function ImportarPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="font-[family-name:var(--font-garamond)] text-2xl text-brot">
+        <h2 className="titulo text-2xl text-brot">
           Importar Datos
         </h2>
         <p className="text-sm text-warm-gray mt-1">
@@ -239,7 +239,7 @@ export default function ImportarPage() {
         className={`relative flex flex-col items-center justify-center gap-3 p-10 rounded-2xl border-2 border-dashed cursor-pointer transition-colors mb-6 ${
           dragging
             ? "border-brot bg-brot/5"
-            : "border-cream-dark bg-white hover:bg-cream"
+            : "border-cream-dark bg-card hover:bg-cream"
         }`}
       >
         <input

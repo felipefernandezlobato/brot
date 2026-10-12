@@ -47,7 +47,7 @@ const MOTIVO_COLORS: Record<Motivo, string> = {
   dañado: "bg-red-100 text-red-700",
   produccion: "bg-blue-100 text-blue-700",
   consumo_personal: "bg-purple-100 text-purple-700",
-  otro: "bg-gray-100 text-warm-gray",
+  otro: "bg-cream text-warm-gray",
 };
 
 const MOTIVO_FILTERS: (Motivo | "todos")[] = [
@@ -117,7 +117,7 @@ export default function MermasPage() {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <h1 className="font-[family-name:var(--font-garamond)] text-3xl text-brot">
+        <h1 className="titulo text-3xl text-brot">
           Mermas
         </h1>
         <div className="flex gap-2">
@@ -137,7 +137,7 @@ export default function MermasPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-cream-dark p-4 mb-4 space-y-3">
+      <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4 space-y-3">
         <DateRangeShortcuts
           fechaDesde={fechaDesde}
           fechaHasta={fechaHasta}
@@ -156,7 +156,7 @@ export default function MermasPage() {
               className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap min-h-[36px] transition-colors ${
                 motivo === m
                   ? "bg-brot text-white"
-                  : "bg-white border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
+                  : "bg-card border border-cream-dark text-warm-gray hover:border-brot hover:text-brot"
               }`}
             >
               {m === "todos" ? "Todos" : MOTIVO_LABELS[m]}
@@ -178,7 +178,7 @@ export default function MermasPage() {
       )}
 
       {/* List */}
-      <div className="bg-white rounded-xl border border-cream-dark overflow-hidden">
+      <div className="bg-card rounded-xl border border-cream-dark overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-warm-gray">Cargando...</div>
         ) : mermas.length === 0 ? (

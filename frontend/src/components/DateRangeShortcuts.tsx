@@ -100,7 +100,7 @@ export default function DateRangeShortcuts({ fechaDesde, fechaHasta, onChange }:
           type="date"
           value={fechaDesde}
           onChange={(e) => onChange(e.target.value, e.target.value)}
-          className="px-2 py-1.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+          className="px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
         />
       )}
 
@@ -113,7 +113,7 @@ export default function DateRangeShortcuts({ fechaDesde, fechaHasta, onChange }:
             const { desde, hasta } = semanaARango(e.target.value);
             onChange(desde, hasta);
           }}
-          className="px-2 py-1.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+          className="px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
         />
       )}
 
@@ -126,7 +126,7 @@ export default function DateRangeShortcuts({ fechaDesde, fechaHasta, onChange }:
             const { desde, hasta } = mesARango(e.target.value);
             onChange(desde, hasta);
           }}
-          className="px-2 py-1.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+          className="px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
         />
       )}
 
@@ -136,14 +136,14 @@ export default function DateRangeShortcuts({ fechaDesde, fechaHasta, onChange }:
             type="date"
             value={fechaDesde}
             onChange={(e) => onChange(e.target.value, fechaHasta)}
-            className="px-2 py-1.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+            className="px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
           />
           <span className="text-warm-gray text-xs">a</span>
           <input
             type="date"
             value={fechaHasta}
             onChange={(e) => onChange(fechaDesde, e.target.value)}
-            className="px-2 py-1.5 rounded-lg border border-cream-dark bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+            className="px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
           />
         </div>
       )}

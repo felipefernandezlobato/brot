@@ -45,7 +45,7 @@ export function PinPad({ onSubmit, error }: Props) {
                 onClick={() =>
                   key === "←" ? handleDelete() : handleDigit(key)
                 }
-                className="h-16 w-16 rounded-full bg-white border border-cream-dark text-xl font-medium text-text active:scale-[0.98] active:bg-cream touch-manipulation"
+                className="h-16 w-16 rounded-full bg-card border border-cream-dark text-xl font-medium text-text active:scale-[0.98] active:bg-cream touch-manipulation"
               >
                 {key}
               </button>
