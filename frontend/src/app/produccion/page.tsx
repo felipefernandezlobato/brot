@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { formatDuracion } from "@/lib/format";
+import { formatDuracion, limpiarCantidad, parseCantidad } from "@/lib/format";
 import { useToast } from "@/components/Toast";
 
 interface TareaDia {
@@ -209,11 +209,6 @@ export default function ProduccionHoy() {
     window.history.replaceState(null, "", `/produccion?fecha=${today}`);
   }
 
-  function num(s: string): number | null {
-    if (!s.trim()) return null;
-    const n = parseFloat(s.replace(",", "."));
-    return Number.isFinite(n) ? n : null;
-  }
 
   /** The draft being edited, falling back to whatever is already saved. */
   function draftOf(tarea: TareaDia): Draft {
@@ -237,7 +232,7 @@ export default function ProduccionHoy() {
   /** Saving is the only thing that moves stock — no quantity, no save. */
   function puedeGuardar(tarea: TareaDia): boolean {
     if (!tarea.producto_congelado_id) return true;
-    const c = num(draftOf(tarea).cantidad);
+    const c = parseCantidad(draftOf(tarea).cantidad);
     return c !== null && c > 0;
   }
 
@@ -252,10 +247,10 @@ export default function ProduccionHoy() {
           tarea_id: tarea.tarea_id,
           fecha,
           completada,
-          cantidad_real: num(d.cantidad),
+          cantidad_real: parseCantidad(d.cantidad),
           duracion_real: d.duracion ? parseInt(d.duracion) : null,
           notas: d.notas || null,
-          consumo_padre_declarado: num(d.consumoPadre),
+          consumo_padre_declarado: parseCantidad(d.consumoPadre),
         }),
       });
       setDrafts((prev) => {
@@ -324,7 +319,7 @@ export default function ProduccionHoy() {
 
   /** Shown while typing, so a wrong number is caught before it moves stock. */
   function previewConsumo(tarea: TareaDia, cantidadStr: string): string | null {
-    const c = num(cantidadStr);
+    const c = parseCantidad(cantidadStr);
     if (c === null || c <= 0 || !tarea.ingrediente_principal) return null;
     const ing = tarea.ingrediente_principal;
     const partes = [`${fmtCantidad(consumoPrincipal(tarea, c), ing.unidad)} ${ing.nombre}`];
@@ -404,7 +399,7 @@ export default function ProduccionHoy() {
 
   async function guardarExtra(extra: ExtraDia) {
     const d = extraDraftOf(extra);
-    const cantidad = num(d.cantidad);
+    const cantidad = parseCantidad(d.cantidad);
     const duracion = d.duracion ? parseInt(d.duracion) : null;
     const esProduccion = esExtraProduccion(extra);
     if (esProduccion) {
@@ -424,7 +419,7 @@ export default function ProduccionHoy() {
           cantidad_real: esProduccion ? cantidad : null,
           duracion_real: duracion,
           notas: d.notas || null,
-          consumo_padre_declarado: num(d.consumoPadre),
+          consumo_padre_declarado: parseCantidad(d.consumoPadre),
         }),
       });
       cancelarEdicionExtra(extra);
@@ -460,12 +455,12 @@ export default function ProduccionHoy() {
         if (!extraCantidad) return;
         const body: Record<string, unknown> = {
           producto_id: parseInt(extraProductoId),
-          cantidad_producida: num(extraCantidad),
+          cantidad_producida: parseCantidad(extraCantidad),
           fecha,
           duracion_real: extraDuracion ? parseInt(extraDuracion) : null,
           notas: extraNotas || null,
         };
-        const bast = num(extraConsumoPadre);
+        const bast = parseCantidad(extraConsumoPadre);
         if (bast !== null && bast > 0) {
           body.consumo_padre_declarado = bast;
         }
@@ -709,7 +704,7 @@ export default function ProduccionHoy() {
                               inputMode="decimal"
                               placeholder="auto"
                               value={d.consumoPadre}
-                              onChange={(e) => setDraft(tarea, { consumoPadre: e.target.value })}
+                              onChange={(e) => setDraft(tarea, { consumoPadre: limpiarCantidad(e.target.value) })}
                               className="w-14 border border-blue-200 bg-blue-50/50 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 outline-none"
                               style={{ minHeight: 36 }}
                             />
@@ -854,8 +849,8 @@ export default function ProduccionHoy() {
               const isSaving = savingExtra === extra.registro_id;
               const esProduccion = esExtraProduccion(extra);
               const habilitado = esProduccion
-                ? num(d.cantidad) !== null && (num(d.cantidad) as number) > 0
-                : num(d.duracion) !== null && (num(d.duracion) as number) > 0;
+                ? parseCantidad(d.cantidad) !== null && (parseCantidad(d.cantidad) as number) > 0
+                : parseCantidad(d.duracion) !== null && (parseCantidad(d.duracion) as number) > 0;
 
               return (
                 <div
@@ -933,7 +928,7 @@ export default function ProduccionHoy() {
                             inputMode="decimal"
                             placeholder="auto"
                             value={d.consumoPadre}
-                            onChange={(e) => setExtraDraft(extra, { consumoPadre: e.target.value })}
+                            onChange={(e) => setExtraDraft(extra, { consumoPadre: limpiarCantidad(e.target.value) })}
                             className="w-14 border border-blue-200 bg-blue-50/50 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 outline-none"
                             style={{ minHeight: 36 }}
                           />
@@ -1053,7 +1048,7 @@ export default function ProduccionHoy() {
                   inputMode="decimal"
                   placeholder={`Consumido de ${productosCongelados.find(p => p.id === parseInt(extraProductoId))?.consumo_padre_label}`}
                   value={extraConsumoPadre}
-                  onChange={(e) => setExtraConsumoPadre(e.target.value)}
+                  onChange={(e) => setExtraConsumoPadre(limpiarCantidad(e.target.value))}
                   className="w-full border border-blue-200 bg-blue-50/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400/30 outline-none"
                   style={{ minHeight: 44 }}
                 />

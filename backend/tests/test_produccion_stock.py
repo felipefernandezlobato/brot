@@ -919,3 +919,76 @@ def test_dia_manda_el_nombre_del_padre_como_etiqueta(client, db):
     etiquetas = {t["titulo"]: t["consumo_padre_label"] for t in tareas}
     assert etiquetas["Hornear Pan 1kg Blanco"] == "Masa Pan Blanco"
     assert etiquetas["Hornear Pan 500g Blanco"] == "Masa Pan Blanco"
+
+
+def test_producir_acepta_el_nombre_viejo_del_campo(client, db):
+    """POST /producir tiene su propio schema (ProduccionRequest, definido en el
+    router y no en schemas.py), asi que se quedo sin el alias en el primer
+    intento. Era el unico endpoint sin cubrir y justo el que se escapo."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    masa, tareas = _masa_con_dos_tamanos(db, ing)
+    _, prod_1kg = tareas["Pan 1kg Blanco"]
+
+    res = client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod_1kg.id, "cantidad_producida": 24,
+              "bastones_consumidos": 1.0},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    # si el alias no agarrara, derivaria 24/20 = 1,2 y quedaria en 0,8
+    assert _stock_congelado(db, masa.id) == pytest.approx(1.0)
+
+
+def test_producir_con_el_nombre_nuevo(client, db):
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    masa, tareas = _masa_con_dos_tamanos(db, ing)
+    _, prod_1kg = tareas["Pan 1kg Blanco"]
+
+    res = client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod_1kg.id, "cantidad_producida": 24,
+              "consumo_padre_declarado": 1.0},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert _stock_congelado(db, masa.id) == pytest.approx(1.0)
+
+
+def test_editar_el_consumo_declarado_no_duplica(client, db):
+    """Reguardar con otro numero tiene que dejar el neto exacto, no sumar los
+    dos. El revert/reapply va por referencia_origen y es ciego a si el valor
+    fue declarado o derivado, pero conviene fijarlo."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    masa, tareas = _masa_con_dos_tamanos(db, ing, stock_masa=3.0)
+    t1kg, _ = tareas["Pan 1kg Blanco"]
+
+    _guardar_con_consumo(client, headers, t1kg.id, 24, 1.0)
+    assert _stock_congelado(db, masa.id) == pytest.approx(2.0)
+
+    # misma tarea, mismo dia: se declara 1,5 en vez de 1,0
+    _guardar_con_consumo(client, headers, t1kg.id, 24, 1.5)
+    assert _stock_congelado(db, masa.id) == pytest.approx(1.5), \
+        "tiene que quedar 3 - 1,5, no 3 - 1,0 - 1,5"
+
+
+def test_extra_con_consumo_declarado(client, db):
+    """La produccion fuera de plan (/registro/extra) usa otro schema mas."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    masa, tareas = _masa_con_dos_tamanos(db, ing)
+    _, prod_1kg = tareas["Pan 1kg Blanco"]
+
+    res = client.post(
+        "/api/produccion/registro/extra",
+        json={"fecha": HOY, "titulo": "Pan extra",
+              "receta_id": prod_1kg.receta_id, "cantidad_real": 24,
+              "duracion_real": None, "notas": None,
+              "consumo_padre_declarado": 1.0},
+        headers=headers,
+    )
+    assert res.status_code in (200, 201), res.text
+    assert _stock_congelado(db, masa.id) == pytest.approx(1.0)

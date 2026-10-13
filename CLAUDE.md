@@ -376,14 +376,51 @@ Daily/weekly/monthly operational task tracking.
 Products have 4 levels tracked in `ProductoCongelado.nivel`:
 - `masa` → Masas base (consume ingredientes from Stock MP)
 - `semi` → Bastones, congelados (consume masas from Stock Congelado)
-- `crudo` → Productos armados sin cocinar (consume bastones — manual input for bastones, auto for rest)
+- `crudo` → Productos armados sin cocinar (consume bastones)
 - `terminado` → Producto final listo para venta (consume crudos 1:1)
 
 Each product has `producto_padre_id` (FK to parent) and `cantidad_por_padre` (how many from 1 parent).
-Production via `POST /api/produccion/producir` with `producto_id`, `cantidad_producida`, `fecha`, optional `bastones_consumidos`.
+Production via `POST /api/produccion/producir` with `producto_id`, `cantidad_producida`, `fecha`, optional `consumo_padre_declarado`.
 Stock service: `services/stock.py` → `producir_producto()`.
-Calendar tasks have `producto_congelado_id` and `necesita_bastones` for correct stock handling.
+Calendar tasks have `producto_congelado_id`; `GET /api/produccion/dia` adds `consumo_padre_label` per task (see below).
 Stock effects ONLY via `/produccion/producir` (removed old `_aplicar_efectos_stock`).
+
+**Consumption of the parent can be declared by hand (generalised 2026-10-13).**
+`RegistroProduccion.consumo_padre_declarado` (was `bastones_consumidos`) holds
+how much of the PARENT product was consumed. Empty = derive it as
+`cantidad_real / cantidad_por_padre`, which is what every record before that
+date did. **`services/stock.py::admite_consumo_declarado(padre)` is THE one
+definition** of which parents allow it: any `nivel` of `semi` or `masa`. Until
+2026-10-13 that rule was written out four times — twice in the backend, once in
+each of the two production screens — and depended on the product's *name*
+(`"baston" in nombre.lower()`), so only bastones qualified.
+
+Why masas needed it: one lote of Masa Pan Blanco nominally yields 20 panes de
+1 kg or 36 de medio, so the standard bake (24 + 30) derives
+`24/20 + 30/36 = 2,0333` lotes against the 2 actually mixed — 724 g short every
+cycle, booked as a negative adjustment lot. Over Aug–Oct that accounted for
+~0,47 of a +6,97-lote gap on Masa Pan Blanco; the other ~6,5 lotes is bread
+baked without being logged, which this does not fix.
+
+**The 36 is correct — do not "fix" it.** An earlier attempt moved it to 40
+reasoning "same masa, so medio kilo = half a bollo = 547 g"; the bench
+contradicted the premise (the bollos are cut at 600 g = 21.865/36, and the
+product name is a commercial label, not the bollo's weight). See
+`scripts/restaurar_rendimiento_pan_36.py`. Same file notes the real open issue:
+the medio kilo carries 55,6% of the 1 kg's dough but sells at exactly half, so
+it returns 2,24× against 2,49×.
+
+`cantidad_por_padre` still drives COSTING (`costo_por_unidad_congelado` divides
+the parent's cost by it and never reads production history), so a declared
+consumption moves stock only — no product cost changes. The input in both
+production screens is labelled with the parent's actual name
+(`consumo_padre_label` from `GET /dia`), not a fixed "bast." that said nothing
+when logging bread, and its placeholder is `auto` because empty means derived.
+Input schemas accept `bastones_consumidos` as an alias — Vercel and Render
+deploy separately, so an old frontend talks to a new backend during the window,
+and without it Pydantic drops the unknown key and silently reverts to derived.
+`ProduccionRequest` in `routers/produccion.py` is a FOURTH input schema that is
+easy to miss when touching this (it was, once).
 
 **Masa stock is counted in lotes, not portions.** For a masa recipe with `porciones_por_lote > 1` (Masa Croissant=9, Medialuna=6, Hojaldre=3), `u` of physical STOCK means "1 lote", not "1 portion" — entering "1.5" for an "u receta" task means 1.5u on the shelf, not 13.5. The ×9/×6/×3 only converts lotes → downstream bastones, it never scales the masa's own stock count. `producir_producto(db, producto_congelado_id, cantidad_producida, lotes, ...)` takes `lotes` (for ingredient/subreceta scaling) as an explicit parameter separate from `cantidad_producida` (physical qty added to stock) — they used to be derived from each other via multiplication, which quietly inflated the masa's own stock by the same factor used to fix ingredient deduction. `lotes_de_receta()` in `produccion_registro.py` computes `lotes`: "u receta" tasks already measure batches directly (`lotes = cantidad`), everything else measures finished pieces and divides by `porciones_por_lote`.
 

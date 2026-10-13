@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 from app.models import (
     Ingrediente,
@@ -786,7 +786,14 @@ def delete_tarea(
 class ProduccionRequest(BaseModel):
     producto_id: int
     cantidad_producida: float
-    consumo_padre_declarado: Optional[float] = None
+    # Mismo alias que los tres schemas de schemas.py: este endpoint tambien
+    # recibe del frontend, asi que durante el deploy escalonado (Vercel y Render
+    # por separado) le llega el nombre viejo. Sin el alias la clave se ignora en
+    # silencio y el consumo vuelve al derivado.
+    consumo_padre_declarado: Optional[float] = Field(
+        default=None,
+        validation_alias=AliasChoices("consumo_padre_declarado", "bastones_consumidos"),
+    )
     fecha: Optional[str] = None
     duracion_real: Optional[int] = None
     notas: Optional[str] = None

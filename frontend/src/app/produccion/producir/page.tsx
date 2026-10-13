@@ -1,5 +1,7 @@
 "use client";
 
+import { limpiarCantidad, parseCantidad } from "@/lib/format";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
@@ -97,15 +99,16 @@ export default function ProducirPage() {
   const padreStock = padre ? (stockMap.get(padre.id) ?? 0) : 0;
 
   const handleProducir = async () => {
-    if (!selectedId || !cantidad || parseFloat(cantidad) <= 0) return;
+    const cant = parseCantidad(cantidad);
+    if (!selectedId || !cant || cant <= 0) return;
     setProducing(true);
     try {
       const body: Record<string, unknown> = {
         producto_id: selectedId,
-        cantidad_producida: parseFloat(cantidad),
+        cantidad_producida: cant,
       };
       if (padreDeclarable && consumoPadre) {
-        body.consumo_padre_declarado = parseFloat(consumoPadre);
+        body.consumo_padre_declarado = parseCantidad(consumoPadre);
       }
       await apiFetch("/api/produccion/producir", {
         method: "POST",
@@ -238,7 +241,7 @@ export default function ProducirPage() {
                         min="0"
                         step="1"
                         value={consumoPadre}
-                        onChange={(e) => setConsumoPadre(e.target.value)}
+                        onChange={(e) => setConsumoPadre(limpiarCantidad(e.target.value))}
                         placeholder="0"
                         className="flex-1 px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
                       />
@@ -246,7 +249,7 @@ export default function ProducirPage() {
                     </div>
                     {consumoPadre && selected.cantidad_por_padre && (
                       <p className="text-xs text-warm-gray mt-1">
-                        {consumoPadre} × {selected.cantidad_por_padre} = {Math.round(parseFloat(consumoPadre) * selected.cantidad_por_padre)} {selected.nombre} (teorico)
+                        {consumoPadre} × {selected.cantidad_por_padre} = {Math.round((parseCantidad(consumoPadre) ?? 0) * selected.cantidad_por_padre)} {selected.nombre} (teorico)
                       </p>
                     )}
                   </div>
@@ -259,12 +262,10 @@ export default function ProducirPage() {
                   </label>
                   <div className="flex items-center gap-2">
                     <input
-                      type="number"
+                      type="text"
                       inputMode="decimal"
-                      min="0"
-                      step="any"
                       value={cantidad}
-                      onChange={(e) => setCantidad(e.target.value)}
+                      onChange={(e) => setCantidad(limpiarCantidad(e.target.value))}
                       placeholder="0"
                       className="flex-1 px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px] text-lg font-medium"
                     />
@@ -273,7 +274,7 @@ export default function ProducirPage() {
                 </div>
 
                 {/* What will happen */}
-                {cantidad && parseFloat(cantidad) > 0 && (
+                {(parseCantidad(cantidad) ?? 0) > 0 && (
                   <div className="bg-cream rounded-lg px-4 py-3 mb-4 text-sm space-y-1">
                     <p className="font-medium text-text">Al producir:</p>
                     {selected.receta_id && !padre && (
@@ -281,7 +282,7 @@ export default function ProducirPage() {
                     )}
                     {padre && !padreDeclarable && (
                       <p className="text-warm-gray">
-                        - Descuenta {(parseFloat(cantidad) / (selected.cantidad_por_padre || 1)).toFixed(1)} {padre.nombre} (auto)
+                        - Descuenta {((parseCantidad(cantidad) ?? 0) / (selected.cantidad_por_padre || 1)).toFixed(1)} {padre.nombre} (auto)
                       </p>
                     )}
                     {padreDeclarable && consumoPadre && (
@@ -298,7 +299,7 @@ export default function ProducirPage() {
                 {/* Submit */}
                 <button
                   onClick={handleProducir}
-                  disabled={producing || !cantidad || parseFloat(cantidad) <= 0}
+                  disabled={producing || !((parseCantidad(cantidad) ?? 0) > 0)}
                   className="w-full bg-brot text-white py-3 rounded-lg text-sm font-medium hover:bg-brot-dark transition-colors min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {producing ? "Registrando..." : "Registrar Produccion"}
