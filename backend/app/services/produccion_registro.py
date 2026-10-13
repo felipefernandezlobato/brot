@@ -202,7 +202,7 @@ def aplicar_efectos(db: Session, reg: RegistroProduccion, user_id: int) -> int:
         producto_id,
         reg.cantidad_real,
         lotes_de_receta(db, reg),
-        reg.bastones_consumidos,
+        reg.consumo_padre_declarado,
         ref,
         user_id,
         fecha_produccion=reg.fecha,

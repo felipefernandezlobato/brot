@@ -337,7 +337,11 @@ class RegistroProduccion(Base):
     unidad_extra: Mapped[Optional[str]] = mapped_column(sa.String(20), nullable=True)
     receta_id: Mapped[Optional[int]] = mapped_column(ForeignKey("recetas.id"), nullable=True)
     producto_congelado_id: Mapped[Optional[int]] = mapped_column(sa.Integer, nullable=True)
-    bastones_consumidos: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
+    # Cuanto del producto PADRE se consumio, declarado a mano. Vacio = se
+    # deriva como cantidad_real / cantidad_por_padre. Se llamaba
+    # bastones_consumidos y solo valia para bastones; desde el 13/10/2026 vale
+    # para cualquier padre semi o masa (ver stock.admite_consumo_declarado).
+    consumo_padre_declarado: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
     registrado_por: Mapped[int] = mapped_column(ForeignKey("users.id"))
     registrado_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 

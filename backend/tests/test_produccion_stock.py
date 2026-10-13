@@ -769,3 +769,153 @@ def test_tarea_sin_producto_se_completa_sin_cantidad(client, db):
     assert res.status_code == 201
     assert res.json()["completada"] is True
     assert res.json()["stock_aplicado"] is False
+
+
+# ==============================================================
+# Declared parent consumption (2026-10-13)
+# ==============================================================
+# Until now only bastones could have their consumption typed in; a masa parent
+# always got `cantidad_real / cantidad_por_padre`. For bread that derivation
+# never closes: one lote of Masa Pan Blanco nominally gives 20 panes de 1 kg or
+# 36 de medio, so the standard bake (24 + 30) asks for 24/20 + 30/36 = 2,0333
+# lotes against the 2 actually mixed -- short every single cycle.
+
+
+def _masa_con_dos_tamanos(db, ing_harina, *, stock_masa=2.0):
+    """Masa Pan Blanco with the two bread sizes hanging off it, as in production:
+    two separate tasks, two separate products, ONE shared masa."""
+    cat = db.query(Categoria).filter(Categoria.tipo == "receta").first()
+    if not cat:
+        cat = Categoria(nombre="Masas", tipo="receta")
+        db.add(cat)
+        db.flush()
+
+    r_masa = Receta(nombre="Masa Pan Blanco", categoria_id=cat.id, porciones_por_lote=1.0,
+                    es_subreceta=True, unidad_rendimiento="u")
+    db.add(r_masa)
+    db.flush()
+    db.add(LineaReceta(receta_id=r_masa.id, ingrediente_id=ing_harina.id, cantidad=12000.0, unidad="g"))
+    masa = ProductoCongelado(nombre="Masa Pan Blanco", categoria="masas", unidad="u",
+                             receta_id=r_masa.id, nivel="masa")
+    db.add(masa)
+    db.flush()
+    db.add(StockCongelado(producto_congelado_id=masa.id, cantidad=stock_masa,
+                          cantidad_original=stock_masa, fecha_entrada=date.today(), is_active=True))
+
+    tareas = {}
+    for nombre, porciones, cpp in [("Pan 1kg Blanco", 20.0, 20.0), ("Pan 500g Blanco", 36.0, 36.0)]:
+        r = Receta(nombre=nombre, categoria_id=cat.id, porciones_por_lote=porciones)
+        db.add(r)
+        db.flush()
+        db.add(LineaReceta(receta_id=r.id, subreceta_id=r_masa.id, cantidad=1.0, unidad="u"))
+        prod = ProductoCongelado(nombre=f"{nombre} Cocinado", categoria="panes", unidad="u",
+                                 receta_id=r.id, nivel="terminado",
+                                 producto_padre_id=masa.id, cantidad_por_padre=cpp)
+        db.add(prod)
+        db.flush()
+        t = TareaProduccion(dia_semana=date.today().isoweekday(), hora="07:00",
+                            titulo=f"Hornear {nombre}",
+                            cantidad_planificada=10.0, unidad_cantidad="u",
+                            receta_id=r.id, producto_congelado_id=prod.id, tipo="produccion")
+        db.add(t)
+        db.flush()
+        tareas[nombre] = (t, prod)
+    db.commit()
+    return masa, tareas
+
+
+def _guardar_con_consumo(client, headers, tarea_id, cantidad, consumo, campo="consumo_padre_declarado"):
+    return client.post(
+        "/api/produccion/registro",
+        json={
+            "tarea_id": tarea_id, "fecha": HOY, "completada": True,
+            "cantidad_real": cantidad, "duracion_real": None, "notas": None,
+            campo: consumo,
+        },
+        headers=headers,
+    )
+
+
+def test_masa_sin_declarar_sigue_derivando(client, db):
+    """Sin numero cargado no cambia nada: 24/20 = 1,2 como siempre."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    masa, tareas = _masa_con_dos_tamanos(db, ing)
+    t1kg, _ = tareas["Pan 1kg Blanco"]
+
+    _guardar(client, headers, t1kg.id, 24)
+    assert _stock_congelado(db, masa.id) == pytest.approx(2.0 - 1.2)
+
+
+def test_masa_declarada_le_gana_al_rinde(client, db):
+    """Lo que carga la persona manda sobre el rinde configurado."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    masa, tareas = _masa_con_dos_tamanos(db, ing)
+    t1kg, _ = tareas["Pan 1kg Blanco"]
+
+    # 24 panes declarando 1,0 lote en vez del 1,2 derivado
+    _guardar_con_consumo(client, headers, t1kg.id, 24, 1.0)
+    assert _stock_congelado(db, masa.id) == pytest.approx(1.0)
+
+
+def test_la_tanda_de_pan_cierra_cuando_se_declara(client, db):
+    """El caso que motivo todo esto. Dos tareas distintas, una sola masa.
+
+    Derivado: 24/20 + 30/36 = 2,0333 contra 2 amasados -> queda negativo.
+    Declarado 1,2 + 0,8: cierra en 0 exacto.
+    """
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    masa, tareas = _masa_con_dos_tamanos(db, ing)
+    t1kg, _ = tareas["Pan 1kg Blanco"]
+    t500, _ = tareas["Pan 500g Blanco"]
+
+    _guardar_con_consumo(client, headers, t1kg.id, 24, 1.2)
+    _guardar_con_consumo(client, headers, t500.id, 30, 0.8)
+
+    assert _stock_congelado(db, masa.id) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_la_tanda_derivada_queda_negativa(client, db):
+    """Contracara: sin declarar, la misma tanda deja la masa en negativo.
+    Es el desvio de -0,0333 por ciclo que se venia acumulando."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    masa, tareas = _masa_con_dos_tamanos(db, ing)
+    t1kg, _ = tareas["Pan 1kg Blanco"]
+    t500, _ = tareas["Pan 500g Blanco"]
+
+    _guardar(client, headers, t1kg.id, 24)
+    _guardar(client, headers, t500.id, 30)
+
+    assert _stock_congelado(db, masa.id) == pytest.approx(-0.0333, abs=1e-3)
+
+
+def test_nombre_viejo_del_campo_sigue_funcionando(client, db):
+    """El frontend y el backend se despliegan por separado, asi que durante el
+    deploy hay frontend viejo mandando `bastones_consumidos`. Si el alias no
+    estuviera, Pydantic ignoraria la clave y el consumo volveria al derivado
+    sin avisar."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    masa, tareas = _masa_con_dos_tamanos(db, ing)
+    t1kg, _ = tareas["Pan 1kg Blanco"]
+
+    _guardar_con_consumo(client, headers, t1kg.id, 24, 1.0, campo="bastones_consumidos")
+    assert _stock_congelado(db, masa.id) == pytest.approx(1.0)
+
+
+def test_dia_manda_el_nombre_del_padre_como_etiqueta(client, db):
+    """La pantalla rotula el input con el nombre real del padre: "Masa Pan
+    Blanco", no un "bast." fijo que no dice nada cuando cargas pan."""
+    headers = _auth(client, db)
+    ing = _harina(db, stock_kg=500.0)
+    _masa_con_dos_tamanos(db, ing)
+
+    res = client.get(f"/api/produccion/dia?fecha={HOY}", headers=headers)
+    assert res.status_code == 200
+    tareas = res.json()["tareas"]
+    etiquetas = {t["titulo"]: t["consumo_padre_label"] for t in tareas}
+    assert etiquetas["Hornear Pan 1kg Blanco"] == "Masa Pan Blanco"
+    assert etiquetas["Hornear Pan 500g Blanco"] == "Masa Pan Blanco"

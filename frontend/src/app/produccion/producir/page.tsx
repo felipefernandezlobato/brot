@@ -48,7 +48,7 @@ export default function ProducirPage() {
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [cantidad, setCantidad] = useState("");
-  const [bastones, setBastones] = useState("");
+  const [consumoPadre, setConsumoPadre] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
@@ -91,7 +91,9 @@ export default function ProducirPage() {
 
   const selected = selectedId ? prodMap.get(selectedId) : null;
   const padre = selected?.producto_padre_id ? prodMap.get(selected.producto_padre_id) : null;
-  const needsBastones = padre && padre.nivel === "semi" && padre.nombre.toLowerCase().includes("baston");
+  // Mismo criterio que services/stock.admite_consumo_declarado (la fuente de
+  // verdad): cualquier padre semi o masa admite declarar el consumo.
+  const padreDeclarable = padre && ["semi", "masa"].includes(padre.nivel);
   const padreStock = padre ? (stockMap.get(padre.id) ?? 0) : 0;
 
   const handleProducir = async () => {
@@ -102,8 +104,8 @@ export default function ProducirPage() {
         producto_id: selectedId,
         cantidad_producida: parseFloat(cantidad),
       };
-      if (needsBastones && bastones) {
-        body.bastones_consumidos = parseFloat(bastones);
+      if (padreDeclarable && consumoPadre) {
+        body.consumo_padre_declarado = parseFloat(consumoPadre);
       }
       await apiFetch("/api/produccion/producir", {
         method: "POST",
@@ -111,7 +113,7 @@ export default function ProducirPage() {
       });
       toast(`${cantidad} ${selected?.nombre} producido`);
       setCantidad("");
-      setBastones("");
+      setConsumoPadre("");
       setSelectedId(null);
       load();
     } catch (err) {
@@ -159,7 +161,7 @@ export default function ProducirPage() {
                           onClick={() => {
                             setSelectedId(isSelected ? null : p.id);
                             setCantidad("");
-                            setBastones("");
+                            setConsumoPadre("");
                           }}
                           className={`text-left px-3 py-2.5 rounded-xl border transition-colors min-h-[44px] ${
                             isSelected
@@ -223,28 +225,28 @@ export default function ProducirPage() {
                   </div>
                 )}
 
-                {/* Bastones input (only for products that consume bastones) */}
-                {needsBastones && (
+                {/* Consumo declarado del padre (bastones, masas) */}
+                {padreDeclarable && (
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-text mb-1">
-                      Bastones consumidos
+                      Consumido de {padre?.nombre}
                     </label>
                     <div className="flex items-center gap-2">
                       <input
-                        type="number"
+                        type="text"
                         inputMode="decimal"
                         min="0"
                         step="1"
-                        value={bastones}
-                        onChange={(e) => setBastones(e.target.value)}
+                        value={consumoPadre}
+                        onChange={(e) => setConsumoPadre(e.target.value)}
                         placeholder="0"
                         className="flex-1 px-3 py-2.5 rounded-lg border border-cream-dark bg-card text-text focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
                       />
-                      <span className="text-sm text-warm-gray">bastones de {padre?.nombre}</span>
+                      <span className="text-sm text-warm-gray">de {padre?.nombre}</span>
                     </div>
-                    {bastones && selected.cantidad_por_padre && (
+                    {consumoPadre && selected.cantidad_por_padre && (
                       <p className="text-xs text-warm-gray mt-1">
-                        {bastones} bastones × {selected.cantidad_por_padre} = {Math.round(parseFloat(bastones) * selected.cantidad_por_padre)} {selected.nombre} (teorico)
+                        {consumoPadre} × {selected.cantidad_por_padre} = {Math.round(parseFloat(consumoPadre) * selected.cantidad_por_padre)} {selected.nombre} (teorico)
                       </p>
                     )}
                   </div>
@@ -277,14 +279,14 @@ export default function ProducirPage() {
                     {selected.receta_id && !padre && (
                       <p className="text-warm-gray">- Descuenta ingredientes de Stock MP (auto)</p>
                     )}
-                    {padre && !needsBastones && (
+                    {padre && !padreDeclarable && (
                       <p className="text-warm-gray">
                         - Descuenta {(parseFloat(cantidad) / (selected.cantidad_por_padre || 1)).toFixed(1)} {padre.nombre} (auto)
                       </p>
                     )}
-                    {needsBastones && bastones && (
+                    {padreDeclarable && consumoPadre && (
                       <p className="text-warm-gray">
-                        - Descuenta {bastones} bastones de {padre.nombre}
+                        - Descuenta {consumoPadre} de {padre.nombre}
                       </p>
                     )}
                     <p className="text-brot font-medium">

@@ -751,12 +751,39 @@ def _consumir_ingredientes_subreceta(
             )
 
 
+def admite_consumo_declarado(padre: Optional[ProductoCongelado]) -> bool:
+    """True if the person logging production may declare how much of `padre`
+    was consumed, instead of letting it be derived.
+
+    THE one definition. Until 2026-10-13 this rule was written out four times
+    -- here inside producir_producto, in produccion.py's _necesita_bastones,
+    and again in each of the two frontend screens -- as
+    `nivel == "semi" and "baston" in nombre.lower()`, so it also depended on
+    the product's NAME.
+
+    Now: any `semi` (bastones) or `masa` parent. Those are the two levels where
+    the real yield genuinely varies from the configured `cantidad_por_padre`,
+    which is why declaring it by hand is worth the extra typing. Deliberately
+    NOT `crudo`/`terminado`: those run ~1:1, so the field would show up on
+    nearly every task and just be noise.
+
+    For masa this matters concretely. One lote of Masa Pan Blanco is nominally
+    20 panes de 1 kg or 36 de medio, so the standard bake (24 + 30) derives
+    24/20 + 30/36 = 2,0333 lotes against the 2 actually mixed -- 724 g short,
+    every cycle, booked as a negative adjustment lot. (The 36 is correct and
+    was verified at the bench: the "medio kilo" bollos are cut at 600 g, which
+    is exactly 21.865/36. See scripts/restaurar_rendimiento_pan_36.py -- an
+    earlier attempt to "fix" this by moving it to 40 was reverted.)
+    """
+    return padre is not None and padre.nivel in ("semi", "masa")
+
+
 def producir_producto(
     db: Session,
     producto_congelado_id: int,
     cantidad_producida: float,
     lotes: float,
-    bastones_consumidos: Optional[float],
+    consumo_padre_declarado: Optional[float],
     referencia: str,
     user_id: Optional[int] = None,
     fecha_produccion: Optional[date] = None,
@@ -771,7 +798,8 @@ def producir_producto(
        cantidad_producida here, since for some recipes (masas) those two numbers
        are the same and for others (terminados) they aren't)
     2. If product has producto_padre_id:
-       - If padre is a baston -> use bastones_consumidos (manual input)
+       - If the padre allows it (see admite_consumo_declarado) and a number was
+         typed -> use consumo_padre_declarado verbatim
        - Otherwise -> auto-calculate from cantidad_producida / cantidad_por_padre
        Deducts from padre's StockCongelado
     3. Adds produced quantity (cantidad_producida, in this product's own unit) to
@@ -826,9 +854,10 @@ def producir_producto(
     if prod.producto_padre_id and prod.cantidad_por_padre:
         padre = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod.producto_padre_id).first()
         if padre:
-            is_baston = padre.nivel == "semi" and "baston" in padre.nombre.lower()
-            if is_baston and bastones_consumidos is not None:
-                consumo_padre = bastones_consumidos
+            # What the person typed wins over the configured yield. Empty means
+            # "derive it", which is what every record before 2026-10-13 did.
+            if admite_consumo_declarado(padre) and consumo_padre_declarado is not None:
+                consumo_padre = consumo_padre_declarado
             else:
                 consumo_padre = cantidad_producida / prod.cantidad_por_padre
 

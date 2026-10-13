@@ -18,14 +18,14 @@ interface TareaDia {
   receta_id: number | null;
   receta_nombre: string | null;
   producto_congelado_id: number | null;
-  necesita_bastones: boolean;
+  consumo_padre_label: string | null;
   tipo: string;
   registro_id: number | null;
   completada: boolean;
   cantidad_real: number | null;
   duracion_real: number | null;
   notas: string | null;
-  bastones_consumidos: number | null;
+  consumo_padre_declarado: number | null;
   porciones_por_lote: number | null;
   ingrediente_principal: IngredientePrincipal | null;
 }
@@ -40,7 +40,7 @@ interface IngredientePrincipal {
 interface Draft {
   cantidad: string;
   duracion: string;
-  bastones: string;
+  consumoPadre: string;
   notas: string;
 }
 
@@ -49,12 +49,12 @@ interface ExtraDia {
   titulo: string;
   receta_id: number | null;
   producto_congelado_id: number | null;
-  necesita_bastones: boolean;
+  consumo_padre_label: string | null;
   unidad_cantidad: string | null;
   completada: boolean;
   cantidad_real: number | null;
   duracion_real: number | null;
-  bastones_consumidos: number | null;
+  consumo_padre_declarado: number | null;
   notas: string | null;
 }
 
@@ -106,13 +106,13 @@ export default function ProduccionHoy() {
   const [saving, setSaving] = useState<number | null>(null);
   const [showExtraForm, setShowExtraForm] = useState(false);
   const [extraProductoId, setExtraProductoId] = useState("");
-  const [extraBastones, setExtraBastones] = useState("");
+  const [extraConsumoPadre, setExtraConsumoPadre] = useState("");
   const [extraCantidad, setExtraCantidad] = useState("");
   const [extraDuracion, setExtraDuracion] = useState("");
   const [extraNotas, setExtraNotas] = useState("");
   const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
   const [recetas, setRecetas] = useState<RecetaDropdown[]>([]);
-  const [productosCongelados, setProductosCongelados] = useState<{id:number;nombre:string;nivel:string;necesita_bastones?:boolean}[]>([]);
+  const [productosCongelados, setProductosCongelados] = useState<{id:number;nombre:string;nivel:string;consumo_padre_label?:string|null}[]>([]);
   const [procesoPorProducto, setProcesoPorProducto] = useState<Map<number, string>>(new Map());
   const [otrasTareas, setOtrasTareas] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
@@ -163,7 +163,13 @@ export default function ProduccionHoy() {
         const padre = p.producto_padre_id ? prodMap.get(p.producto_padre_id) : null;
         return {
           ...p,
-          necesita_bastones: padre && (padre as any).nivel === "semi" && (padre as any).nombre.toLowerCase().includes("baston"),
+          // Mismo criterio que services/stock.admite_consumo_declarado, que es
+          // la fuente de verdad. Guarda el NOMBRE del padre, que es lo que
+          // rotula el input.
+          consumo_padre_label:
+            padre && ["semi", "masa"].includes((padre as any).nivel)
+              ? (padre as any).nombre
+              : null,
         };
       }).sort((a: any, b: any) => a.nombre.localeCompare(b.nombre)));
     } catch {
@@ -215,7 +221,7 @@ export default function ProduccionHoy() {
       drafts[tarea.tarea_id] ?? {
         cantidad: tarea.cantidad_real != null ? String(tarea.cantidad_real) : "",
         duracion: tarea.duracion_real != null ? String(tarea.duracion_real) : "",
-        bastones: tarea.bastones_consumidos != null ? String(tarea.bastones_consumidos) : "",
+        consumoPadre: tarea.consumo_padre_declarado != null ? String(tarea.consumo_padre_declarado) : "",
         notas: tarea.notas ?? "",
       }
     );
@@ -249,7 +255,7 @@ export default function ProduccionHoy() {
           cantidad_real: num(d.cantidad),
           duracion_real: d.duracion ? parseInt(d.duracion) : null,
           notas: d.notas || null,
-          bastones_consumidos: num(d.bastones),
+          consumo_padre_declarado: num(d.consumoPadre),
         }),
       });
       setDrafts((prev) => {
@@ -297,8 +303,8 @@ export default function ProduccionHoy() {
         `${fmtCantidad(consumoPrincipal(tarea, tarea.cantidad_real), ing.unidad)} ${ing.nombre}`
       );
     }
-    if (tarea.bastones_consumidos != null) {
-      partes.push(`${fmt(tarea.bastones_consumidos)} bastones`);
+    if (tarea.consumo_padre_declarado != null) {
+      partes.push(`${fmt(tarea.consumo_padre_declarado)} ${tarea.consumo_padre_label ?? "del padre"}`);
     }
     if (tarea.duracion_real != null) partes.push(`${tarea.duracion_real} min`);
     return partes.length ? partes.join(" · ") : "completada";
@@ -352,7 +358,7 @@ export default function ProduccionHoy() {
       extraDrafts[extra.registro_id] ?? {
         cantidad: extra.cantidad_real != null ? String(extra.cantidad_real) : "",
         duracion: extra.duracion_real != null ? String(extra.duracion_real) : "",
-        bastones: extra.bastones_consumidos != null ? String(extra.bastones_consumidos) : "",
+        consumoPadre: extra.consumo_padre_declarado != null ? String(extra.consumo_padre_declarado) : "",
         notas: extra.notas ?? "",
       }
     );
@@ -387,7 +393,7 @@ export default function ProduccionHoy() {
     if (extra.cantidad_real != null) {
       partes.push(`${fmt(extra.cantidad_real)} ${extra.unidad_cantidad ?? ""}`.trim());
     }
-    if (extra.bastones_consumidos != null) partes.push(`${fmt(extra.bastones_consumidos)} bastones`);
+    if (extra.consumo_padre_declarado != null) partes.push(`${fmt(extra.consumo_padre_declarado)} ${extra.consumo_padre_label ?? "del padre"}`);
     if (extra.duracion_real != null) partes.push(`${extra.duracion_real} min`);
     return partes.length ? partes.join(" · ") : "completada";
   }
@@ -418,7 +424,7 @@ export default function ProduccionHoy() {
           cantidad_real: esProduccion ? cantidad : null,
           duracion_real: duracion,
           notas: d.notas || null,
-          bastones_consumidos: num(d.bastones),
+          consumo_padre_declarado: num(d.consumoPadre),
         }),
       });
       cancelarEdicionExtra(extra);
@@ -459,9 +465,9 @@ export default function ProduccionHoy() {
           duracion_real: extraDuracion ? parseInt(extraDuracion) : null,
           notas: extraNotas || null,
         };
-        const bast = num(extraBastones);
+        const bast = num(extraConsumoPadre);
         if (bast !== null && bast > 0) {
-          body.bastones_consumidos = bast;
+          body.consumo_padre_declarado = bast;
         }
         await apiFetch("/api/produccion/producir", {
           method: "POST",
@@ -470,7 +476,7 @@ export default function ProduccionHoy() {
       }
       setShowExtraForm(false);
       setExtraProductoId("");
-      setExtraBastones("");
+      setExtraConsumoPadre("");
       setExtraCantidad("");
       setExtraDuracion("");
       setExtraNotas("");
@@ -696,18 +702,18 @@ export default function ProduccionHoy() {
                     /* ---------- EDITING ---------- */
                     <>
                       <div className="flex items-center gap-2 mt-2 ml-10 flex-wrap">
-                        {tarea.necesita_bastones && (
+                        {tarea.consumo_padre_label && (
                           <div className="flex items-center gap-1">
                             <input
                               type="text"
                               inputMode="decimal"
-                              placeholder="1"
-                              value={d.bastones}
-                              onChange={(e) => setDraft(tarea, { bastones: e.target.value })}
+                              placeholder="auto"
+                              value={d.consumoPadre}
+                              onChange={(e) => setDraft(tarea, { consumoPadre: e.target.value })}
                               className="w-14 border border-blue-200 bg-blue-50/50 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 outline-none"
                               style={{ minHeight: 36 }}
                             />
-                            <span className="text-xs text-blue-500">bast.</span>
+                            <span className="text-xs text-blue-500">{tarea.consumo_padre_label}</span>
                           </div>
                         )}
                         {tarea.cantidad_planificada !== null && (
@@ -920,18 +926,18 @@ export default function ProduccionHoy() {
                   ) : (
                     /* ---------- EDITING ---------- */
                     <div className="flex items-center gap-2 mt-2 ml-10 flex-wrap">
-                      {extra.necesita_bastones && (
+                      {extra.consumo_padre_label && (
                         <div className="flex items-center gap-1">
                           <input
                             type="text"
                             inputMode="decimal"
-                            placeholder="1"
-                            value={d.bastones}
-                            onChange={(e) => setExtraDraft(extra, { bastones: e.target.value })}
+                            placeholder="auto"
+                            value={d.consumoPadre}
+                            onChange={(e) => setExtraDraft(extra, { consumoPadre: e.target.value })}
                             className="w-14 border border-blue-200 bg-blue-50/50 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 outline-none"
                             style={{ minHeight: 36 }}
                           />
-                          <span className="text-xs text-blue-500">bast.</span>
+                          <span className="text-xs text-blue-500">{extra.consumo_padre_label}</span>
                         </div>
                       )}
                       {esProduccion && (
@@ -1011,7 +1017,7 @@ export default function ProduccionHoy() {
             <div className="space-y-2">
               <select
                 value={extraProductoId}
-                onChange={(e) => { setExtraProductoId(e.target.value); setExtraBastones(""); }}
+                onChange={(e) => { setExtraProductoId(e.target.value); setExtraConsumoPadre(""); }}
                 className="w-full border border-cream-dark rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brot/30 focus:border-brot outline-none"
                 style={{ minHeight: 44 }}
               >
@@ -1041,13 +1047,13 @@ export default function ProduccionHoy() {
                   </optgroup>
                 )}
               </select>
-              {extraProductoId && productosCongelados.find(p => p.id === parseInt(extraProductoId))?.necesita_bastones && (
+              {extraProductoId && productosCongelados.find(p => p.id === parseInt(extraProductoId))?.consumo_padre_label && (
                 <input
                   type="text"
                   inputMode="decimal"
-                  placeholder="Bastones consumidos"
-                  value={extraBastones}
-                  onChange={(e) => setExtraBastones(e.target.value)}
+                  placeholder={`Consumido de ${productosCongelados.find(p => p.id === parseInt(extraProductoId))?.consumo_padre_label}`}
+                  value={extraConsumoPadre}
+                  onChange={(e) => setExtraConsumoPadre(e.target.value)}
                   className="w-full border border-blue-200 bg-blue-50/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400/30 outline-none"
                   style={{ minHeight: 44 }}
                 />

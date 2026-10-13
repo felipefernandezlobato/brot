@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import AliasChoices, BaseModel, EmailStr, Field
 
 
 # --- Auth ---
@@ -489,7 +489,10 @@ class RegistroProduccionCreate(BaseModel):
     cantidad_real: Optional[float] = None
     duracion_real: Optional[int] = None
     notas: Optional[str] = None
-    bastones_consumidos: Optional[float] = None
+    consumo_padre_declarado: Optional[float] = Field(
+        default=None,
+        validation_alias=AliasChoices("consumo_padre_declarado", "bastones_consumidos"),
+    )
 
 
 class RegistroExtraCreate(BaseModel):
@@ -499,14 +502,20 @@ class RegistroExtraCreate(BaseModel):
     cantidad_real: Optional[float] = None
     duracion_real: Optional[int] = None
     notas: Optional[str] = None
-    bastones_consumidos: Optional[float] = None
+    consumo_padre_declarado: Optional[float] = Field(
+        default=None,
+        validation_alias=AliasChoices("consumo_padre_declarado", "bastones_consumidos"),
+    )
 
 
 class RegistroExtraUpdate(BaseModel):
     cantidad_real: Optional[float] = None
     duracion_real: Optional[int] = None
     notas: Optional[str] = None
-    bastones_consumidos: Optional[float] = None
+    consumo_padre_declarado: Optional[float] = Field(
+        default=None,
+        validation_alias=AliasChoices("consumo_padre_declarado", "bastones_consumidos"),
+    )
 
 
 class RegistroProduccionOut(BaseModel):
@@ -522,7 +531,7 @@ class RegistroProduccionOut(BaseModel):
     receta_id: Optional[int] = None
     receta_nombre: Optional[str] = None
     producto_congelado_id: Optional[int] = None
-    bastones_consumidos: Optional[float] = None
+    consumo_padre_declarado: Optional[float] = None
     stock_aplicado: bool = False
     movimientos: int = 0
     registrado_por: int

@@ -18,6 +18,7 @@ from app.models import (
     User,
 )
 from app.services.produccion_registro import aplicar_efectos, revertir_efectos
+from app.services.stock import admite_consumo_declarado
 from app.permissions import require_permission
 from app.schemas import (
     RegistroExtraCreate,
@@ -32,14 +33,33 @@ from app.schemas import (
 router = APIRouter(prefix="/api/produccion", tags=["produccion"])
 
 
-def _necesita_bastones(db: Session, producto_congelado_id: int | None) -> bool:
+def _padre_declarable(db: Session, producto_congelado_id: int | None) -> Optional[ProductoCongelado]:
+    """The parent product whose consumption may be declared by hand, or None.
+
+    Returning the padre itself (not a bool) is what lets the screen label the
+    input with its actual name -- "Masa Pan Blanco", "Baston Croissant" --
+    instead of the old fixed "bast.", which said nothing when you were logging
+    bread. The rule lives in services/stock.admite_consumo_declarado; this just
+    resolves the parent and asks.
+    """
     if not producto_congelado_id:
-        return False
+        return None
     prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == producto_congelado_id).first()
     if not prod or not prod.producto_padre_id:
-        return False
+        return None
     padre = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod.producto_padre_id).first()
-    return padre is not None and padre.nivel == "semi" and "baston" in padre.nombre.lower()
+    return padre if admite_consumo_declarado(padre) else None
+
+
+def _consumo_padre_campos(db: Session, producto_congelado_id: int | None) -> dict:
+    """Fields the day view needs to render (or hide) the declared-consumption
+    input. `consumo_padre_label` is the parent's own name, which the input uses
+    as its label."""
+    padre = _padre_declarable(db, producto_congelado_id)
+    return {
+        "consumo_padre_id": padre.id if padre else None,
+        "consumo_padre_label": padre.nombre if padre else None,
+    }
 
 DIAS = {1: "Lunes", 2: "Martes", 3: "Miercoles", 4: "Jueves", 5: "Viernes", 6: "Sabado"}
 
@@ -77,7 +97,7 @@ def _registro_to_out(r: RegistroProduccion, movimientos: int = 0, stock_aplicado
         "receta_id": r.receta_id,
         "receta_nombre": r.receta.nombre if r.receta else None,
         "producto_congelado_id": r.producto_congelado_id,
-        "bastones_consumidos": r.bastones_consumidos,
+        "consumo_padre_declarado": r.consumo_padre_declarado,
         "stock_aplicado": stock_aplicado,
         "movimientos": movimientos,
         "registrado_por": r.registrado_por,
@@ -210,14 +230,14 @@ def get_dia(
             "receta_id": t.receta_id,
             "receta_nombre": t.receta.nombre if t.receta else None,
             "producto_congelado_id": t.producto_congelado_id,
-            "necesita_bastones": _necesita_bastones(db, t.producto_congelado_id),
+            **_consumo_padre_campos(db, t.producto_congelado_id),
             "tipo": t.tipo,
             "registro_id": reg.id if reg else None,
             "completada": reg.completada if reg else False,
             "cantidad_real": reg.cantidad_real if reg else None,
             "duracion_real": reg.duracion_real if reg else None,
             "notas": reg.notas if reg else None,
-            "bastones_consumidos": reg.bastones_consumidos if reg else None,
+            "consumo_padre_declarado": reg.consumo_padre_declarado if reg else None,
             # Lets the screen show what one unit will consume, so the operator can
             # sanity-check the deduction before committing to it.
             **_preview_consumo(db, t),
@@ -235,11 +255,11 @@ def get_dia(
             "receta_id": r.receta_id,
             "producto_congelado_id": r.producto_congelado_id,
             "unidad_cantidad": r.unidad_extra or (prod_extra.unidad if prod_extra else None),
-            "necesita_bastones": _necesita_bastones(db, r.producto_congelado_id),
+            **_consumo_padre_campos(db, r.producto_congelado_id),
             "completada": r.completada,
             "cantidad_real": r.cantidad_real,
             "duracion_real": r.duracion_real,
-            "bastones_consumidos": r.bastones_consumidos,
+            "consumo_padre_declarado": r.consumo_padre_declarado,
             "notas": r.notas,
         })
 
@@ -298,7 +318,7 @@ def upsert_registro(
         reg.cantidad_real = data.cantidad_real
         reg.duracion_real = data.duracion_real
         reg.notas = data.notas
-        reg.bastones_consumidos = data.bastones_consumidos
+        reg.consumo_padre_declarado = data.consumo_padre_declarado
     else:
         reg = RegistroProduccion(
             tarea_id=data.tarea_id,
@@ -307,7 +327,7 @@ def upsert_registro(
             cantidad_real=data.cantidad_real,
             duracion_real=data.duracion_real,
             notas=data.notas,
-            bastones_consumidos=data.bastones_consumidos,
+            consumo_padre_declarado=data.consumo_padre_declarado,
             registrado_por=user.id,
         )
         db.add(reg)
@@ -353,7 +373,7 @@ def create_extra(
         notas=data.notas,
         receta_id=data.receta_id,
         titulo_extra=titulo_extra,
-        bastones_consumidos=data.bastones_consumidos,
+        consumo_padre_declarado=data.consumo_padre_declarado,
         registrado_por=user.id,
     )
     db.add(reg)
@@ -395,7 +415,7 @@ def update_registro(
     reg.cantidad_real = data.cantidad_real
     reg.duracion_real = data.duracion_real
     reg.notas = data.notas
-    reg.bastones_consumidos = data.bastones_consumidos
+    reg.consumo_padre_declarado = data.consumo_padre_declarado
 
     movimientos = aplicar_efectos(db, reg, user.id)
 
@@ -766,7 +786,7 @@ def delete_tarea(
 class ProduccionRequest(BaseModel):
     producto_id: int
     cantidad_producida: float
-    bastones_consumidos: Optional[float] = None
+    consumo_padre_declarado: Optional[float] = None
     fecha: Optional[str] = None
     duracion_real: Optional[int] = None
     notas: Optional[str] = None
@@ -799,7 +819,7 @@ def producir(
         receta_id=prod.receta_id,
         titulo_extra=prod.nombre,
         producto_congelado_id=prod.id,
-        bastones_consumidos=data.bastones_consumidos,
+        consumo_padre_declarado=data.consumo_padre_declarado,
         registrado_por=user.id,
     )
     db.add(reg)
