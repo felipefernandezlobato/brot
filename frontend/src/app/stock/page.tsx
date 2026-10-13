@@ -117,7 +117,7 @@ const TABS: { key: Tab; label: string }[] = [
 // ── Chart colors ─────────────────────────────────────────────────────────────
 
 const CHART_COLORS = [
-  "#2c412c", "#2563eb", "#dc2626", "#d97706", "#7c3aed",
+  "#25422a", "#2563eb", "#dc2626", "#d97706", "#7c3aed",
   "#059669", "#db2777", "#0891b2", "#65a30d", "#ea580c",
   "#4f46e5", "#0d9488", "#b91c1c", "#ca8a04", "#9333ea",
 ];
@@ -1051,13 +1051,13 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="#dfd2bf" />
                   <XAxis
                     dataKey="fecha"
-                    tick={{ fontSize: 11, fill: "#66564d" }}
+                    tick={{ fontSize: 11, fill: "#614e46" }}
                     tickFormatter={(v: string) => {
                       const d = new Date(v + "T00:00:00");
                       return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
                     }}
                   />
-                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#66564d" }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#614e46" }} />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#dc2626" }} />
                   <Tooltip
                     labelFormatter={(v) => formatDate(String(v))}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { formatARS, formatDate } from "@/lib/format";
+import { PERSONAJE } from "@/lib/ilustraciones";
 
 interface Resumen {
   comprado_total_ars: number;
@@ -358,6 +359,13 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
 
       {data.movimientos_recientes.length === 0 && (
         <div className="bg-card border border-cream-dark rounded-xl p-6 text-center text-warm-gray text-sm">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={PERSONAJE.amasando}
+            alt=""
+            aria-hidden="true"
+            className="w-24 h-24 mx-auto mb-3 opacity-70"
+          />
           No hay movimientos de stock registrados todavia.
           Los movimientos se crean automaticamente al producir, recibir pedidos, entregar o registrar mermas.
         </div>

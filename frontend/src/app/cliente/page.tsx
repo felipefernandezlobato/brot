@@ -6,6 +6,7 @@ import { CustomerNav } from "@/components/CustomerNav";
 import { apiClienteFetch } from "@/lib/api-cliente";
 import { useToast } from "@/components/Toast";
 import { Cliente } from "@/lib/types";
+import { ilustracionProducto, PERSONAJE } from "@/lib/ilustraciones";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -317,6 +318,13 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
           </p>
         ) : productos.length === 0 ? (
           <div className="text-center py-12 text-warm-gray">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={PERSONAJE.bandeja}
+              alt=""
+              aria-hidden="true"
+              className="w-28 h-28 mx-auto mb-4 opacity-70"
+            />
             <p className="text-lg">No hay productos disponibles</p>
           </div>
         ) : (
@@ -338,13 +346,27 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
                             : "border-cream-dark"
                         }`}
                       >
-                        <div className="flex-1">
-                          <h3 className="font-medium text-text">{p.nombre}</h3>
-                          {p.descripcion && (
-                            <p className="text-xs text-warm-gray mt-1 line-clamp-2">
-                              {p.descripcion}
-                            </p>
-                          )}
+                        <div className="flex-1 flex items-start gap-3">
+                          {/* Ilustracion de marca (seccion 5.3). Decorativa:
+                              el nombre del producto esta al lado, asi que va
+                              con alt vacio para que el lector de pantalla no
+                              lo lea dos veces. */}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={ilustracionProducto(p.nombre, p.categoria, p.imagen_url)}
+                            alt=""
+                            aria-hidden="true"
+                            className="w-12 h-12 shrink-0 object-contain"
+                            draggable={false}
+                          />
+                          <div className="min-w-0">
+                            <h3 className="font-medium text-text">{p.nombre}</h3>
+                            {p.descripcion && (
+                              <p className="text-xs text-warm-gray mt-1 line-clamp-2">
+                                {p.descripcion}
+                              </p>
+                            )}
+                          </div>
                         </div>
 
                         <div className="flex items-center justify-between gap-3">

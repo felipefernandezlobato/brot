@@ -59,8 +59,14 @@ any brand value.
   `frontend/public/logos/README.md` for which version goes where (manual §3.1)
   and the 150px minimum width (§3.4). `design/image (1).png` is the OLD logo,
   superseded — don't use it.
-- **Palette (manual §2):** Verde Brot `#2c412c`, Chocolate `#382b27`, Blanco
-  harina `#ece3d4`, Negro `#000000`, Pistacho `#9ea582`, Trigo Tostado `#7a665c`
+- **Palette (manual §2):** Verde Brot `#25422a`, Chocolate `#3a2a26`, Blanco
+  harina `#eee3d2`, Negro `#000000`, Pistacho `#9ca57e`, Trigo Tostado `#7e655b`
+  — these are the *rendered* values, not the written hex. Read trap 1 below
+  before changing any of them.
+- **Illustrations (manual §5):** character + product line drawings in
+  `frontend/public/ilustraciones/`, wired through `src/lib/ilustraciones.ts`
+  (`ilustracionProducto()` picks one per catalog product; `PERSONAJE.*` for
+  empty states). Black line art — light backgrounds only.
 - **Fonts (manual §4):** Gelica (títulos, uppercase) + New Reason (subtítulos
   Medium, cuerpo Regular). Self-hosted woff2 in `frontend/public/fonts/`, NOT
   Google Fonts.
@@ -68,14 +74,19 @@ any brand value.
 
 ### Two traps in the brand files
 
-**1. Don't sample colour from the manual PDF.** The 76 MB
-`Manual de Identidad BROT (1).pdf` renders its own colour swatches slightly off
-from the hex printed beside them — Verde Brot measures `#25422a` there instead of
-`#2c412c`. The authoritative sources are `design/identidad/Paleta de color
-BROT.pdf` and the fill inside the official logo SVGs, which agree with each other
-on `#2c412c`. If the app and the PDF look different side by side, this is why.
-(Felipe reported exactly this on 2026-10-12; the app was briefly changed to the
-measured value and then reverted.)
+**1. The palette is NOT the hex the manual writes.** The manual writes Verde Brot
+`#2c412c`, but its own PDF *renders* that swatch as `#25422a` — seven points less
+red. That deck is ICC-managed (48 `/ICCBased` spaces, no `/DeviceRGB`), so every
+colour goes through a profile conversion on screen and doesn't land on the sRGB
+hex printed beside it. The same shift affects all six brand colours.
+
+Felipe compared the app against page 8 twice and chose **how the manual looks**
+over the written hex (2026-10-12, reaffirmed 2026-10-13), so the tokens in
+`globals.css` are the measured values. The official logo SVGs ship in `#2c412c`
+and were **recoloured to match** — otherwise the logo clashes with its own
+background. If anyone re-downloads the logos from the Drive they must be
+recoloured again, or the whole palette reverted to the written hex. Both
+together, never one alone.
 
 **2. The Gelica `.otf` files are mislabeled.** `Gelica-Medium.otf`,
 `Gelica-Semi-Bold.otf` and `Gelica-Extra-Light.otf` are **italics** — ITALIC bit

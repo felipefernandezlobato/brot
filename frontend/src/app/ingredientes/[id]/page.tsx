@@ -433,13 +433,13 @@ export default function IngredienteDetailPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#dfd2bf" />
                   <XAxis
                     dataKey="fecha"
-                    tick={{ fontSize: 11, fill: "#66564d" }}
+                    tick={{ fontSize: 11, fill: "#614e46" }}
                     tickFormatter={(v: string) => {
                       const d = new Date(v + "T00:00:00");
                       return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
                     }}
                   />
-                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#66564d" }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#614e46" }} />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#dc2626" }} />
                   <Tooltip
                     labelFormatter={(v) => formatDate(String(v))}
@@ -452,9 +452,9 @@ export default function IngredienteDetailPage() {
                     type="monotone"
                     dataKey="stock"
                     name="Stock"
-                    stroke="#2c412c"
+                    stroke="#25422a"
                     strokeWidth={2}
-                    dot={{ r: 3, fill: "#2c412c" }}
+                    dot={{ r: 3, fill: "#25422a" }}
                     connectNulls
                   />
                 </ComposedChart>

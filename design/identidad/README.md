@@ -42,3 +42,30 @@ numera distinto que el SVG. El mapeo esta en:
 
 - `frontend/public/logos/README.md` — para los SVG
 - `scripts/generar_iconos.py` — para los PNG (identificados por proporcion)
+
+## Ilustraciones (seccion 5)
+
+`ilustraciones-svg/` y `ilustraciones-png/` son los 21 recursos de
+`Recursos de marca/`. Los que usa la app estan copiados y renombrados en
+`frontend/public/ilustraciones/` (ver `src/lib/ilustraciones.ts`):
+
+| Recurso | nombre en la app      | que es                          |
+|---------|-----------------------|---------------------------------|
+| 1       | personaje-cafe        | cafe y croissant, caminando     |
+| 2       | personaje-reparto     | corriendo con bolsa y baguette  |
+| 3       | personaje-caja        | cargando caja BROT              |
+| 4       | personaje-bandeja     | cargando una pila de panes      |
+| 5       | personaje-amasando    | amasando                        |
+| 6       | personaje-pan         | caminando con un pan grande     |
+| 7       | personaje-saludando   | saluda con una bandeja          |
+| 8       | bolsa                 | la bolsa BROT, sin personaje    |
+| 9       | personaje-obrador     | escena del obrador con estante  |
+| 16-21   | producto-*            | pan, croissant, baguette, roll, espiga, palote |
+
+Los 10-15 son los mismos seis productos pero con relleno crema detras del
+trazo. No se usan: sobre las tarjetas (Blanco harina) el relleno coincide con
+el fondo y no aporta nada. Sirven si alguna vez hace falta ponerlos sobre
+Verde Brot o Chocolate.
+
+**Son dibujos de linea negra.** No tienen version en color de marca, asi que
+solo funcionan sobre fondos claros de la paleta.

@@ -25,3 +25,13 @@ El color va en el archivo, no en CSS: un SVG cargado via `<img>` no hereda
 
 Los iconos PWA (`../icons/`) y el favicon se generan desde los PNG oficiales
 con `scripts/generar_iconos.py`.
+
+## Estos SVG estan recoloreados
+
+Los archivos del estudio vienen en `#2c412c` / `#ece3d4` (el hex escrito en el
+manual). Aca estan en `#25422a` / `#eee3d2`, que es como el PDF del manual
+RENDERIZA esos mismos colores — ver el comentario largo en `globals.css`.
+
+Si se vuelven a bajar del Drive hay que recolorearlos otra vez, o volver toda
+la paleta al hex escrito. Las dos cosas juntas: si el logo y el fondo no usan
+el mismo verde, se nota.

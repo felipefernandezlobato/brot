@@ -26,7 +26,8 @@ Uso:  python scripts/generar_iconos.py
 from pathlib import Path
 from PIL import Image
 
-VERDE = (0x2c, 0x41, 0x2c)
+# verde como lo renderiza el manual, no el hex escrito — ver globals.css
+VERDE = (0x25, 0x42, 0x2a)
 ORIGEN = Path("design/identidad/logos-png/Recurso 35@4x.png")    # principal crema
 REDUCIDO = Path("design/identidad/logos-png/Recurso 37@4x.png")  # reducido crema
 ICONOS = Path("frontend/public/icons")

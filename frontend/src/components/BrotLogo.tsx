@@ -17,8 +17,8 @@
  * cargado via <img> no hereda currentColor. Hay que elegir la variante segun
  * el fondo:
  *
- *   color="verde"  #2c412c, para fondos claros (Blanco harina, tarjetas)
- *   color="crema"  #ece3d4, para fondos Verde Brot o Chocolate
+ *   color="verde"  #25422a, para fondos claros (Blanco harina, tarjetas)
+ *   color="crema"  #eee3d2, para fondos Verde Brot o Chocolate
  *   color="negro"  para B&W, impresion especial o restricciones tecnicas
  *                  (seccion 3.6 del manual)
  *

@@ -202,13 +202,13 @@ export default function MermasAnalisisPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#dfd2bf" vertical={false} />
                   <XAxis
                     dataKey="periodo"
-                    tick={{ fontSize: 11, fill: "#66564d" }}
+                    tick={{ fontSize: 11, fill: "#614e46" }}
                     tickFormatter={(v: string) => {
                       const d = new Date(v + "T00:00:00");
                       return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
                     }}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: "#66564d" }} width={70} tickFormatter={(v) => formatARS(v)} />
+                  <YAxis tick={{ fontSize: 11, fill: "#614e46" }} width={70} tickFormatter={(v) => formatARS(v)} />
                   <Tooltip
                     labelFormatter={(v) => {
                       const d = new Date(String(v) + "T00:00:00");
@@ -225,7 +225,7 @@ export default function MermasAnalisisPage() {
                       fontSize: "13px",
                     }}
                   />
-                  <Bar dataKey="coste_total" fill="#2c412c" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="coste_total" fill="#25422a" radius={[4, 4, 0, 0]} maxBarSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             )}

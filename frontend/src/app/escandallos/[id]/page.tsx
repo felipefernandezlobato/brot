@@ -456,15 +456,15 @@ export default function RecetaCompletoPage() {
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#dfd2bf" />
-              <XAxis dataKey="fecha" tick={{ fontSize: 11, fill: "#66564d" }}
+              <XAxis dataKey="fecha" tick={{ fontSize: 11, fill: "#614e46" }}
                 tickFormatter={(v: string) => new Date(v + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })} />
-              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#66564d" }} />
+              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#614e46" }} />
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#dc2626" }} />
               <Tooltip labelFormatter={(v) => formatDate(String(v))}
                 contentStyle={{ borderRadius: "8px", border: "1px solid #dfd2bf", fontSize: "13px" }} />
               <Legend wrapperStyle={{ fontSize: "12px" }} />
               <Bar yAxisId="right" dataKey="consumo" name="Consumo/sem" fill="#dc2626" opacity={0.3} barSize={16} />
-              <Line yAxisId="left" type="monotone" dataKey="stock" name="Stock" stroke="#2c412c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              <Line yAxisId="left" type="monotone" dataKey="stock" name="Stock" stroke="#25422a" strokeWidth={2} dot={{ r: 3 }} connectNulls />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
