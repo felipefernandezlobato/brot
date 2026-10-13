@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { formatARS, formatDate } from "@/lib/format";
 import { PERSONAJE } from "@/lib/ilustraciones";
+import { EstadisticasMensuales } from "@/components/EstadisticasMensuales";
 
 interface Resumen {
   comprado_total_ars: number;
@@ -145,6 +146,11 @@ export default function DashboardPage() {
       <h1 className="titulo text-3xl text-brot mb-6">
         Panel de Control
       </h1>
+
+      {/* Resumen mensual. Tiene su propio eje de tiempo (meses calendario) y no
+          usa el selector de fechas de abajo, que es de rango libre. Se esconde
+          solo si el usuario no es admin. */}
+      <EstadisticasMensuales />
 
       {/* Period selector */}
       <div className="bg-card rounded-xl border border-cream-dark p-4 mb-4">

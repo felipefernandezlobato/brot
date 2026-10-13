@@ -612,6 +612,8 @@ class LineaPedidoCliente(Base):
     cantidad: Mapped[float] = mapped_column(sa.Float)
     precio_unitario_snapshot: Mapped[float] = mapped_column(sa.Float)
     subtotal: Mapped[float] = mapped_column(sa.Float)
+    # Mismo criterio que en LineaEntregaB2B: el costo se congela al entregar.
+    costo_unitario_snapshot: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
 
     pedido: Mapped["PedidoCliente"] = relationship(back_populates="lineas")
     producto: Mapped["ProductoCatalogo"] = relationship()
@@ -662,6 +664,12 @@ class LineaEntregaB2B(Base):
     producto_id: Mapped[int] = mapped_column(ForeignKey("productos_catalogo.id"))
     cantidad: Mapped[float] = mapped_column(sa.Float)
     precio_unitario: Mapped[float] = mapped_column(sa.Float, default=0)
+    # Costo por unidad congelado al momento de entregar, para que el margen de
+    # un mes cerrado no se mueva despues. Nullable a proposito: si la receta no
+    # permite calcular un costo real (p.ej. Baston Cinnamon Roll no tiene
+    # lineas), se guarda NULL y se cuenta como hueco, en vez de congelar un 0
+    # que se leeria como "margen del 100%". Ver _snapshot_costos().
+    costo_unitario_snapshot: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
 
     entrega: Mapped["EntregaB2B"] = relationship(back_populates="lineas")
     producto: Mapped["ProductoCatalogo"] = relationship()

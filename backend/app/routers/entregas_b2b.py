@@ -16,8 +16,10 @@ from app.models import (
     PedidoCliente,
     ProductoCatalogo,
     ProductoCongelado,
+    Receta,
     User,
 )
+from app.services.costes import costo_receta
 from app.services.stock import deducir_congelado_por_catalogo, revertir_consumos
 from app.permissions import require_permission
 from app.schemas import (
@@ -228,6 +230,7 @@ def _aplicar_pedido_portal(db: Session, pedido: PedidoCliente, user_id: int) -> 
     their reversals apart.
     """
     ref = _ref_pedido_portal(db, pedido)
+    _snapshot_costos(db, pedido.lineas, pedido.fecha_entrega)
     for l in pedido.lineas:
         mov = deducir_congelado_por_catalogo(
             db, l.producto_id, l.cantidad, ref, "entrega_b2b", user_id,
@@ -494,8 +497,37 @@ def _revertir_entrega(db: Session, entrega: EntregaB2B, user_id: int) -> int:
     return total
 
 
+def _snapshot_costos(db: Session, lineas, fecha: date) -> None:
+    """Freeze the cost of goods on each sale line, once.
+
+    Mirrors what `precio_unitario_snapshot` already does for revenue on the
+    portal side: without this, a closed month's margin drifts every time an
+    ingredient price changes. Called from both channels' _aplicar_*.
+
+    Only writes a line that has no snapshot yet, so toggling an entrega out of
+    and back into "entregado" cannot re-stamp a past month at today's cost.
+
+    Stores NULL, never 0, when no real cost can be computed -- a recipe with no
+    lines (Baston Cinnamon Roll) would otherwise freeze a 0 that reads as a
+    100% margin forever. The monthly endpoint counts those as gaps.
+    """
+    for l in lineas:
+        if l.costo_unitario_snapshot is not None:
+            continue
+        cat = db.get(ProductoCatalogo, l.producto_id)
+        if not cat or not cat.receta_id:
+            continue
+        receta = db.get(Receta, cat.receta_id)
+        if not receta:
+            continue
+        _, por_porcion = costo_receta(receta, db, fecha=fecha)
+        if por_porcion and por_porcion > 0:
+            l.costo_unitario_snapshot = por_porcion
+
+
 def _aplicar_entrega(db: Session, entrega: EntregaB2B, user_id: int) -> None:
     ref = _ref_entrega(db, entrega)
+    _snapshot_costos(db, entrega.lineas, entrega.fecha_entrega)
     for l in entrega.lineas:
         mov = deducir_congelado_por_catalogo(
             db, l.producto_id, l.cantidad, ref, "entrega_b2b", user_id,

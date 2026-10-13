@@ -5,29 +5,43 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_admin
 from app.database import get_db
 from app.models import (
     EntregaB2B,
     Ingrediente,
     InventarioRegistro,
     LineaEntregaB2B,
-    LineaPedido,
     LineaReceta,
     MermaRegistro,
     MovimientoStock,
-    Pedido,
     ProductoCatalogo,
     ProductoCongelado,
     Receta,
     RegistroProduccion,
     User,
 )
-from app.services.conversiones import convertir
+from app.services.mensual import monto_compras_recibidas, resumen_mensual
 from app.services.produccion_registro import movimiento_no_revertido
 from app.services.stock import es_conteo_manual, get_saldos_congelado
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
+
+@router.get("/mensual")
+def estadisticas_mensuales(
+    meses: int = Query(6, ge=1, le=24),
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Ventas, compras, margen y mermas por mes calendario.
+
+    Solo admin: a diferencia de /flujo y /reconciliacion, que son operativos,
+    esto expone facturacion, margen y la concentracion de clientes.
+
+    La aritmetica vive en services/mensual.py para poder testearla directo.
+    """
+    return resumen_mensual(db, meses=meses)
 
 
 @router.get("/flujo")
@@ -43,17 +57,10 @@ def flujo_completo(
     if not fecha_hasta:
         fecha_hasta = date.today()
 
-    # Compras recibidas en el periodo
-    pedidos_recibidos = (
-        db.query(func.sum(LineaPedido.cantidad_recibida * LineaPedido.precio_unitario))
-        .join(Pedido, Pedido.id == LineaPedido.pedido_id)
-        .filter(
-            Pedido.estado == "recibido",
-            Pedido.fecha_recepcion >= fecha_desde,
-            Pedido.fecha_recepcion <= fecha_hasta,
-        )
-        .scalar()
-    ) or 0
+    # Compras recibidas en el periodo. Delega en el helper compartido para que
+    # "lo que gastamos" tenga UNA definicion: la pantalla mensual calcula lo
+    # mismo y dos copias terminan dando distinto.
+    pedidos_recibidos = monto_compras_recibidas(db, fecha_desde, fecha_hasta)
 
     # Stock materia prima actual
     subq = (

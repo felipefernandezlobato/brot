@@ -1,24 +1,77 @@
+from datetime import date
+
 from sqlalchemy.orm import Session
 
-from app.models import Ingrediente, LineaReceta, ProductoCongelado, Receta
+from app.models import HistorialPrecio, Ingrediente, LineaReceta, ProductoCongelado, Receta
 from app.services.conversiones import convertir
 
 
-def costo_por_unidad_uso(ing: Ingrediente) -> float:
+def precio_compra_en(db: Session, ing: Ingrediente, fecha: date | None = None) -> float:
+    """What this ingredient cost per `cantidad_compra` on `fecha`.
+
+    With fecha=None returns the live `precio_compra` — every pre-existing caller
+    behaves exactly as before.
+
+    Reconstructed from HistorialPrecio, which records one row per actual change
+    (precio_anterior -> precio_nuevo, fecha_cambio). Verified against reality:
+    for every ingredient with a real reception, the reconstructed price matches
+    what was actually paid on `LineaPedido.precio_unitario` (see
+    test_precio_reconstruido_coincide_con_lo_pagado). That matters because the
+    alternative -- costing August with today's prices -- is badly wrong here:
+    Harina Integral went 1.250 -> 2.400 (+92%) and Miel 13.814 -> 7.500 (-46%).
+
+    KNOWN LIMITS. Only `precio_compra` is historised:
+      - `cantidad_compra`/`unidad_compra` are not, so a repackaging is invisible.
+        Papa Deshidratada was converted g -> kg on 2026-09-11, so its cost
+        before that date is reconstructed against today's kg basis.
+      - recipe composition is not historised either (LineaReceta has no
+        history), so a reworked recipe is costed with today's lines. Focaccia
+        was reworked 2026-08-17/18.
+    Both are narrow, and the caller surfaces them rather than hiding them.
+    """
+    if fecha is None:
+        return ing.precio_compra
+
+    cambios = (
+        db.query(HistorialPrecio)
+        .filter(HistorialPrecio.ingrediente_id == ing.id)
+        .order_by(HistorialPrecio.fecha_cambio, HistorialPrecio.id)
+        .all()
+    )
+    if not cambios:
+        return ing.precio_compra
+
+    # the price set by the last change on or before `fecha` is the one in force
+    previos = [c for c in cambios if c.fecha_cambio <= fecha]
+    if previos:
+        return previos[-1].precio_nuevo
+    # `fecha` predates every recorded change: the price before the first one
+    return cambios[0].precio_anterior
+
+
+def costo_por_unidad_uso(
+    ing: Ingrediente, db: Session | None = None, fecha: date | None = None
+) -> float:
+    precio = precio_compra_en(db, ing, fecha) if (db is not None and fecha is not None) else ing.precio_compra
     cantidad_en_uso = convertir(ing.cantidad_compra, ing.unidad_compra, ing.unidad_uso)
-    cpu = ing.precio_compra / cantidad_en_uso
+    cpu = precio / cantidad_en_uso
     if ing.merma_porcentaje > 0:
         cpu = cpu / (1 - ing.merma_porcentaje / 100)
     return cpu
 
 
-def costo_linea(linea: LineaReceta, db: Session, visited: set[int] | None = None) -> float:
+def costo_linea(
+    linea: LineaReceta,
+    db: Session,
+    visited: set[int] | None = None,
+    fecha: date | None = None,
+) -> float:
     if visited is None:
         visited = set()
 
     if linea.ingrediente_id:
         ing = linea.ingrediente_rel or db.get(Ingrediente, linea.ingrediente_id)
-        cpu = costo_por_unidad_uso(ing)
+        cpu = costo_por_unidad_uso(ing, db, fecha)
         cantidad_convertida = convertir(linea.cantidad, linea.unidad, ing.unidad_uso)
         return cpu * cantidad_convertida
 
@@ -26,7 +79,7 @@ def costo_linea(linea: LineaReceta, db: Session, visited: set[int] | None = None
         if linea.subreceta_id in visited:
             return 0
         sub = linea.subreceta_rel or db.get(Receta, linea.subreceta_id)
-        total_sub, _ = costo_receta(sub, db, visited)
+        total_sub, _ = costo_receta(sub, db, visited, fecha)
         costo_por_porcion_sub = total_sub / sub.porciones_por_lote
         if sub.unidad_rendimiento and linea.unidad != sub.unidad_rendimiento:
             cantidad = convertir(linea.cantidad, linea.unidad, sub.unidad_rendimiento)
@@ -37,13 +90,20 @@ def costo_linea(linea: LineaReceta, db: Session, visited: set[int] | None = None
     return 0
 
 
-def costo_receta(receta: Receta, db: Session, visited: set[int] | None = None) -> tuple[float, float]:
+def costo_receta(
+    receta: Receta,
+    db: Session,
+    visited: set[int] | None = None,
+    fecha: date | None = None,
+) -> tuple[float, float]:
+    """(total del lote, costo por porcion). With `fecha`, uses the ingredient
+    prices in force on that date instead of today's — see precio_compra_en."""
     if visited is None:
         visited = set()
     visited.add(receta.id)
 
     lineas = receta.lineas or db.query(LineaReceta).filter(LineaReceta.receta_id == receta.id).all()
-    total = sum(costo_linea(l, db, visited) for l in lineas)
+    total = sum(costo_linea(l, db, visited, fecha) for l in lineas)
     por_porcion = total / receta.porciones_por_lote if receta.porciones_por_lote else total
     return total, por_porcion
 
