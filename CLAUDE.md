@@ -514,6 +514,48 @@ goes UP on production (+produccion_salida), DOWN on consumption (-produccion_con
 ### Historical stock reconciliation (`carga_inicial`)
 `load_historical.py` and the manual "Registrar" screens insert `StockCongelado`/`InventarioRegistro` rows directly, with no matching `MovimientoStock` row (by design — see the calculated-column section above, this is what lets the discrepancy check mean something). Once real transactions get logged against that un-ledgered baseline, summing `MovimientoStock` reads deeply negative even though the real count is fine. `scripts/reconciliar_ledger_congelado.py` / `reconciliar_ledger_materia_prima.py` each insert one `tipo_movimiento="carga_inicial"` movement per affected item (`real - ledger`, dated to the item's earliest count on record) to fix this. Both dry-run by default. Already run once each in production; re-run if more historically-loaded items surface a gap.
 
+### NUNCA reaplicar producción histórica si ya existe un conteo posterior (2026-10-13)
+
+`revertir_efectos` + `aplicar_efectos` es el camino sancionado para corregir un
+registro de producción, y funciona bien para uno reciente. **Pero reaplicar un
+registro fechado ANTES de un conteo físico posterior infla el saldo físico y no
+hay forma de deshacerlo por esa vía.** Hacerlo en lote es destructivo.
+
+Por qué: `reconciliar_lotes_tras_conteo` barre los lotes previos al conteo
+filtrando por `id <`. El reapply crea un lote NUEVO (id alto) fechado en el
+pasado, que el conteo ya no puede barrer porque ya ocurrió. El saldo queda
+sumando el conteo MÁS la producción que ese conteo ya reflejaba.
+
+Pasó de verdad el 13/10/2026, intentando redondear el consumo de masa de los 58
+horneados históricos para que el historial no mostrara `0,xx`: `Pan 1kg Integral`
+23 → 187, `Barra Blanca` 24 → 118, seis productos inflados. Es la misma falla que
+este archivo ya tenía anotada como abierta ("logging production dated BEFORE an
+existing count inflates the saldo... Found 2026-10-01 on Barra Blanca Cocinado")
+y se entró igual.
+
+**Los dos intentos de arreglarlo lo empeoraron**, y las razones no son obvias:
+- *Desactivar a mano los lotes nuevos no alcanza.* El reapply además consume por
+  FIFO de lotes PREEXISTENTES, bajándoles `cantidad` en el lugar, y eso es
+  invisible para un barrido por `is_active`. Dejó las masas en 3,04 y 0,53 en vez
+  de 0.
+- *Revertir sin reaplicar es peor.* Saca la salida de producción que el conteo ya
+  había absorbido, así que resta dos veces. Dejó los terminados en −97 y −185.
+
+Lo único que recupera es reaplicar con los valores originales
+(`consumo_padre_declarado = None`), que restaura el **ledger** exacto al decimal.
+El **saldo físico** no se recupera así: se re-ancla con un conteo nuevo desde la
+pantalla Registrar, que es el mecanismo hecho para eso.
+
+Reglas que salen de esto:
+1. **Antes de mutar `StockCongelado` en lote, snapshot de la TABLA**, no sólo de
+   los saldos. No tenerlo fue el error de fondo, más que el redondeo en sí.
+2. Para "limpiar" números históricos, no reaplicar. Declarar el consumo en las
+   producciones NUEVAS, donde `consumo_padre_declarado` funciona bien.
+3. Ledger y saldo físico son dos cosas distintas: el primero es recuperable, el
+   segundo se re-ancla contando. No confundirlas.
+4. El clasificador de permisos bloquea estas escrituras directas a producción.
+   Eso es una protección, no un obstáculo a sortear.
+
 ### Correcting a past manual stock count (added 2026-08-21)
 `PUT /api/inventario/{id}` (new) and `PUT /api/congelados/{id}` (existed, was ledger-blind before) let a person fix a mistyped quantity, a kg/g mix-up, or a wrong date on an existing manual count row.
 
