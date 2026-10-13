@@ -337,6 +337,18 @@ Daily/weekly/monthly operational task tracking.
     background read as boxes stuck on top (Felipe, 2026-10-12). `bg-white/10..20`
     overlays on Verde Brot are intentional and stay.
   - `pistacho` is 2.02:1 on the background — fill/background only, never text
+- **A class sweep is not enough when changing the palette.** Tokens only reach
+  Tailwind classes. Three things sit outside them and were each missed once:
+  Recharts props (raw colour strings), `bg-[#hex]` arbitrary values, and
+  **inline `style={{ backgroundColor: ... }}`** — the pivot's sticky "Ud."
+  column had a literal `"white"` there and showed as white boxes on the beige
+  for a day. Grep for `backgroundColor:`/`rgb(` too, not just the hex.
+- **Numbers in columns use `tabular-nums`, not `font-mono`.** `font-mono`
+  resolves to the system monospace, which is neither brand face — it was on 14
+  cells, 86 rendered elements on Escandallos alone. New Reason ships the `tnum`
+  feature in all five weights, so `tabular-nums` keeps digits fixed-width in the
+  brand font. The only legitimate `font-mono` left is in two admin screens
+  showing literal DB table and CSV column names.
 - **Headings:** the `.titulo` utility (Gelica + uppercase + tracking), defined once
   in `globals.css`. Don't re-spell the font on each page.
 - **Inline editing:** Click value → replace with input → save on Enter/blur. **Exception: any edit that writes to a shared/production data store (e.g. correcting a stock count) must NOT save on blur** — a stray click or a mouse-wheel scroll over a focused `<input type="number">` (which Chrome/Firefox treat as increment/decrement) can silently trigger a real write otherwise. Use the safer pattern instead: a pencil icon visible only on hover to enter edit mode (plain click on the value does nothing), explicit ✓/✕ buttons to confirm/cancel (Enter still works, blur/Escape/✕ all cancel without saving — implemented by checking `e.relatedTarget` against the edit group's container in `onBlur`, not a naive always-cancel), and `onWheel`/`ArrowUp`/`ArrowDown` blocked on the input. See `frontend/src/app/stock/page.tsx` and `congelados/page.tsx`'s `TabHistorial` for the reference implementation (added 2026-08-21 after two accidental production edits with the naive version).
