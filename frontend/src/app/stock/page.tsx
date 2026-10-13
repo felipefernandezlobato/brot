@@ -1112,12 +1112,12 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                   {allIngsWithData.map((ing, idx) => (
                     <tr
                       key={ing.id}
-                      className={`${idx < allIngsWithData.length - 1 ? "border-b border-cream-dark" : ""} ${idx % 2 === 0 ? "" : "bg-cream/30"}`}
+                      className={`${idx < allIngsWithData.length - 1 ? "border-b border-cream-dark" : ""} ${idx % 2 === 0 ? "" : "bg-card-zebra"}`}
                     >
-                      <td className="px-3 py-1.5 font-medium text-text sticky left-0 bg-card z-10 whitespace-nowrap" style={idx % 2 !== 0 ? { backgroundColor: "rgb(245 240 232 / 0.3)" } : undefined}>
+                      <td className={`px-3 py-1.5 font-medium text-text sticky left-0 z-10 whitespace-nowrap ${idx % 2 === 0 ? "bg-card" : "bg-card-zebra"}`}>
                         <Link href={`/ingredientes/${ing.id}`} className="hover:text-brot hover:underline">{ing.nombre}</Link>
                       </td>
-                      <td className="px-2 py-1.5 text-warm-gray sticky z-10" style={idx % 2 !== 0 ? { backgroundColor: "rgb(245 240 232 / 0.3)" } : { backgroundColor: "white" }}>
+                      <td className={`px-2 py-1.5 text-warm-gray sticky z-10 ${idx % 2 === 0 ? "bg-card" : "bg-card-zebra"}`}>
                         {ing.unidad_uso}
                       </td>
                       {allDates.map((d) => {

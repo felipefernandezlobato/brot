@@ -135,6 +135,16 @@
   --color-cream: #e4d7c3;
   --color-cream-dark: #cfbda2;
 
+  /* Franja cebra de las tablas. Es OPACA a proposito, no un cream/30 encima
+     de la tarjeta: en los pivotes de Stock y Congelados las dos primeras
+     columnas van sticky, y una celda sticky no hereda el fondo de su fila
+     cuando el resto se desplaza por debajo — necesita fondo propio. Si la
+     fila usa una translucida y la celda otra cosa, la columna fija queda
+     de distinto color que su fila (hasta el 13/10/2026 la columna "Ud."
+     tenia backgroundColor:"white" hardcodeado en un style inline y se veia
+     como una caja blanca sobre el beige). */
+  --color-card-zebra: #e9ddcc;
+
   /* Acentos. Ojo: Pistacho da 2.02:1 sobre Blanco harina, asi que sirve
      como relleno o fondo pero NUNCA como color de texto. Trigo tostado
      puro (4.24:1) tampoco llega a AA para texto chico — para eso esta

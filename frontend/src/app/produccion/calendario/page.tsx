@@ -235,7 +235,7 @@ export default function CalendarioProduccion() {
           <tbody>
             {TIME_SLOTS.map((slot) => (
               <tr key={slot} className="border-b border-gray-100">
-                <td className="p-2 text-xs text-gray-400 font-mono align-top whitespace-nowrap">
+                <td className="p-2 text-xs text-gray-400 tabular-nums align-top whitespace-nowrap">
                   {slot.replace(":00", "h")}
                 </td>
                 {DAY_KEYS.map((dk) => {
@@ -415,7 +415,7 @@ export default function CalendarioProduccion() {
                             />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-400 font-mono">
+                                <span className="text-xs text-gray-400 tabular-nums">
                                   {tarea.hora?.replace(":00", "h")}
                                 </span>
                                 {tarea.duracion_minutos != null &&

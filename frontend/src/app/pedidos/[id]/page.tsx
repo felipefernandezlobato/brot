@@ -456,16 +456,16 @@ export default function PedidoDetailPage() {
                       <td className="px-6 py-3 font-medium text-text">
                         {ingredientesMap[l.ingrediente_id] ?? `Ingrediente #${l.ingrediente_id}`}
                       </td>
-                      <td className="px-6 py-3 text-right font-mono">
+                      <td className="px-6 py-3 text-right tabular-nums">
                         {l.cantidad_pedida}
                       </td>
                       <td className="px-4 py-3 text-warm-gray">{l.unidad}</td>
-                      <td className="px-6 py-3 text-right font-mono text-warm-gray">
+                      <td className="px-6 py-3 text-right tabular-nums text-warm-gray">
                         {l.precio_unitario !== null
                           ? formatARS(l.precio_unitario)
                           : "—"}
                       </td>
-                      <td className="px-6 py-3 text-right font-mono">
+                      <td className="px-6 py-3 text-right tabular-nums">
                         {subtotal !== null ? formatARS(subtotal) : "—"}
                       </td>
                       {receiveMode && (
@@ -486,7 +486,7 @@ export default function PedidoDetailPage() {
                         </td>
                       )}
                       {!receiveMode && pedido.estado === "recibido" && (
-                        <td className="px-6 py-3 text-right font-mono text-green-700">
+                        <td className="px-6 py-3 text-right tabular-nums text-green-700">
                           {l.cantidad_recibida !== null
                             ? `${l.cantidad_recibida} ${l.unidad}`
                             : "—"}
@@ -504,7 +504,7 @@ export default function PedidoDetailPage() {
                   >
                     Total estimado
                   </td>
-                  <td className="px-6 py-3 text-right font-medium text-brot font-mono">
+                  <td className="px-6 py-3 text-right font-medium text-brot tabular-nums">
                     {formatARS(
                       pedido.lineas.reduce(
                         (sum, l) => sum + l.cantidad_pedida * (l.precio_unitario ?? 0),

@@ -649,7 +649,7 @@ export default function ProduccionHoy() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
-                        <span className="text-xs text-gray-400 font-mono">
+                        <span className="text-xs text-gray-400 tabular-nums">
                           {tarea.hora?.replace(":00", "h")}
                         </span>
                         {tarea.producto_congelado_id ? (

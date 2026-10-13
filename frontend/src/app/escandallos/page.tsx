@@ -193,10 +193,10 @@ export default function EscandallsPage() {
                     <td className="px-4 py-3 text-warm-gray hidden sm:table-cell">
                       {r.categoria_nombre}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-sm">
+                    <td className="px-4 py-3 text-right tabular-nums text-sm">
                       {formatARS(r.costo_por_porcion)}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-sm hidden md:table-cell">
+                    <td className="px-4 py-3 text-right tabular-nums text-sm hidden md:table-cell">
                       {r.precio_venta !== null
                         ? formatARS(r.precio_venta)
                         : "—"}

@@ -193,7 +193,7 @@ function PriceCell({
   }
 
   return (
-    <td className={`px-3 py-3 text-right font-mono text-sm ${colorClass}`}>
+    <td className={`px-3 py-3 text-right tabular-nums text-sm ${colorClass}`}>
       {formatARS(precio)}
     </td>
   );
@@ -299,7 +299,7 @@ export default function CompetenciaPage() {
                           {row.receta_nombre}
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-right font-mono text-sm font-semibold text-text">
+                      <td className="px-3 py-3 text-right tabular-nums text-sm font-semibold text-text">
                         {row.pvp !== null ? formatARS(row.pvp) : "—"}
                       </td>
                       {competidores.map((name) => (

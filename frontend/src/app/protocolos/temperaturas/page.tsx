@@ -55,7 +55,7 @@ function TempBar({
   return (
     <div className="flex flex-col items-center gap-1" style={{ width: 26 }}>
       <span
-        className={`text-[9px] font-mono leading-none ${
+        className={`text-[9px] tabular-nums leading-none ${
           isHot ? "text-red-600 font-bold" : "text-warm-gray"
         }`}
       >
@@ -250,7 +250,7 @@ export default function TemperaturasPage() {
                           onChange={(e) =>
                             setValues((v) => ({ ...v, [f.id]: e.target.value }))
                           }
-                          className={`w-20 text-right px-2 py-1.5 rounded border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brot/30 ${
+                          className={`w-20 text-right px-2 py-1.5 rounded border text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brot/30 ${
                             isAlert
                               ? "border-red-300 bg-card text-red-700"
                               : "border-cream-dark bg-card"
