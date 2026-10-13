@@ -530,6 +530,58 @@ Deliveries are routinely entered late — 23 of the first 38 were saved one or m
 - `useAccionesEntrega` + `PieEntrega` (`frontend/src/app/entregas/page.tsx`) are shared by TabCalendario and TabEntregas, which previously copy-pasted `updateEstado`/`deleteEntrega` and the whole card footer verbatim. `correr()` returns a boolean so the editor stays open (keeping the typed draft) when a save fails, and the blur-cancel guard is skipped while a save is in flight — disabling the ✓ button steals focus and fires a blur with a null `relatedTarget`, which would otherwise close the editor exactly when it must not.
 - **Known gap, deliberate:** portal orders (`PedidoCliente`, `tipo: "portal"` in the unified list) have **no date-edit endpoint** — only `PUT /pedido-portal/{id}/estado` and `DELETE`. The pencil is hidden for them, and correcting a date means updating `PedidoCliente.fecha_entrega` on the row. Offered to build the endpoint 2026-09-29 after the first real portal order needed exactly this; Felipe declined ("no se hará a menudo"). **Note this is now only about the DATE** — as of 2026-09-30 portal orders DO move stock, see the next section; a date correction on a delivered one will not re-date its movements the way the B2B path does.
 
+### Estadísticas mensuales en inicio, y el costo histórico (added 2026-10-13)
+
+`GET /api/dashboard/mensual?meses=N` → `services/mensual.py`. **Admin only**
+(`require_admin`), unlike `/flujo` and `/reconciliacion`, because it exposes
+revenue, margin and client concentration. `frontend/src/components/EstadisticasMensuales.tsx`
+renders nothing at all when the role isn't admin. One flat payload with every
+month pre-computed — 9 queries regardless of `meses`, and month-switching is
+client-side with no refetch.
+
+**Ventas = B2B + portal, both `estado == "entregado"`, bucketed by `fecha_entrega`.**
+Counter sales do not exist anywhere in the system, so every sales total
+understates reality — the payload says so in `advertencias.sin_ventas_mostrador`
+and the UI prints it. Compras use `fecha_recepcion` (not `fecha`) and
+`cantidad_recibida` (not `cantidad_pedida`), via `monto_compras_recibidas()`,
+which `/flujo` now also calls so there is **one** definition of "what we spent".
+
+**Cost of goods is historical, never today's price.** Two sources, in order:
+1. `costo_unitario_snapshot` on `LineaEntregaB2B`/`LineaPedidoCliente` — frozen
+   at delivery by `_snapshot_costos()` (`routers/entregas_b2b.py`). Written once,
+   so toggling an entrega out of and back into `entregado` can't re-stamp a
+   closed month. **Exception: a `fecha_entrega` correction clears it on purpose**,
+   so it re-freezes at the corrected date — if the date was wrong the cost was too.
+   Called from `_aplicar_entrega`, `_aplicar_pedido_portal` **and**
+   `create_entrega_b2b`, which deducts stock with its own inline loop and would
+   otherwise never snapshot.
+2. `precio_compra_en(db, ing, fecha)` (`services/costes.py`) reconstructs an
+   ingredient's price from `HistorialPrecio` for sales that predate the column.
+   `costo_receta`/`costo_linea`/`costo_por_unidad_uso` take an optional `fecha`;
+   **with `fecha=None` they behave exactly as before**, so Escandallos and every
+   other existing caller is untouched.
+
+Why it matters: prices moved hard. Harina Integral 1.250 → 2.400 (+92%), Miel
+13.814 → 7.500 (−46%). Costing August at October's prices invents a margin. The
+reconstruction was validated against `LineaPedido.precio_unitario` (what was
+actually paid, frozen at reception) — two independent sources that agree, pinned
+by `test_precio_reconstruido_coincide_con_lo_pagado`.
+
+**`receta_incompleta()` — an empty sub-recipe is worse than a zero cost.** Cost 0
+is easy to catch; a *nested* empty sub-recipe yields a non-zero cost that's just
+too low. Real case: Cinnamon Roll → Cinnamon Roll Crudo → **Baston Cinnamon Roll
+(0 lines)** costs 33,91 against a 1.000 price = 96,6% margin, while everything
+correctly costed sits at ~67% (which is just the ×3 multiplier). It would read as
+the most profitable product in the bakery. The guard walks the whole tree, so
+uncosted lines are reported as gaps instead of trusted.
+
+**The margin % is computed over costable sales only, and reports its coverage.**
+Dropping an uncosted line's cost while keeping its revenue *inflates* the margin
+— the opposite of flagging a gap. `margen.bruto_pct` divides by
+`ventas_costeadas_ars`, and `cobertura_pct` says what slice of the month that is.
+Live: 65,5–67,0% over 97% of sales. If `cobertura_pct` is null there was nothing
+costable and the card shows "—", never a number.
+
 ### Portal orders deduct stock on `entregado`, same as a B2B delivery (added 2026-09-30)
 Portal orders never touched stock: the estado handler was a bare `pedido.estado = ...; commit()`. That was invisible while the customer portal was unused, but Olula started ordering through it on 2026-09-29 and its first order — 14 products, $265.900 — sat marked `entregado` having deducted nothing at all. Felipe's instruction was "igual que los que se hacen en la pagina de brot interna", so the B2B machinery is mirrored exactly.
 - `_aplicar_pedido_portal` / `_revertir_pedido_portal` (`routers/entregas_b2b.py`) mirror `_aplicar_entrega`/`_revertir_entrega`. `aplicar_cambio_estado_portal` is the shared entry point used by **both** estado endpoints (this router's and `pedidos_clientes_admin`'s) — either one alone left a way to mark an order delivered without deducting. `delete_pedido_portal` reverts first, or deleting a delivered order would orphan its deduction with nothing able to undo it.
