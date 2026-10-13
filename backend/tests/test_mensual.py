@@ -1,9 +1,9 @@
-"""Tests de las estadisticas mensuales.
+"""Tests for the monthly statistics.
 
-Se apunta a lo que puede estar silenciosamente mal y nadie notaria:
-  - los limites de mes (una venta del ultimo dia entra, la del dia siguiente no)
-  - que el costo se reconstruya a la fecha de la venta y no con precios de hoy
-  - que los huecos de datos se cuenten en vez de leerse como 0
+Aimed at what could be silently wrong with nobody noticing:
+  - month boundaries (a sale on the last day counts, the next day's does not)
+  - cost reconstructed at the sale's date, not with today's prices
+  - data gaps counted rather than read as 0
 """
 from datetime import date
 
@@ -32,7 +32,7 @@ from app.services.mensual import (
 HOY = date(2026, 10, 13)
 
 
-# ── limites de mes ────────────────────────────────────────────────────────────
+# ── month boundaries ──────────────────────────────────────────────────────────
 
 
 def test_mes_en_curso_es_parcial_y_corta_hoy():
@@ -55,7 +55,7 @@ def test_ultimos_n_meses_cruza_el_ano():
     assert [m.es_parcial for m in meses] == [False, False, False, True]
 
 
-# ── fixture minima ────────────────────────────────────────────────────────────
+# ── minimal fixture ───────────────────────────────────────────────────────────
 
 
 def _setup(db, *, precio_harina=1000.0):
@@ -97,7 +97,7 @@ def _mes(res, clave):
     return next(m for m in res["meses"] if m["mes"] == clave)
 
 
-# ── el borde que importa ──────────────────────────────────────────────────────
+# ── the boundary that matters ─────────────────────────────────────────────────
 
 
 def test_venta_del_ultimo_dia_del_mes_cuenta_en_ese_mes(db):
@@ -129,7 +129,7 @@ def test_venta_futura_queda_afuera(db):
     assert _mes(res, "2026-10")["ventas"]["total_ars"] == 0.0
 
 
-# ── costo historico, no el de hoy ─────────────────────────────────────────────
+# ── historical cost, not today's ──────────────────────────────────────────────
 
 
 def test_precio_compra_en_reconstruye_hacia_atras(db):
@@ -138,12 +138,12 @@ def test_precio_compra_en_reconstruye_hacia_atras(db):
                            precio_nuevo=2400.0, fecha_cambio=date(2026, 9, 28)))
     db.commit()
 
-    # antes del cambio rige el precio viejo
+    # before the change the old price applies
     assert precio_compra_en(db, ing, date(2026, 8, 15)) == 1250.0
-    # el dia del cambio ya rige el nuevo
+    # on the day of the change the new one already applies
     assert precio_compra_en(db, ing, date(2026, 9, 28)) == 2400.0
     assert precio_compra_en(db, ing, date(2026, 10, 5)) == 2400.0
-    # sin fecha, el de hoy: ningun llamador existente cambia de comportamiento
+    # with no date, today's: no existing caller changes behaviour
     assert precio_compra_en(db, ing, None) == 2400.0
 
 
@@ -161,7 +161,7 @@ def test_margen_usa_el_precio_de_la_fecha_no_el_de_hoy(db):
     db.commit()
 
     res = resumen_mensual(db, meses=3, hoy=HOY)
-    # receta: 1 kg de harina / 10 porciones -> costo por unidad = precio/10
+    # recipe: 1 kg of flour / 10 portions -> unit cost = price/10
     assert _mes(res, "2026-08")["margen"]["cogs_ars"] == 1250.0
     assert _mes(res, "2026-10")["margen"]["cogs_ars"] == 2400.0
     assert _mes(res, "2026-08")["margen"]["bruto_ars"] == 3750.0
@@ -210,7 +210,7 @@ def test_precio_reconstruido_coincide_con_lo_pagado(db):
     assert precio_compra_en(db, ing, date(2026, 9, 10)) == pagado
 
 
-# ── los huecos se cuentan, no se esconden ─────────────────────────────────────
+# ── gaps are counted, not hidden ──────────────────────────────────────────────
 
 
 def test_receta_sin_lineas_no_cuenta_como_costo_cero(db):
@@ -225,7 +225,124 @@ def test_receta_sin_lineas_no_cuenta_como_costo_cero(db):
     m = _mes(res, "2026-10")
     assert m["margen"]["cogs_ars"] == 0.0
     assert m["margen"]["lineas_sin_costo"] == 1, "el hueco tiene que quedar visible"
-    assert m["margen"]["bruto_pct"] == 100.0  # queda al descubierto por el contador
+    # sin ninguna linea costeable no hay margen que informar: None, no 100%.
+    # Dejar la venta en el numerador y el costo afuera INFLA el margen, que es
+    # justo lo contrario de avisar que falta un dato.
+    assert m["margen"]["bruto_pct"] is None
+    assert m["margen"]["cobertura_pct"] == 0.0
+    assert m["ventas"]["total_ars"] == 5000.0, "la venta se sigue informando igual"
+
+
+def test_subreceta_vacia_anidada_no_pasa_como_costo_valido(db):
+    """El caso real de Cinnamon Roll, que casi se escapa.
+
+    Cinnamon Roll -> Cinnamon Roll Crudo -> Baston Cinnamon Roll (0 lineas).
+    El baston vacio esta DOS niveles abajo, asi que el costo no sale 0: sale
+    33.91 contra un precio de 1.000, o sea 96.6% de margen, cuando todo lo bien
+    costeado da ~67%. Una guarda que solo mire "costo == 0" lo deja pasar y el
+    producto aparece como el mas rentable del negocio.
+    """
+    ing, receta_top, producto, cliente = _setup(db)
+
+    vacia = Receta(nombre="Baston Vacio", categoria_id=receta_top.categoria_id,
+                   porciones_por_lote=1, precio_venta=0, es_subreceta=True)
+    db.add(vacia)
+    db.flush()
+    intermedia = Receta(nombre="Crudo", categoria_id=receta_top.categoria_id,
+                        porciones_por_lote=40, precio_venta=0, es_subreceta=True)
+    db.add(intermedia)
+    db.flush()
+    # the middle recipe DOES have lines: a real ingredient + the empty sub-recipe
+    db.add_all([
+        LineaReceta(receta_id=intermedia.id, subreceta_id=vacia.id, cantidad=1, unidad="u"),
+        LineaReceta(receta_id=intermedia.id, ingrediente_id=ing.id, cantidad=0.04, unidad="kg"),
+    ])
+    db.query(LineaReceta).filter(LineaReceta.receta_id == receta_top.id).delete()
+    db.add(LineaReceta(receta_id=receta_top.id, subreceta_id=intermedia.id, cantidad=1, unidad="u"))
+    _vender(db, producto, cliente, date(2026, 10, 2))
+    db.commit()
+
+    from app.services.costes import receta_incompleta
+    assert receta_incompleta(receta_top, db) is True
+
+    m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")
+    assert m["margen"]["cogs_ars"] == 0.0
+    assert m["margen"]["lineas_sin_costo"] == 1, \
+        "un costo no-cero pero incompleto tiene que contarse como hueco"
+    assert m["margen"]["bruto_pct"] is None
+
+
+def test_margen_se_calcula_solo_sobre_lo_costeable(db):
+    """Con una venta costeable y otra que no, el % tiene que medirse sobre la
+    primera nada mas, e informar que cubre la mitad.
+
+    Si la venta sin costo quedara en el numerador con costo 0, el margen subiria
+    en vez de avisar que hay un dato faltante.
+    """
+    ing, receta, producto, cliente = _setup(db)
+    sin_receta = ProductoCatalogo(nombre="Sin receta", precio=500, categoria="Panes",
+                                  disponible=True, posicion=2, receta_id=None)
+    db.add(sin_receta)
+    db.flush()
+    _vender(db, producto, cliente, date(2026, 10, 2))      # 5000, costeable
+    _vender(db, sin_receta, cliente, date(2026, 10, 3))    # 5000, no costeable
+    db.commit()
+
+    m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")
+    assert m["ventas"]["total_ars"] == 10000.0
+    assert m["margen"]["ventas_costeadas_ars"] == 5000.0
+    assert m["margen"]["cobertura_pct"] == 50.0
+    # 1 kg de harina a 1000 / 10 porciones = 100/u, 10u -> 1000 de costo
+    assert m["margen"]["cogs_ars"] == 1000.0
+    assert m["margen"]["bruto_pct"] == 80.0  # (5000-1000)/5000, NO sobre 10000
+
+
+def test_receta_completa_no_se_marca_incompleta(db):
+    """Contracara del anterior: la guarda no puede ensuciar las recetas buenas."""
+    from app.services.costes import receta_incompleta
+
+    _, receta, _, _ = _setup(db)
+    assert receta_incompleta(receta, db) is False
+
+
+def test_compra_sin_cantidad_recibida_no_usa_la_pedida(db):
+    """/flujo sumaba esto con SQL crudo: cantidad_recibida NULL hacia NULL el
+    producto y SUM descartaba la fila, o sea aportaba 0. Si ahora cayera en
+    cantidad_pedida, un `comprado_total_ars` historico cambiaria de valor solo
+    por el refactor."""
+    ing, *_ = _setup(db)
+    prov = Proveedor(nombre="Forzani")
+    db.add(prov)
+    db.flush()
+    p = Pedido(fecha=date(2026, 10, 2), proveedor_id=prov.id, estado="recibido",
+               fecha_recepcion=date(2026, 10, 2))
+    db.add(p)
+    db.flush()
+    db.add(LineaPedido(pedido_id=p.id, ingrediente_id=ing.id, cantidad_pedida=10,
+                       unidad="kg", cantidad_recibida=None, precio_unitario=100.0))
+    db.commit()
+
+    assert monto_compras_recibidas(db, date(2026, 10, 1), date(2026, 10, 31)) == 0.0
+    m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")
+    assert m["compras_total_ars"] == 0.0
+    assert m["avisos"]["lineas_compra_sin_precio"] == 1
+
+
+def test_cambio_de_precio_a_mitad_de_mes_se_aplica_por_fecha(db):
+    """La cache no puede ser por mes: el orden de iteracion es de insercion, no
+    cronologico (las entregas se cargan tarde), asi que la primera linea que
+    toque un producto definiria el costo de todo el mes."""
+    ing, _, producto, cliente = _setup(db, precio_harina=2000.0)
+    db.add(HistorialPrecio(ingrediente_id=ing.id, precio_anterior=1000.0,
+                           precio_nuevo=2000.0, fecha_cambio=date(2026, 10, 10)))
+    # inserted out of order on purpose: the later sale first
+    _vender(db, producto, cliente, date(2026, 10, 12))  # costo 200
+    _vender(db, producto, cliente, date(2026, 10, 3))   # costo 100
+    db.commit()
+
+    m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")
+    # 10u * 200 + 10u * 100 = 3000, not 2*(10*200) nor 2*(10*100)
+    assert m["margen"]["cogs_ars"] == 3000.0
 
 
 def test_linea_vendida_a_precio_cero_se_cuenta(db):
@@ -288,7 +405,7 @@ def test_entrega_pendiente_no_es_venta(db):
     assert _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")["ventas"]["total_ars"] == 0.0
 
 
-# ── una sola definicion de "lo que gastamos" ─────────────────────────────────
+# ── one definition of "what we spent" ────────────────────────────────────────
 
 
 def test_flujo_y_mensual_dan_el_mismo_gasto(db):
@@ -307,13 +424,13 @@ def test_flujo_y_mensual_dan_el_mismo_gasto(db):
                        unidad="kg", cantidad_recibida=8, precio_unitario=100.0))
     db.commit()
 
-    # cantidad_recibida (8), no cantidad_pedida (10)
+    # cantidad_recibida (8), not cantidad_pedida (10)
     esperado = 800.0
     assert monto_compras_recibidas(db, date(2026, 10, 1), date(2026, 10, 31)) == esperado
     assert _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")["compras_total_ars"] == esperado
 
 
-# ── agrupaciones ──────────────────────────────────────────────────────────────
+# ── groupings ─────────────────────────────────────────────────────────────────
 
 
 def test_concentracion_por_cliente(db):
@@ -329,7 +446,7 @@ def test_concentracion_por_cliente(db):
     assert [(c["nombre"], c["pct"]) for c in porc] == [("Olula", 80.0), ("Creme", 20.0)]
 
 
-# ── el endpoint es solo de admin ──────────────────────────────────────────────
+# ── the endpoint is admin-only ────────────────────────────────────────────────
 
 
 def _login(client, db, role):

@@ -1,29 +1,28 @@
-"""Estadisticas mensuales para el panel de inicio.
+"""Monthly statistics for the home dashboard.
 
-Vive en services/ y no dentro del router porque la parte delicada es la
-aritmetica de plata y los limites de mes, y asi se puede testear directo sin
-levantar HTTP ni auth (mismo criterio que test_costes.py).
+Lives in services/ rather than in the router because the delicate parts are the
+money arithmetic and the month boundaries, and here they can be tested directly
+without HTTP or auth (same reasoning as test_costes.py).
 
-Decisiones que conviene conocer antes de tocar esto:
+Things worth knowing before changing any of this:
 
-* El bucketeo es en Python, no en SQL — misma convencion que
-  mermas.analisis (`_inicio_periodo`). Se traen las filas del rango completo
-  UNA vez y se agrupan en memoria: 9 consultas en total, sin importar cuantos
-  meses se pidan.
+* Bucketing happens in Python, not SQL -- same convention as mermas.analisis
+  (`_inicio_periodo`). The rows for the whole range are fetched ONCE and grouped
+  in memory: 9 queries total, however many months are requested.
 
-* "Ventas" son DOS canales que se suman: EntregaB2B y PedidoCliente (portal).
-  Los dos apuntan a productos_catalogo y a clientes_b2b, asi que agrupan
-  limpio. Ambos filtran estado == "entregado": lo pendiente no es venta.
+* "Ventas" is TWO channels summed: EntregaB2B and PedidoCliente (the portal).
+  Both point at productos_catalogo and at clientes_b2b, so they group cleanly.
+  Both filter estado == "entregado" -- a pending order is not a sale.
 
-* Las ventas de mostrador NO existen en el sistema, asi que todo total de
-  ventas subestima la venta real. Se expone en `advertencias`.
+* Counter sales DO NOT exist in this system, so every sales total understates
+  what was really sold. Surfaced in `advertencias` so the UI can say so.
 
-* El costo de lo vendido sale del snapshot congelado al entregar
-  (`costo_unitario_snapshot`); para las ventas anteriores a que eso existiera,
-  se reconstruye el precio de cada ingrediente a la fecha de la entrega via
-  HistorialPrecio (costes.precio_compra_en). NO se usa el costo de hoy: los
-  precios se movieron fuerte (Harina Integral +92%, Miel -46%), asi que
-  costear agosto con precios de octubre daria un margen inventado.
+* Cost of goods comes from the snapshot frozen at delivery time
+  (`costo_unitario_snapshot`). For sales that predate that column, each
+  ingredient's price is reconstructed at the delivery date from HistorialPrecio
+  (costes.precio_compra_en). Today's cost is NEVER used: prices moved hard here
+  (Harina Integral +92%, Miel -46%), so costing August at October's prices would
+  invent a margin.
 """
 from __future__ import annotations
 
@@ -49,20 +48,20 @@ from app.models import (
     Proveedor,
     Receta,
 )
-from app.services.costes import costo_receta
+from app.services.costes import costo_receta, receta_incompleta
 
 TOP_N = 10
 
 
-# ── limites de mes ────────────────────────────────────────────────────────────
-# `hoy` se recibe como parametro en vez de llamar a date.today() adentro, para
-# que los bordes de mes se puedan testear sin congelar el reloj.
+# ── month boundaries ──────────────────────────────────────────────────────────
+# `hoy` is passed in rather than calling date.today() inside, so the month edges
+# can be tested without freezing the clock.
 
 
 @dataclass(frozen=True)
 class RangoMes:
     inicio: date
-    fin: date  # ultimo dia del mes, o `hoy` si el mes esta en curso
+    fin: date  # last day of the month, or `hoy` while the month is in progress
     clave: str  # "2026-10"
     es_parcial: bool
     dias_transcurridos: int
@@ -86,7 +85,7 @@ def rango_mes(anio: int, mes: int, *, hoy: date) -> RangoMes:
 
 
 def ultimos_n_meses(n: int, *, hoy: date) -> list[RangoMes]:
-    """Del mas viejo al mas nuevo; el ultimo es el mes en curso."""
+    """Oldest to newest; the last one is the month in progress."""
     out = []
     anio, mes = hoy.year, hoy.month
     for _ in range(n):
@@ -97,7 +96,7 @@ def ultimos_n_meses(n: int, *, hoy: date) -> list[RangoMes]:
     return [rango_mes(a, m, hoy=hoy) for a, m in reversed(out)]
 
 
-# ── filas crudas ──────────────────────────────────────────────────────────────
+# ── raw rows ──────────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -118,7 +117,7 @@ class _LineaCompra:
     ingrediente_id: int
     proveedor_id: int | None
     cantidad: float
-    monto: float | None  # None = la linea no tiene precio cargado
+    monto: float | None  # None = this line's cost is unknown
 
 
 def _clave(f: date) -> str:
@@ -162,7 +161,7 @@ def _ventas(db: Session, desde: date, hasta: date) -> list[_LineaVenta]:
             fecha=p.fecha_entrega, clave_mes=_clave(p.fecha_entrega), canal="portal",
             cliente_id=p.cliente_id, producto_id=l.producto_id,
             cantidad=l.cantidad or 0,
-            # el portal ya guarda el subtotal calculado y es inmutable
+            # the portal already stores a computed subtotal, and it's immutable
             monto=l.subtotal or 0,
             costo_snapshot=l.costo_unitario_snapshot,
         ))
@@ -182,50 +181,64 @@ def _compras(db: Session, desde: date, hasta: date) -> list[_LineaCompra]:
     )
     out = []
     for l, p in filas:
-        cantidad = l.cantidad_recibida if l.cantidad_recibida is not None else l.cantidad_pedida
-        # precio_unitario es nullable: se deja monto=None en vez de 0 para poder
-        # sumar ignorandolo Y contar el hueco desde las mismas filas
-        monto = None if l.precio_unitario is None else (cantidad or 0) * l.precio_unitario
+        # Both nullable, and either one means we don't know what this line cost.
+        # monto stays None instead of collapsing to 0 so callers can sum while
+        # ignoring it AND count the gap from the same rows.
+        #
+        # Deliberately does NOT fall back to cantidad_pedida when
+        # cantidad_recibida is NULL: the raw SQL this replaced (used by
+        # /api/dashboard/flujo) multiplied by NULL and let SUM drop the row, so
+        # substituting the ordered quantity would silently change a historical
+        # `comprado_total_ars` that someone may already have on record.
+        if l.precio_unitario is None or l.cantidad_recibida is None:
+            monto = None
+        else:
+            monto = l.cantidad_recibida * l.precio_unitario
         out.append(_LineaCompra(
             clave_mes=_clave(p.fecha_recepcion), ingrediente_id=l.ingrediente_id,
-            proveedor_id=p.proveedor_id, cantidad=cantidad or 0, monto=monto,
+            proveedor_id=p.proveedor_id,
+            cantidad=(l.cantidad_recibida if l.cantidad_recibida is not None else l.cantidad_pedida) or 0,
+            monto=monto,
         ))
     return out
 
 
 def monto_compras_recibidas(db: Session, desde: date, hasta: date) -> float:
-    """Lo gastado en pedidos recibidos entre dos fechas.
+    """What was spent on received orders between two dates.
 
-    Una sola definicion de "lo que gastamos", compartida con
-    GET /api/dashboard/flujo, que antes la tenia escrita aparte. Si hay dos,
-    tarde o temprano dan distinto.
+    One definition of "what we spent", shared with GET /api/dashboard/flujo,
+    which used to carry its own copy of this query. Two copies drift.
     """
     return sum(c.monto or 0 for c in _compras(db, desde, hasta))
 
 
-# ── costo de lo vendido ───────────────────────────────────────────────────────
+# ── cost of goods sold ────────────────────────────────────────────────────────
 
 
 def _costo_unitario(
     db: Session,
     linea: _LineaVenta,
     catalogo: dict[int, ProductoCatalogo],
-    cache: dict[tuple[int, str], float | None],
+    cache: dict[tuple[int, date], float | None],
 ) -> float | None:
-    """Costo por unidad de una linea vendida, o None si no se puede saber.
+    """Unit cost of a sold line, or None when it cannot be known.
 
-    Prioridad:
-      1. el snapshot congelado al entregar — inmutable, es la verdad
-      2. reconstruccion a la fecha de la entrega via HistorialPrecio
-    Nunca el costo de hoy.
+    Priority:
+      1. the snapshot frozen at delivery time -- immutable, the real figure
+      2. reconstruction at the delivery date via HistorialPrecio
+    Never today's cost.
 
-    La cache es por (producto, mes) y no por producto: dentro de un mes los
-    precios casi no se mueven, y asi no se recalcula la receta por cada linea.
+    Cached by (producto, exact date), NOT by month. A monthly cache would let
+    whichever line happens to be iterated first decide the cost for the whole
+    month -- and iteration order here is insertion order, not chronological,
+    because deliveries are routinely entered days late. A price change mid-month
+    would then be applied to sales on the wrong side of it, which is the same
+    failure threading `fecha` exists to prevent, just at a smaller scale.
     """
     if linea.costo_snapshot is not None:
         return linea.costo_snapshot
 
-    key = (linea.producto_id, linea.clave_mes)
+    key = (linea.producto_id, linea.fecha)
     if key in cache:
         return cache[key]
 
@@ -233,15 +246,18 @@ def _costo_unitario(
     costo: float | None = None
     if cat and cat.receta_id:
         receta = db.get(Receta, cat.receta_id)
-        if receta:
+        # An incomplete tree gives a number that is simply too low, not zero --
+        # Cinnamon Roll comes out at 33.91 against a 1.000 price (96.6% margin)
+        # because its bastón, two levels down, has no lines. Checking only for
+        # cost == 0 lets that through and makes it look like the star product.
+        if receta and not receta_incompleta(receta, db):
             _, por_porcion = costo_receta(receta, db, fecha=linea.fecha)
-            # 0 significa "receta sin lineas", no "sale gratis"
             costo = por_porcion if por_porcion and por_porcion > 0 else None
     cache[key] = costo
     return costo
 
 
-# ── armado del mes ────────────────────────────────────────────────────────────
+# ── assembling each month ─────────────────────────────────────────────────────
 
 
 @dataclass
@@ -253,6 +269,10 @@ class _Acum:
     por_producto: dict = field(default_factory=lambda: defaultdict(lambda: {"unidades": 0.0, "monto": 0.0}))
     por_cliente: dict = field(default_factory=lambda: defaultdict(float))
     cogs: float = 0.0
+    # Revenue of the lines whose cost IS known. The margin % is computed over
+    # this, not over total sales: counting a line's revenue while dropping its
+    # cost would inflate the margin instead of flagging the gap.
+    ventas_costeadas: float = 0.0
     lineas_sin_costo: int = 0
     compras: float = 0.0
     lineas_sin_precio: int = 0
@@ -283,14 +303,14 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
         .all()
     )
 
-    # tablas chicas de un obrador unico: se cargan enteras una vez
+    # small tables for a single bakery: loaded whole, once
     catalogo = {p.id: p for p in db.query(ProductoCatalogo).all()}
     ingredientes = {i.id: i.nombre for i in db.query(Ingrediente).all()}
     clientes = {c.id: c.nombre for c in db.query(ClienteB2B).all()}
     proveedores = {p.id: p.nombre for p in db.query(Proveedor).all()}
 
     acum: dict[str, _Acum] = defaultdict(_Acum)
-    cache_costo: dict[tuple[int, str], float | None] = {}
+    cache_costo: dict[tuple[int, date], float | None] = {}
 
     for v in ventas:
         a = acum[v.clave_mes]
@@ -311,6 +331,7 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
             a.lineas_sin_costo += 1
         else:
             a.cogs += cu * v.cantidad
+            a.ventas_costeadas += v.monto
 
     for c in compras:
         a = acum[c.clave_mes]
@@ -343,7 +364,8 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
     for r in rangos:
         a = acum.get(r.clave, _Acum())
         ventas_total = a.ventas_b2b + a.ventas_portal
-        margen = ventas_total - a.cogs
+        # over the costed subset only -- see _Acum.ventas_costeadas
+        margen = a.ventas_costeadas - a.cogs
         meses_out.append({
             "mes": r.clave,
             "es_parcial": r.es_parcial,
@@ -359,9 +381,12 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
             "margen": {
                 "cogs_ars": round(a.cogs, 2),
                 "bruto_ars": round(margen, 2),
-                "bruto_pct": round(100 * margen / ventas_total, 1) if ventas_total else None,
-                # cuantas lineas del mes no pudieron costearse: sin esto el
-                # margen se leeria como exacto cuando no lo es
+                "bruto_pct": round(100 * margen / a.ventas_costeadas, 1) if a.ventas_costeadas else None,
+                # the slice of sales this margin actually covers. Anything under
+                # 100% means some lines could not be costed, so the figure
+                # describes part of the month, not all of it.
+                "ventas_costeadas_ars": round(a.ventas_costeadas, 2),
+                "cobertura_pct": round(100 * a.ventas_costeadas / ventas_total, 1) if ventas_total else None,
                 "lineas_sin_costo": a.lineas_sin_costo,
             },
             "mermas": {
@@ -414,7 +439,7 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
         "periodo": {"desde": str(desde), "hasta": str(hasta), "meses": meses},
         "meses": meses_out,
         "advertencias": {
-            # no es un bug ni un hueco de datos: simplemente no existe el modelo
+            # not a bug or a data gap: the model simply does not exist
             "sin_ventas_mostrador": True,
             "margen_reconstruido": True,
         },

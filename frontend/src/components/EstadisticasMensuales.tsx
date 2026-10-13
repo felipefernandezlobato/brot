@@ -25,6 +25,8 @@ interface Margen {
   cogs_ars: number;
   bruto_ars: number;
   bruto_pct: number | null;
+  ventas_costeadas_ars: number;
+  cobertura_pct: number | null;
   lineas_sin_costo: number;
 }
 interface Mermas {
@@ -181,8 +183,6 @@ export function EstadisticasMensuales() {
   const m = data.meses[idx];
   if (!m) return null;
 
-  const sinVentas = m.ventas.total_ars === 0;
-
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
@@ -232,15 +232,18 @@ export function EstadisticasMensuales() {
         />
         <Tarjeta
           label="Margen bruto"
-          valor={
-            sinVentas || m.margen.bruto_pct === null
-              ? "—"
-              : `${m.margen.bruto_pct.toFixed(1)}%`
+          valor={m.margen.bruto_pct === null ? "—" : `${m.margen.bruto_pct.toFixed(1)}%`}
+          detalle={
+            m.margen.bruto_pct === null
+              ? undefined
+              : `${formatARS(m.margen.bruto_ars)} sobre costo ${formatARS(m.margen.cogs_ars)}`
           }
-          detalle={sinVentas ? undefined : `${formatARS(m.margen.bruto_ars)} sobre costo ${formatARS(m.margen.cogs_ars)}`}
+          /* El margen se mide solo sobre las ventas que se pudieron costear.
+             Si no cubre todo el mes hay que decirlo: un 67% que en realidad
+             describe el 90% de las ventas no es el margen del mes. */
           aviso={
-            m.margen.lineas_sin_costo
-              ? `${m.margen.lineas_sin_costo} líneas sin costo calculable`
+            m.margen.cobertura_pct !== null && m.margen.cobertura_pct < 99.5
+              ? `cubre ${m.margen.cobertura_pct.toFixed(0)}% de las ventas · ${m.margen.lineas_sin_costo} líneas sin costo`
               : undefined
           }
         />

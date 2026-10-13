@@ -19,7 +19,7 @@ from app.models import (
     Receta,
     User,
 )
-from app.services.costes import costo_receta
+from app.services.costes import costo_receta, receta_incompleta
 from app.services.stock import deducir_congelado_por_catalogo, revertir_consumos
 from app.permissions import require_permission
 from app.schemas import (
@@ -377,6 +377,7 @@ def create_entrega_b2b(
     db.add(entrega)
     db.flush()
     ref = f"entrega_b2b:{entrega.id}:{cliente_nombre}"
+    creadas = []
     for l in data.lineas:
         linea = LineaEntregaB2B(
             entrega_id=entrega.id,
@@ -385,6 +386,7 @@ def create_entrega_b2b(
             precio_unitario=l.precio_unitario,
         )
         db.add(linea)
+        creadas.append(linea)
         if data.estado == "entregado":
             mov = deducir_congelado_por_catalogo(
                 db, l.producto_id, l.cantidad,
@@ -397,6 +399,12 @@ def create_entrega_b2b(
                     status_code=422,
                     detail=f"No se pudo resolver el stock congelado para '{cat.nombre if cat else l.producto_id}'",
                 )
+    # This endpoint deducts stock inline instead of going through
+    # _aplicar_entrega, so it has to freeze the costs itself -- an entrega
+    # created already "entregado" (which the API supports and
+    # test_reversion_stock.py exercises) would otherwise never get a snapshot.
+    if data.estado == "entregado":
+        _snapshot_costos(db, creadas, data.fecha_entrega)
     db.commit()
     db.refresh(entrega, ["lineas"])
     return _entrega_out(entrega)
@@ -447,6 +455,15 @@ def update_entrega_b2b(
 
     for key, val in updates.items():
         setattr(entrega, key, val)
+
+    if recalcular and lineas_data is None:
+        # Only the date moved, so the lines survive -- and _snapshot_costos
+        # refuses to overwrite an existing snapshot. Clearing it here is what
+        # lets the cost re-freeze at the CORRECTED date: the old one was taken
+        # against the wrong day's ingredient prices. (Harina Integral moved
+        # +92%, so this is not a rounding difference.)
+        for l in entrega.lineas:
+            l.costo_unitario_snapshot = None
 
     if lineas_data is not None:
         for old_line in list(entrega.lineas):
@@ -507,9 +524,12 @@ def _snapshot_costos(db: Session, lineas, fecha: date) -> None:
     Only writes a line that has no snapshot yet, so toggling an entrega out of
     and back into "entregado" cannot re-stamp a past month at today's cost.
 
-    Stores NULL, never 0, when no real cost can be computed -- a recipe with no
-    lines (Baston Cinnamon Roll) would otherwise freeze a 0 that reads as a
-    100% margin forever. The monthly endpoint counts those as gaps.
+    Stores NULL, never a number it cannot stand behind. Freezing a wrong cost
+    is worse than freezing none: it would be permanent. Skipped when the recipe
+    tree is incomplete -- Cinnamon Roll's bastón has no lines two levels down,
+    so its cost computes to 33.91 against a 1.000 price (96.6% margin) instead
+    of the ~67% every properly costed product shows. The monthly endpoint
+    counts these as gaps instead of hiding them.
     """
     for l in lineas:
         if l.costo_unitario_snapshot is not None:
@@ -518,7 +538,7 @@ def _snapshot_costos(db: Session, lineas, fecha: date) -> None:
         if not cat or not cat.receta_id:
             continue
         receta = db.get(Receta, cat.receta_id)
-        if not receta:
+        if not receta or receta_incompleta(receta, db):
             continue
         _, por_porcion = costo_receta(receta, db, fecha=fecha)
         if por_porcion and por_porcion > 0:

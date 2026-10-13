@@ -90,6 +90,39 @@ def costo_linea(
     return 0
 
 
+def receta_incompleta(receta: Receta, db: Session, visited: set[int] | None = None) -> bool:
+    """True if any recipe in the tree has no lines, making its cost a lie.
+
+    A cost of 0 is easy to spot, but an EMPTY SUB-recipe nested deeper produces
+    a non-zero cost that is simply too low, which is far more dangerous: it
+    makes the product look like the most profitable thing on the menu.
+
+    Real case this exists for -- Cinnamon Roll:
+        Cinnamon Roll -> Cinnamon Roll Crudo -> Baston Cinnamon Roll (0 lines)
+    Only the canela and azucar get costed, with no dough at all, so it comes
+    out at 33.91 against a 1.000 price: 96.6% margin, while every correctly
+    costed product sits at ~67%. The empty bastón is two levels down, so
+    checking only the top recipe's direct lines misses it.
+
+    Callers should treat an incomplete recipe as "cost unknown" rather than
+    trusting the number. See CLAUDE.md on Baston Cinnamon Roll.
+    """
+    visited = visited if visited is not None else set()
+    if receta.id in visited:
+        return False  # a cycle is a different problem; costo_linea already stops it
+    visited.add(receta.id)
+
+    lineas = receta.lineas or db.query(LineaReceta).filter(LineaReceta.receta_id == receta.id).all()
+    if not lineas:
+        return True
+    for l in lineas:
+        if l.subreceta_id:
+            sub = l.subreceta_rel or db.get(Receta, l.subreceta_id)
+            if sub and receta_incompleta(sub, db, visited):
+                return True
+    return False
+
+
 def costo_receta(
     receta: Receta,
     db: Session,
