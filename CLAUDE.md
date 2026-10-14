@@ -556,6 +556,58 @@ Reglas que salen de esto:
 4. El clasificador de permisos bloquea estas escrituras directas a producción.
    Eso es una protección, no un obstáculo a sortear.
 
+### Ajustar SOLO el consumo del padre, sin reaplicar el registro (2026-10-14)
+
+`services/stock.py::ajustar_consumo_padre(db, producto_congelado_id, referencia,
+nuevo_consumo, user_id)` cambia cuánta masa/bastón consumió un registro de
+producción **sin tocar nada más de ese registro**. Es la respuesta a la sección
+de arriba: `revertir_efectos` + `aplicar_efectos` reconstruye TODO, incluido el
+lote de salida, y para un registro anterior a un conteo ese lote nuevo ya no se
+puede barrer. Esta función nunca llama a `producir_producto`/`aplicar_efectos`,
+nunca lee un `StockCongelado` con `registro_produccion_id` (el output), y nunca
+toca `InventarioRegistro` (los ingredientes).
+
+**Dos regímenes, y el segundo es la parte no obvia** (`_conteo_posterior`):
+- **Sin conteo posterior** → camino completo: `_restaurar_lotes` devuelve a los
+  lotes exactos vía `ConsumoFifoDetalle`, y se vuelve a deducir con
+  `deducir_congelado_fifo`.
+- **Con un conteo posterior** → **solo ledger, los lotes no se tocan**. El
+  conteo ya re-ancló la estantería, así que la producción vieja no tiene efecto
+  físico que corregir. Hacerlo igual falla en las dos direcciones:
+  `_restaurar_lotes` hace `is_active = True` en cualquier lote que acredita, así
+  que devolverle 0,08 a un lote que el conteo había barrido **con 2 unidades
+  adentro resucita las 2**; y volver a deducir cobra un consumo que el conteo ya
+  había absorbido. Medido en vivo: Masa Barra Blanca dio −1,88 contra una
+  predicción de −3,00. La verificación del script lo atajó y no se escribió nada.
+
+En modo solo-ledger no se crean filas `ConsumoFifoDetalle`, así que un revert
+completo posterior de ese registro cae en la rama de "lote reconstruido" de
+`_restaurar_lotes` — correcto, porque no quedan lotes reales a los que devolver.
+
+`PUT /api/produccion/registro/{id}` **hacía `revertir_efectos` + `aplicar_efectos`
+incondicionalmente**, así que corregir el consumo de masa de un registro viejo
+desde la propia app volvía a inflar la estantería: el bug del 13/10 era
+alcanzable desde la UI, no solo desde un script. Ahora, cuando lo ÚNICO que
+cambia es `consumo_padre_declarado`, va por la primitiva. Cualquier otro cambio
+(sobre todo `cantidad_real`) sigue por el camino de siempre, porque ahí el
+output sí tiene que reconstruirse.
+
+**Redondeo histórico aplicado el 2026-10-14** (`scripts/redondear_consumo_masa_dias.py`,
+56 registros). Dos reglas elegidas por Felipe:
+1. **Por masa y día, no por registro.** Se suman las líneas del día, se redondea
+   el total y se reparte (resto mayor). Un día normal de pan da 1 + 1 = 2, lo que
+   realmente se amasó. Redondear por línea con piso de 1 es lo que dejaba Masa
+   Pan Negro en 26 lotes en vez de 23.
+2. **Solo días ya a menos de `TOLERANCIA` (0,25) de un entero** — 51 de 58. Los
+   otros 7 son fracciones reales (1 bastón de un lote de 3 de Masa Hojaldre ES un
+   tercio de lote) y redondearlos inventaría masa. Quedan 9 movimientos
+   fraccionados vivos, todos de esos 7 días, casi todos del 22/08.
+
+La estantería no se movió en absoluto (todos los días afectados estaban detrás
+de un conteo). El script snapshotea la tabla `StockCongelado` completa antes de
+escribir y **hace rollback si algún saldo no coincide con lo predicho** — que es
+exactamente lo que pasó en el primer intento.
+
 ### Correcting a past manual stock count (added 2026-08-21)
 `PUT /api/inventario/{id}` (new) and `PUT /api/congelados/{id}` (existed, was ledger-blind before) let a person fix a mistyped quantity, a kg/g mix-up, or a wrong date on an existing manual count row.
 

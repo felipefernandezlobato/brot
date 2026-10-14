@@ -17,8 +17,8 @@ from app.models import (
     TareaProduccion,
     User,
 )
-from app.services.produccion_registro import aplicar_efectos, revertir_efectos
-from app.services.stock import admite_consumo_declarado
+from app.services.produccion_registro import aplicar_efectos, referencia_de, revertir_efectos
+from app.services.stock import admite_consumo_declarado, ajustar_consumo_padre
 from app.permissions import require_permission
 from app.schemas import (
     RegistroExtraCreate,
@@ -410,6 +410,40 @@ def update_registro(
             raise HTTPException(status_code=422, detail="Ingresa la cantidad producida.")
     elif data.duracion_real is None or data.duracion_real <= 0:
         raise HTTPException(status_code=422, detail="Ingresa la duracion.")
+
+    # Correcting ONLY how much masa/baston was consumed goes through the
+    # surgical path: a full revert+reapply would recreate the output lot, and
+    # for a record dated before a later physical count that lot can never be
+    # swept, inflating the shelf irrecoverably (CLAUDE.md, "NUNCA reaplicar
+    # produccion historica"). Everything else still takes the normal path --
+    # a changed cantidad_real genuinely has to rebuild the output.
+    def _igual(a, b) -> bool:
+        if a is None or b is None:
+            return a is None and b is None
+        return abs(a - b) < 1e-9
+
+    solo_consumo = (
+        es_produccion
+        and reg.producto_congelado_id is not None
+        and _igual(data.cantidad_real, reg.cantidad_real)
+        and _igual(data.duracion_real, reg.duracion_real)
+        and data.notas == reg.notas
+        and not _igual(data.consumo_padre_declarado, reg.consumo_padre_declarado)
+        and data.consumo_padre_declarado is not None
+    )
+    if solo_consumo:
+        mov = ajustar_consumo_padre(
+            db, reg.producto_congelado_id, referencia_de(reg),
+            data.consumo_padre_declarado, user.id,
+        )
+        if mov is not None:
+            reg.consumo_padre_declarado = data.consumo_padre_declarado
+            db.commit()
+            db.refresh(reg)
+            return _registro_to_out(reg, 1, True)
+        # Nothing to adjust (the record was never applied, or the parent
+        # doesn't take a declared consumption) -- fall through and let the
+        # normal path handle it exactly as before.
 
     revertir_efectos(db, reg, user.id)
     reg.cantidad_real = data.cantidad_real

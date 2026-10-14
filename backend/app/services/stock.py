@@ -1059,6 +1059,177 @@ def _restaurar_lotes(db: Session, mov: MovimientoStock, devuelto: float, fecha: 
         ))
 
 
+def movimiento_consumo_padre(
+    db: Session, referencia: str, padre_id: int
+) -> Optional[MovimientoStock]:
+    """The single live `produccion_consumo` movement a record booked against
+    its parent product, or None.
+
+    `revertir_consumos` can't tell this row apart from a congelado-subreceta
+    consumption -- both are `produccion_consumo` under the same referencia --
+    so the discriminator is `referencia_producto_id == padre.id`. Returns None
+    rather than guessing if somehow more than one matches (a recipe whose
+    subreceta line targets the parent's own product would do it), because the
+    caller is about to restore lots from whichever it picked.
+    """
+    movs = (
+        db.query(MovimientoStock)
+        .filter(
+            MovimientoStock.referencia_origen == referencia,
+            MovimientoStock.tipo_stock == "congelado",
+            MovimientoStock.tipo_movimiento == "produccion_consumo",
+            MovimientoStock.referencia_producto_id == padre_id,
+        )
+        .all()
+    )
+    return movs[0] if len(movs) == 1 else None
+
+
+def ajustar_consumo_padre(
+    db: Session,
+    producto_congelado_id: int,
+    referencia: str,
+    nuevo_consumo: float,
+    user_id: Optional[int] = None,
+) -> Optional[MovimientoStock]:
+    """Change how much of the PARENT a production record consumed, touching
+    nothing else about that record.
+
+    Why this exists instead of revert+reapply: `revertir_efectos` +
+    `aplicar_efectos` rewrites every effect of the record, including creating
+    a fresh output `StockCongelado` lot. For a record dated before a later
+    physical count that new lot can never be swept (`reconciliar_lotes_tras_conteo`
+    filters by `id <`), so the shelf inflates with no way back -- this is the
+    2026-10-13 incident documented at length in CLAUDE.md ("NUNCA reaplicar
+    produccion historica"), which put Pan 1kg Integral at 187 against a real 23.
+
+    So this deliberately never calls `producir_producto`, `aplicar_efectos`,
+    `revertir_efectos` or `revertir_consumos`. It never reads or writes a
+    `StockCongelado` row carrying a `registro_produccion_id` (the output lot),
+    and never touches `InventarioRegistro` (the ingredients). Those stay
+    correct by construction, not by care.
+
+    Two regimes, decided by `_conteo_posterior`: a record sitting behind a
+    physical count of the parent moves the LEDGER ONLY, because that count
+    already re-anchored the shelf -- see the long comment below, this was
+    learned the hard way. A record with no count after it does the full lot
+    restore and re-deduction.
+
+    What it does touch, and only this:
+      * the parent's lots, via `_restaurar_lotes` -> the exact lots the
+        original consumption drew from, by `ConsumoFifoDetalle` (only in the
+        no-count-since regime);
+      * the parent's `produccion_consumo` movement, retagged `:rev` next to a
+        compensating entry -- the same append-only shape as
+        `revertir_consumos`, so the pair nets to zero in any sum and is hidden
+        from activity feeds by `movimiento_no_revertido()`;
+      * a fresh consumption for `nuevo_consumo` at the SAME date and under the
+        same referencia, so the record still owns its own effect.
+
+    `cantidad_original` is never written, so no manual count and no calculado
+    anchor moves (`_conteos_manuales_por_fecha` reads that field and ignores
+    `is_active`).
+
+    Returns the new consumption movement, or None when there was nothing to
+    adjust: no parent, a parent that doesn't accept a declared consumption, no
+    live consumption movement to replace (the record was never applied), or
+    the value already matching. Callers must treat None as "not handled" and
+    decide for themselves whether to fall back.
+
+    The caller sets `RegistroProduccion.consumo_padre_declarado`; this function
+    deliberately doesn't, so it stays usable from a context that only has ids.
+    """
+    prod = (
+        db.query(ProductoCongelado)
+        .filter(ProductoCongelado.id == producto_congelado_id)
+        .first()
+    )
+    if not prod or not prod.producto_padre_id:
+        return None
+    padre = (
+        db.query(ProductoCongelado)
+        .filter(ProductoCongelado.id == prod.producto_padre_id)
+        .first()
+    )
+    if not admite_consumo_declarado(padre):
+        return None
+
+    mov = movimiento_consumo_padre(db, referencia, padre.id)
+    if mov is None:
+        return None
+    anterior = -mov.cantidad  # consumption is stored negative
+    if abs(anterior - nuevo_consumo) < 1e-9:
+        return None
+
+    # The record's own date, never today -- same reason revertir_consumos takes
+    # one: a give-back dated later than the re-apply would outrank it.
+    fecha_mov = mov.fecha
+    rev_ref = f"{referencia}:rev"
+
+    # A physical count dated on or after this production has ALREADY absorbed
+    # its effect on the shelf: reconciliar_lotes_tras_conteo deactivated every
+    # lot that preceded it. So for a record behind a count the lots must not
+    # move at all -- only the ledger.
+    #
+    # Doing it anyway is wrong in both directions, and both were observed:
+    # `_restaurar_lotes` reactivates any lot it credits (`is_active = True`
+    # whenever the result is positive), so giving back 0,08 to a lot the count
+    # had swept while it still held 2 units RESURRECTS all 2 -- Masa Barra
+    # Blanca came out at -1,88 instead of the predicted -3,00. And re-deducting
+    # afterwards books a consumption the count already accounted for, a second
+    # time.
+    tras_conteo = _conteo_posterior(db, padre.id, fecha_mov)
+
+    if not tras_conteo:
+        _restaurar_lotes(db, mov, anterior, fecha_mov)
+        db.flush()  # autoflush=False -- the saldo read below must see the restored lots
+
+    registrar_movimiento(
+        db, "congelado", padre.id, anterior, mov.unidad,
+        mov.tipo_movimiento, rev_ref, get_saldo_congelado(db, padre.id), user_id,
+        notas=f"Reversion de {referencia} (ajuste de consumo de {padre.nombre})",
+        fecha=fecha_mov,
+    )
+    mov.referencia_origen = rev_ref
+    db.flush()
+
+    if tras_conteo:
+        # Ledger only. No ConsumoFifoDetalle rows, so a later full revert of
+        # this record falls back to _restaurar_lotes' reconstructed-lot branch
+        # -- which is the same thing that happens to any movement predating
+        # that table, and still the right answer here: there are no real lots
+        # left to give back to.
+        nuevo = registrar_movimiento(
+            db, "congelado", padre.id, -nuevo_consumo, mov.unidad,
+            "produccion_consumo", referencia, get_saldo_congelado(db, padre.id), user_id,
+            notas=f"Consumo corregido de {padre.nombre} (conteo posterior: los lotes no se tocan)",
+            fecha=fecha_mov,
+        )
+        db.flush()
+        return nuevo
+
+    return deducir_congelado_fifo(
+        db, padre.id, nuevo_consumo, referencia, user_id,
+        fecha=fecha_mov, tipo_movimiento="produccion_consumo",
+    )
+
+
+def _conteo_posterior(db: Session, producto_congelado_id: int, fecha: date) -> bool:
+    """True if a genuine physical count of this product is dated on or after
+    `fecha` -- i.e. the shelf has already been re-anchored past that date."""
+    lotes = (
+        db.query(StockCongelado)
+        .filter(
+            StockCongelado.producto_congelado_id == producto_congelado_id,
+            StockCongelado.fecha_vencimiento.is_(None),
+            StockCongelado.registro_produccion_id.is_(None),
+            StockCongelado.fecha_entrada >= fecha,
+        )
+        .all()
+    )
+    return any(es_conteo_manual("congelado", l.notas) for l in lotes)
+
+
 def _revertir_correccion_conteo(db: Session, referencia: str, user_id: Optional[int]) -> None:
     """Undo a previous manual-count correction filed under `referencia`, if any.
 
