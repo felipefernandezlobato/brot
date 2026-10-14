@@ -18,6 +18,17 @@ from app.models import (
 from app.services.conversiones import convertir
 
 
+# Marks a MovimientoStock that was booked against the ledger WITHOUT taking
+# anything off a lot (ajustar_consumo_padre behind a physical count), so a
+# later reversal knows there is nothing to give back and must not reconstruct
+# a lot. Same "tag rides in notas" shape as the `subreceta:` marker.
+NOTA_SIN_LOTES = "sin-lotes: "
+# The 56 rows written by redondear_consumo_masa_dias.py on 2026-10-14 predate
+# the tag and carry this phrase instead. Recognised rather than rewritten --
+# retagging real ledger rows to fix a code bug is not worth it when matching
+# the text they already have is exact and costs nothing.
+NOTA_SIN_LOTES_LEGACY = "(conteo posterior: los lotes no se tocan)"
+
 NOTAS_AUTOMATICAS_MATERIA_PRIMA = ["Consumo automatico:", "Reversion de", "Pedido #"]
 NOTAS_AUTOMATICAS_CONGELADO = ["Produccion:", "Ajuste por reversion", "Reversion de", "Stock insuficiente"]
 
@@ -1032,6 +1043,13 @@ def revertir_consumos(
     return revertidos
 
 
+def movimiento_sin_lotes(mov: MovimientoStock) -> bool:
+    """True if this movement was booked against the ledger only, never taking
+    stock off a real lot -- so reversing it must not put any back."""
+    notas = mov.notas or ""
+    return notas.startswith(NOTA_SIN_LOTES) or NOTA_SIN_LOTES_LEGACY in notas
+
+
 def _restaurar_lotes(db: Session, mov: MovimientoStock, devuelto: float, fecha: date) -> None:
     """Put a FIFO consumption back on the exact lots it drew from."""
     detalles = (
@@ -1039,6 +1057,15 @@ def _restaurar_lotes(db: Session, mov: MovimientoStock, devuelto: float, fecha: 
         .filter(ConsumoFifoDetalle.movimiento_stock_id == mov.id)
         .all()
     )
+    if not detalles and movimiento_sin_lotes(mov):
+        # Booked against the ledger only (ajustar_consumo_padre behind a
+        # physical count), so it never took stock off a lot and there is
+        # nothing to give back. Without this the fallback below would invent
+        # an active, backdated lot for the full amount -- id too high for any
+        # count to ever sweep it, which is precisely the irreversible shelf
+        # inflation this tag exists to prevent. Tagging via `notas` follows
+        # the `subreceta:` precedent in this same table.
+        return
     if detalles:
         for det in detalles:
             lote = db.get(StockCongelado, det.stock_congelado_id)
@@ -1194,15 +1221,17 @@ def ajustar_consumo_padre(
     db.flush()
 
     if tras_conteo:
-        # Ledger only. No ConsumoFifoDetalle rows, so a later full revert of
-        # this record falls back to _restaurar_lotes' reconstructed-lot branch
-        # -- which is the same thing that happens to any movement predating
-        # that table, and still the right answer here: there are no real lots
-        # left to give back to.
+        # Ledger only -- and it MUST carry NOTA_SIN_LOTES. Without the tag, a
+        # later full revert of this record (any edit that isn't just the
+        # consumption, or a delete) reaches _restaurar_lotes with no
+        # ConsumoFifoDetalle rows and manufactures an active backdated lot for
+        # the whole amount, permanently inflating the shelf. Caught in review;
+        # there is a test pinning it.
         nuevo = registrar_movimiento(
             db, "congelado", padre.id, -nuevo_consumo, mov.unidad,
             "produccion_consumo", referencia, get_saldo_congelado(db, padre.id), user_id,
-            notas=f"Consumo corregido de {padre.nombre} (conteo posterior: los lotes no se tocan)",
+            notas=f"{NOTA_SIN_LOTES}consumo corregido de {padre.nombre} "
+                  f"(conteo posterior: los lotes no se tocan)",
             fecha=fecha_mov,
         )
         db.flush()

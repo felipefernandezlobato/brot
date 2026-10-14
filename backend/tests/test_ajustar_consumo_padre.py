@@ -335,6 +335,56 @@ def test_un_lote_barrido_por_un_conteo_no_resucita(db):
     assert get_saldo_congelado(db, masa.id) == 0.0
 
 
+def test_revertir_despues_de_un_ajuste_solo_ledger_no_inventa_un_lote(db):
+    """La trampa: en modo solo-ledger no hay `ConsumoFifoDetalle`, y la rama
+    de fallback de `_restaurar_lotes` fabrica un lote nuevo, activo y
+    backdateado por el monto completo. Ese lote nace con id alto y fecha
+    vieja, asi que ningun conteo lo barre nunca -- exactamente el inflado
+    irreversible que esta funcion existe para evitar, reintroducido por la
+    puerta de atras la proxima vez que alguien edite o borre el registro."""
+    from app.services.stock import revertir_consumos
+
+    _ing, masa, pan = _cadena_pan(db)
+    _hornear(db, pan)
+    _contar(db, masa, cantidad=0.0, dias=1)
+    ajustar_consumo_padre(db, pan.id, REF, 1.0)
+    db.commit()
+    assert get_saldo_congelado(db, masa.id) == 0.0
+
+    revertir_consumos(db, REF, None, fecha=date.today())
+    db.commit()
+
+    assert get_saldo_congelado(db, masa.id) == 0.0, (
+        "revertir un ajuste solo-ledger no puede crear stock fisico de la nada"
+    )
+
+
+def test_las_filas_sin_el_tag_nuevo_tambien_quedan_protegidas(db):
+    """Las 56 filas escritas en produccion el 14/10 llevan la nota vieja, sin
+    el prefijo `sin-lotes:`. Se reconocen por su texto en vez de reescribirlas,
+    asi que esto pinea ese texto exacto."""
+    from app.services.stock import movimiento_sin_lotes, revertir_consumos
+
+    _ing, masa, pan = _cadena_pan(db)
+    _hornear(db, pan)
+    _contar(db, masa, cantidad=0.0, dias=1)
+    ajustar_consumo_padre(db, pan.id, REF, 1.0)
+    db.commit()
+
+    vivo = [m for m in db.query(MovimientoStock).filter(
+        MovimientoStock.tipo_stock == "congelado",
+        MovimientoStock.referencia_producto_id == masa.id,
+        MovimientoStock.referencia_origen == REF).all()][0]
+    # Reescribir la nota al formato anterior al tag.
+    vivo.notas = "Consumo corregido de Masa Pan Blanco (conteo posterior: los lotes no se tocan)"
+    db.commit()
+    assert movimiento_sin_lotes(vivo)
+
+    revertir_consumos(db, REF, None, fecha=date.today())
+    db.commit()
+    assert get_saldo_congelado(db, masa.id) == 0.0
+
+
 def test_funciona_aunque_el_consumo_deje_la_masa_negativa(db):
     """Subir el consumo por encima de lo disponible no se clampea: se asienta
     en un lote de ajuste negativo, igual que cualquier otra deduccion."""
