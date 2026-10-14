@@ -580,9 +580,17 @@ toca `InventarioRegistro` (los ingredientes).
   había absorbido. Medido en vivo: Masa Barra Blanca dio −1,88 contra una
   predicción de −3,00. La verificación del script lo atajó y no se escribió nada.
 
-En modo solo-ledger no se crean filas `ConsumoFifoDetalle`, así que un revert
-completo posterior de ese registro cae en la rama de "lote reconstruido" de
-`_restaurar_lotes` — correcto, porque no quedan lotes reales a los que devolver.
+**El movimiento solo-ledger DEBE llevar `NOTA_SIN_LOTES` en `notas`.** Sin el
+tag no hay filas `ConsumoFifoDetalle`, y un revert completo posterior del
+registro (cualquier edición que no sea solo el consumo, o un borrado) llega a
+`_restaurar_lotes` sin detalle y **fabrica un lote nuevo, activo y backdateado
+por el monto completo** — id alto y fecha vieja, o sea que ningún conteo lo
+barre nunca: el mismo inflado irreversible, por la puerta de atrás.
+`movimiento_sin_lotes()` es el discriminador y `_restaurar_lotes` no devuelve
+nada cuando da true. Encontrado en revisión el mismo día, era latente (solo se
+disparaba al editar uno de esos registros) y hay un test que lo pinea.
+Las 56 filas escritas antes del tag llevan la nota anterior, así que
+`NOTA_SIN_LOTES_LEGACY` reconoce ese texto en vez de reescribir filas reales.
 
 `PUT /api/produccion/registro/{id}` **hacía `revertir_efectos` + `aplicar_efectos`
 incondicionalmente**, así que corregir el consumo de masa de un registro viejo
