@@ -784,6 +784,17 @@ Cleaning and packaging supplies are bought and stocked through the same Ingredie
 ### Sidebar / BottomNav order follows the workshop flow (2026-09-29)
 `NAV_ITEMS` in `components/Sidebar.tsx` and `components/BottomNav.tsx` are two separate lists that must stay in the same order. Compras Ingredientes comes before Stock Materia Prima (you buy first, then it enters stock) and Mermas before Stock Congelado.
 
+**The two lists DID drift (found 2026-10-15): Competencia was in the Sidebar and
+missing from the BottomNav**, so on a phone there was no way to navigate to
+`/competencia` at all. Worse, `BottomNav` used `flex justify-around` with no
+overflow handling: 12 items at a 64px minimum need 768px and a phone is 390, so
+the last six (Produccion onwards) rendered off-screen and were simply
+unreachable — nothing scrolled them into view. The row is `flex overflow-x-auto`
+now, and **`justify-around` must not come back**: on an overflowing flex row it
+also pushes the first item past the left edge, where scrolling can't reach it.
+Adding a nav item costs ~64px of a budget that is already over; check it on a
+390px viewport.
+
 ### Competencia: `receta_id` is a required FK, so a competitor-only product needs a placeholder recipe (2026-09-30)
 `PrecioCompetencia.receta_id` is `ForeignKey("recetas.id")` and **not nullable**, and `create_competencia` 404s on an unknown id. There is no free-text product field, so a price for something the bakery does not make yet cannot be stored at all. Worked around by creating **Receta 49 "Pan Bollito"** in Panes with no lines and `precio_venta = None` — deliberately no PVP so `/competencia/comparar` shows the market prices with `pvp: null` and Escandallos shows "—" for multi instead of a fabricated one.
 - **This is the same empty-recipe shape flagged as dangerous under the PVP section** (Baston Cinnamon Roll). It is safe *only* while it has no `precio_venta`: give it a price without filling in the lines and it becomes the same trap. When the product goes into production, load its real lines.
