@@ -270,7 +270,15 @@ export default function CompetenciaPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-warm-gray text-xs uppercase tracking-wide">
-                  <th className="text-left px-3 py-3 min-w-[160px]">Receta</th>
+                  {/* Sticky: la tabla mide ~710px y en un movil el contenedor
+                      da 358, asi que hay que desplazarla si o si. Sin fijar
+                      esta columna, mirar el precio de un competidor dejaba
+                      fuera de pantalla el nombre del producto. Fondo opaco
+                      obligatorio -- una celda sticky no hereda el fondo de su
+                      fila y se veria el texto de debajo al pasar. */}
+                  <th className="sticky left-0 z-20 bg-card text-left px-3 py-3 min-w-[150px]">
+                    Receta
+                  </th>
                   <th className="text-right px-3 py-3 min-w-[110px]">
                     PVP B2B
                   </th>
@@ -294,7 +302,7 @@ export default function CompetenciaPage() {
                       key={row.receta_id}
                       className="border-b border-gray-50 hover:bg-cream transition-colors"
                     >
-                      <td className="px-3 py-3">
+                      <td className="sticky left-0 z-10 bg-card px-3 py-3">
                         <div className="font-medium text-text">
                           {row.receta_nombre}
                         </div>

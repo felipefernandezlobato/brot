@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/congelados", label: "Congelado" },
   { href: "/entregas", label: "Entregas" },
   { href: "/protocolos", label: "Protocolos" },
+  { href: "/competencia", label: "Competencia", admin: true },
   { href: "/admin", label: "Admin", admin: true },
 ];
 
@@ -25,7 +26,14 @@ export function BottomNav({ role }: { role: string }) {
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-cream-dark z-40 pb-[env(safe-area-inset-bottom)]">
-      <div className="flex justify-around">
+      {/* Scrollable, NOT justify-around. 13 items at 64px minimum need 832px
+          and a phone is 390: with the old `flex justify-around` and no
+          overflow the last six (Produccion onwards, Competencia and Admin
+          included) rendered off-screen and were simply unreachable on a
+          phone -- nothing scrolled them into view. `justify-around` must not
+          come back here either: on an overflowing flex row it pushes the
+          first item off the left edge too, where scrolling can't reach it. */}
+      <div className="flex overflow-x-auto">
         {items.map((item) => {
           const active =
             item.href === "/"
@@ -35,7 +43,7 @@ export function BottomNav({ role }: { role: string }) {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center py-2 px-3 min-w-[64px] min-h-[44px] ${
+              className={`flex shrink-0 flex-col items-center justify-center py-2 px-3 min-w-[64px] min-h-[44px] ${
                 active ? "text-brot" : "text-warm-gray"
               }`}
             >
