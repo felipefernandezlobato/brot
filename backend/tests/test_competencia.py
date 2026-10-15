@@ -83,3 +83,55 @@ def test_comparar_view(client, db):
     nombres = {c["competidor_nombre"] for c in entry["competidores"]}
     assert "Panaderia Rival" in nombres
     assert "Panaderia Sur" in nombres
+
+
+def test_comparar_deja_fuera_masas_bastones_y_subrecetas(client, db):
+    """La comparacion es de lo que vendemos. De las 43 recetas reales, 19 son
+    etapas intermedias (masas, bastones, crudos) que solo aportaban filas
+    vacias."""
+    token, receta_id = _setup(client, db)
+    cat = db.query(Categoria).first()
+    db.add_all([
+        # Flagged subreceta: fuera.
+        Receta(nombre="Masa Madre", categoria_id=cat.id, porciones_por_lote=1,
+               es_subreceta=True),
+        # NO flagged subreceta pero sin PVP -- las cuatro masas reales
+        # (Masa Barra Blanca/Integral, Masa de Pan Lomo, Masa de Pizza) son
+        # exactamente esta forma, y es la que el filtro por `es_subreceta`
+        # solo no atrapaba.
+        Receta(nombre="Masa de Pizza", categoria_id=cat.id, porciones_por_lote=1),
+        # Baston: es_subreceta y ademas precio_venta 0, no None.
+        Receta(nombre="Baston Croissant", categoria_id=cat.id, porciones_por_lote=1,
+               es_subreceta=True, precio_venta=0.0),
+    ])
+    db.commit()
+
+    data = client.get("/api/competencia/comparar",
+                      headers={"Authorization": f"Bearer {token}"}).json()
+    nombres = {r["receta_nombre"] for r in data}
+    assert nombres == {"Pan de molde"}, nombres
+
+
+def test_comparar_mantiene_un_producto_sin_pvp_que_tiene_competencia(client, db):
+    """Pan Bollito: placeholder deliberado de algo que todavia no hacemos, sin
+    PVP a proposito (CLAUDE.md). Filtrar por PVP a secas se llevaria puestos
+    los precios de mercado cargados contra el."""
+    token, _receta_id = _setup(client, db)
+    cat = db.query(Categoria).first()
+    bollito = Receta(nombre="Pan Bollito", categoria_id=cat.id, porciones_por_lote=1)
+    db.add(bollito)
+    db.commit()
+
+    data = client.get("/api/competencia/comparar",
+                      headers={"Authorization": f"Bearer {token}"}).json()
+    assert "Pan Bollito" not in {r["receta_nombre"] for r in data}
+
+    client.post("/api/competencia",
+                json={"receta_id": bollito.id, "competidor_nombre": "BRUTO", "precio": 1800},
+                headers={"Authorization": f"Bearer {token}"})
+
+    data = client.get("/api/competencia/comparar",
+                      headers={"Authorization": f"Bearer {token}"}).json()
+    entry = next(r for r in data if r["receta_nombre"] == "Pan Bollito")
+    assert entry["pvp"] is None
+    assert len(entry["competidores"]) == 1

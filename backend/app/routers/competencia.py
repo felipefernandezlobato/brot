@@ -20,7 +20,25 @@ def comparar_competencia(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Each recipe with its PVP + all competitor prices side by side."""
+    """Each FINISHED product with its PVP + all competitor prices side by side.
+
+    Only what we actually sell: the 43 recipes include masas, bastones and
+    crudos, so the comparison used to be 19 rows of permanently empty
+    intermediate stages (Masa Madre, Baston Croissant, Pure...) around the 24
+    that mean something.
+
+    `ProductoCongelado.nivel == "terminado"` looks like the obvious filter and
+    is WRONG on real data: Sacramento is stored as `crudo` and Ensaimadas as
+    `semi`, yet both are sold and Sacramento already carries a competitor
+    price. Having a PVP is what actually means "we sell this" -- every masa
+    and baston has `precio_venta` null or 0, including the four masa-stage
+    recipes that aren't flagged `es_subreceta` (Masa Barra Blanca/Integral,
+    Masa de Pan Lomo, Masa de Pizza).
+
+    Recipes with competitor prices but no PVP are kept regardless, or Pan
+    Bollito -- the deliberate placeholder for a product we don't make yet,
+    see CLAUDE.md -- would vanish along with the prices loaded against it.
+    """
     recetas = db.query(Receta).order_by(Receta.nombre).all()
     precios = db.query(PrecioCompetencia).all()
 
@@ -30,6 +48,10 @@ def comparar_competencia(
 
     result = []
     for receta in recetas:
+        if receta.es_subreceta:
+            continue
+        if not (receta.precio_venta or 0) > 0 and receta.id not in mapa:
+            continue
         competidores = [
             {
                 "id": p.id,
