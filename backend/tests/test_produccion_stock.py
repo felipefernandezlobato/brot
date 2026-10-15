@@ -992,3 +992,34 @@ def test_extra_con_consumo_declarado(client, db):
     )
     assert res.status_code in (200, 201), res.text
     assert _stock_congelado(db, masa.id) == pytest.approx(1.0)
+
+
+def test_dia_muestra_el_trabajo_de_una_tarea_retirada_del_plan(client, db):
+    """Al reorganizar el plan (2026-10-15) ocho tareas pasaron a is_active=False
+    y sus 44 registros reales desaparecieron de la pantalla del dia: `items`
+    solo recorre tareas activas y `extras` solo aceptaba tarea_id NULL, asi que
+    no caian en ninguna lista. El trabajo se hizo y movio stock."""
+    headers = _auth(client, db)
+    ing = _harina(db)
+    _receta, _prod, tarea = _masa(db, ing)
+    # /dia filtra por el isoweekday de la fecha pedida, no por el id de tarea.
+    tarea.dia_semana = date.today().isoweekday()
+    db.commit()
+
+    r = client.post("/api/produccion/registro", json={
+        "tarea_id": tarea.id, "fecha": HOY, "completada": True, "cantidad_real": 1.0,
+    }, headers=headers)
+    assert r.status_code in (200, 201), r.text
+
+    dia = client.get(f"/api/produccion/dia?fecha={HOY}", headers=headers).json()
+    assert any(t["tarea_id"] == tarea.id for t in dia["tareas"])
+    assert dia["extras"] == []
+
+    tarea.is_active = False
+    db.commit()
+
+    dia = client.get(f"/api/produccion/dia?fecha={HOY}", headers=headers).json()
+    assert all(t["tarea_id"] != tarea.id for t in dia["tareas"])
+    assert len(dia["extras"]) == 1, "el registro no puede desaparecer de la pantalla"
+    assert dia["extras"][0]["titulo"] == tarea.titulo
+    assert dia["extras"][0]["cantidad_real"] == 1.0

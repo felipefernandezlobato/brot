@@ -214,7 +214,15 @@ def get_dia(
         .all()
     )
     reg_by_tarea = {r.tarea_id: r for r in registros if r.tarea_id is not None}
-    extras = [r for r in registros if r.tarea_id is None]
+    # Un registro cuya tarea salio del plan (is_active=False) no entra en
+    # `items` -- ese bucle solo recorre tareas activas -- y antes tampoco
+    # entraba aca, asi que desaparecia de la pantalla por completo. Reorganizar
+    # el plan el 2026-10-15 dejo 44 registros reales invisibles de golpe
+    # (Limpieza de los viernes, LLEVAR PEDIDO, Sacramento...). El trabajo se
+    # hizo y movio stock: va con los extras, que es justo "lo que pasó ese dia
+    # fuera del plan de hoy".
+    ids_activos = {t.id for t in tareas}
+    extras = [r for r in registros if r.tarea_id is None or r.tarea_id not in ids_activos]
 
     items = []
     for t in tareas:
@@ -251,7 +259,12 @@ def get_dia(
         )
         extras_out.append({
             "registro_id": r.id,
-            "titulo": r.receta.nombre if r.receta else r.titulo_extra,
+            # El titulo de la tarea es el ultimo recurso, pero para una tarea
+            # retirada del plan es el UNICO: una Limpieza no tiene receta ni
+            # titulo_extra, asi que sin esto saldria en blanco.
+            "titulo": (r.receta.nombre if r.receta else None)
+                      or r.titulo_extra
+                      or (r.tarea.titulo if r.tarea else None),
             "receta_id": r.receta_id,
             "producto_congelado_id": r.producto_congelado_id,
             "unidad_cantidad": r.unidad_extra or (prod_extra.unidad if prod_extra else None),
