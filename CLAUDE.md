@@ -415,7 +415,9 @@ the parent's cost by it and never reads production history), so a declared
 consumption moves stock only — no product cost changes. The input in both
 production screens is labelled with the parent's actual name
 (`consumo_padre_label` from `GET /dia`), not a fixed "bast." that said nothing
-when logging bread, and its placeholder is `auto` because empty means derived.
+when logging bread. It used to carry an `auto` placeholder (empty means
+derived); Felipe asked for it blank on 2026-10-15, so the box is empty — the
+label next to it already says which masa/bastón it is.
 Input schemas accept `bastones_consumidos` as an alias — Vercel and Render
 deploy separately, so an old frontend talks to a new backend during the window,
 and without it Pydantic drops the unknown key and silently reverts to derived.
