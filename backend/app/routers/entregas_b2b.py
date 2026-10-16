@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +20,7 @@ from app.models import (
     User,
 )
 from app.services.acceso_cliente import enviar_invitacion
+from app.services.email import app_url, enviar_email
 from app.services.costes import costo_receta, receta_incompleta
 from app.services.stock import deducir_congelado_por_catalogo, revertir_consumos
 from app.permissions import require_permission
@@ -66,6 +67,8 @@ def _cliente_out(c: ClienteB2B) -> dict:
         "nombre": c.nombre,
         "email": c.email,
         "tiene_acceso": bool(c.password_hash),
+        "email_verificado": bool(c.email_verificado_at),
+        "aprobado": bool(c.aprobado_at),
         "direccion": c.direccion,
         "telefono": c.telefono,
         "contacto": c.contacto,
@@ -106,6 +109,13 @@ def create_cliente_b2b(
     campos = data.model_dump()
     campos["email"] = _email_libre(db, campos.get("email"))
     obj = ClienteB2B(**campos)
+    # Darlo de alta uno mismo ya es aprobarlo: no tiene sentido que Felipe
+    # tenga que aprobar a alguien que acaba de escribir con sus propias manos.
+    # El alta PROPIA del portal (auth_cliente.registrar) nace con las dos en
+    # None, que es lo que la deja pendiente.
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+    obj.aprobado_at = ahora
+    obj.email_verificado_at = ahora
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -750,3 +760,67 @@ def corregir_recetas_faltantes(
 
     db.commit()
     return resultado
+
+@clientes_router.post("/{cliente_id}/aprobar")
+def aprobar_cliente_b2b(
+    cliente_id: int,
+    user: User = require_permission("entregas_b2b", "edit"),
+    db: Session = Depends(get_db),
+):
+    """Le abre el portal a un cliente que se registro solo.
+
+    Exige que haya verificado su correo primero. Aprobar a alguien con un
+    correo que no existe le da acceso a una cuenta que no va a poder
+    recuperar nunca si pierde la contrasena, y a la que no le podemos avisar
+    de nada.
+    """
+    cliente = db.query(ClienteB2B).filter(ClienteB2B.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente B2B no encontrado")
+    if not cliente.email_verificado_at:
+        raise HTTPException(
+            status_code=409,
+            detail="Todavia no confirmo su correo. Esperá a que lo haga o reenviale el enlace.",
+        )
+    if cliente.aprobado_at:
+        return {"aprobado": True, "avisado": False}
+
+    cliente.aprobado_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    avisado = enviar_email(
+        cliente.email,
+        "Tu cuenta de BROT ya esta activa",
+        f"""Hola {cliente.nombre},
+
+Ya revisamos tu alta y tu cuenta esta activa. Podes entrar y hacer tu pedido:
+
+{app_url()}/cliente
+
+Los pedidos se entregan miercoles y sabado.
+
+BROT La Panaderia
+""",
+    ) if cliente.email else False
+    db.commit()
+    return {"aprobado": True, "avisado": avisado}
+
+
+@clientes_router.post("/{cliente_id}/rechazar")
+def rechazar_cliente_b2b(
+    cliente_id: int,
+    user: User = require_permission("entregas_b2b", "edit"),
+    db: Session = Depends(get_db),
+):
+    """Desactiva un alta que no se acepta.
+
+    No borra la fila: si mañana resulta que si era un cliente de verdad,
+    reactivarlo es un clic, y borrarlo dejaria el correo libre para que un
+    tercero se registre con el. Tampoco le manda ningun aviso -- decirle
+    "te rechazamos" por un correo automatico es peor que no decir nada;
+    si hay algo que explicar, lo explica una persona.
+    """
+    cliente = db.query(ClienteB2B).filter(ClienteB2B.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente B2B no encontrado")
+    cliente.is_active = False
+    db.commit()
+    return {"ok": True}

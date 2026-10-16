@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CustomerAuthGuard } from "@/components/CustomerAuthGuard";
+import { CuentaPendiente } from "@/components/CuentaPendiente";
 import { CustomerNav } from "@/components/CustomerNav";
 import { apiClienteFetch } from "@/lib/api-cliente";
 import { useToast } from "@/components/Toast";
@@ -501,7 +502,17 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
 export default function ClientePage() {
   return (
     <CustomerAuthGuard>
-      {(cliente) => <ClienteDashboard cliente={cliente} />}
+      {(cliente) =>
+        // Sin el alta completa no se monta el dashboard: no es solo que no
+        // pueda confirmar el pedido, es que no puede ver el catalogo ni los
+        // precios. El backend tambien lo bloquea (get_cliente_aprobado); esto
+        // evita que la pantalla pida datos que le van a dar 403.
+        cliente.puede_pedir ? (
+          <ClienteDashboard cliente={cliente} />
+        ) : (
+          <CuentaPendiente cliente={cliente} />
+        )
+      }
     </CustomerAuthGuard>
   );
 }

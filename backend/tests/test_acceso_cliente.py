@@ -54,14 +54,6 @@ def _token_de(db, cliente_id):
 # ---------------------------------------------------------------- alta
 
 
-def test_el_registro_abierto_esta_cerrado(client, db):
-    res = client.post("/api/auth/cliente/registro", json={
-        "email": "random@internet.com", "password": "loquesea123", "nombre": "Random",
-    })
-    assert res.status_code == 410
-    assert db.query(ClienteB2B).count() == 0
-
-
 def test_invitar_crea_un_token_de_alta(client, db, monkeypatch):
     capturado = {}
     monkeypatch.setattr(
@@ -238,3 +230,129 @@ def test_cambiar_password_requiere_sesion(client, db):
     assert client.post(
         "/api/auth/cliente/cambiar-password", json={"actual": "x", "nueva": "flamante123"}
     ).status_code in (401, 403)
+
+
+# ------------------------------------------------- alta propia + aprobacion
+
+
+def _registrarse(client, monkeypatch, email="nuevo@test.com", nombre="Panaderia Nueva"):
+    """Devuelve (token de sesion, lista de cuerpos de correo enviados)."""
+    correos = []
+    monkeypatch.setattr(
+        "app.services.acceso_cliente.enviar_email",
+        lambda destino, asunto, cuerpo: correos.append((destino, asunto, cuerpo)) or True,
+    )
+    res = client.post("/api/auth/cliente/registro", json={
+        "email": email, "password": "miclave123", "nombre": nombre,
+        "telefono": "+54 9 260 400 0846", "direccion": "San Martin 100",
+    })
+    assert res.status_code == 201, res.text
+    return res.json()["token"], correos
+
+
+def test_registrarse_deja_la_cuenta_pendiente(client, db, monkeypatch):
+    tok, correos = _registrarse(client, monkeypatch)
+    c = db.query(ClienteB2B).filter(ClienteB2B.email == "nuevo@test.com").first()
+    assert c is not None
+    assert c.email_verificado_at is None
+    assert c.aprobado_at is None
+    assert c.telefono and c.direccion  # el alta recoge sus datos, no los pone Felipe
+
+    me = client.get("/api/auth/cliente/me", headers={"Authorization": f"Bearer {tok}"}).json()
+    assert me["email_verificado"] is False
+    assert me["aprobado"] is False
+    assert me["puede_pedir"] is False
+
+
+def test_el_alta_avisa_al_cliente_y_a_brot(client, db, monkeypatch, ):
+    monkeypatch.setenv("SMTP_USER", "brotlapanaderia@gmail.com")
+    _tok, correos = _registrarse(client, monkeypatch)
+    destinos = [d for d, _a, _c in correos]
+    assert "nuevo@test.com" in destinos, "el cliente tiene que recibir su enlace"
+    assert "brotlapanaderia@gmail.com" in destinos, "BROT tiene que enterarse de que hay alguien esperando"
+
+
+def test_el_email_se_normaliza_tambien_en_el_alta_propia(client, db, monkeypatch):
+    _registrarse(client, monkeypatch, email="  Nuevo@Test.com  ")
+    c = db.query(ClienteB2B).first()
+    assert c.email == "nuevo@test.com"
+
+
+def test_no_se_puede_registrar_dos_veces_el_mismo_correo(client, db, monkeypatch):
+    _registrarse(client, monkeypatch, email="repe@test.com")
+    monkeypatch.setattr("app.services.acceso_cliente.enviar_email", lambda *a: True)
+    res = client.post("/api/auth/cliente/registro", json={
+        "email": "REPE@test.com", "password": "otraclave1", "nombre": "Impostor",
+    })
+    assert res.status_code == 409
+
+
+def test_un_pendiente_no_puede_pedir(client, db, monkeypatch):
+    tok, _ = _registrarse(client, monkeypatch)
+    res = client.post(
+        "/api/cliente/pedidos",
+        json={"fecha_entrega": "2026-10-21", "lineas": [{"producto_id": 1, "cantidad": 1}]},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert res.status_code == 403
+
+
+def test_verificar_el_correo_no_alcanza_para_pedir(client, db, monkeypatch):
+    """Son dos puertas distintas: verificar es cosa del cliente, aprobar es
+    cosa de BROT."""
+    tok, correos = _registrarse(client, monkeypatch)
+    enlace = [c for _d, _a, c in correos if "verificar?token=" in c][0]
+    token = enlace.split("verificar?token=")[1].split()[0]
+
+    assert client.post("/api/auth/cliente/verificar", json={"token": token}).status_code == 204
+    me = client.get("/api/auth/cliente/me", headers={"Authorization": f"Bearer {tok}"}).json()
+    assert me["email_verificado"] is True
+    assert me["puede_pedir"] is False  # falta la aprobacion
+
+
+def test_no_se_puede_aprobar_a_quien_no_verifico(client, db, monkeypatch):
+    """Aprobar un correo que no existe da acceso a una cuenta irrecuperable."""
+    _registrarse(client, monkeypatch)
+    c = db.query(ClienteB2B).first()
+    admin = _admin(client, db)
+    res = client.post(f"/api/clientes-b2b/{c.id}/aprobar", headers={"Authorization": f"Bearer {admin}"})
+    assert res.status_code == 409
+
+
+def test_el_circuito_completo(client, db, monkeypatch):
+    tok, correos = _registrarse(client, monkeypatch)
+    token = [c for _d, _a, c in correos if "verificar?token=" in c][0].split("verificar?token=")[1].split()[0]
+    client.post("/api/auth/cliente/verificar", json={"token": token})
+
+    c = db.query(ClienteB2B).first()
+    admin = _admin(client, db)
+    monkeypatch.setattr("app.routers.entregas_b2b.enviar_email", lambda *a: True)
+    res = client.post(f"/api/clientes-b2b/{c.id}/aprobar", headers={"Authorization": f"Bearer {admin}"})
+    assert res.status_code == 200 and res.json()["aprobado"] is True
+
+    me = client.get("/api/auth/cliente/me", headers={"Authorization": f"Bearer {tok}"}).json()
+    assert me["puede_pedir"] is True
+    assert client.get("/api/catalogo", headers={"Authorization": f"Bearer {tok}"}).status_code == 200
+
+
+def test_rechazar_desactiva_sin_borrar(client, db, monkeypatch):
+    """Borrarlo dejaria el correo libre para que un tercero se registre con el."""
+    _registrarse(client, monkeypatch)
+    c = db.query(ClienteB2B).first()
+    admin = _admin(client, db)
+    assert client.post(f"/api/clientes-b2b/{c.id}/rechazar",
+                       headers={"Authorization": f"Bearer {admin}"}).status_code == 200
+    db.refresh(c)
+    assert c.is_active is False
+    assert db.query(ClienteB2B).filter(ClienteB2B.email == c.email).first() is not None
+
+
+def test_un_cliente_que_crea_felipe_nace_aprobado(client, db):
+    """Darlo de alta el mismo ya es aprobarlo: no tiene sentido que tenga que
+    aprobar a alguien que acaba de escribir con sus propias manos."""
+    admin = _admin(client, db)
+    res = client.post("/api/clientes-b2b", json={"nombre": "A mano", "email": "amano@test.com"},
+                      headers={"Authorization": f"Bearer {admin}"})
+    assert res.status_code == 201
+    assert res.json()["aprobado"] is True
+    assert res.json()["email_verificado"] is True

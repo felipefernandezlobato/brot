@@ -15,8 +15,14 @@ from app.schemas import (
     EstablecerPassword,
     RecuperarPassword,
     TokenResponse,
+    VerificarEmail,
 )
-from app.services.acceso_cliente import consumir_token, enviar_recuperacion
+from app.services.acceso_cliente import (
+    avisar_alta_a_brot,
+    consumir_token,
+    enviar_recuperacion,
+    enviar_verificacion,
+)
 
 router = APIRouter(prefix="/api/auth/cliente", tags=["auth-cliente"])
 
@@ -31,22 +37,70 @@ def normalizar_email(email: str) -> str:
     return email.strip().lower()
 
 
-@router.post("/registro", status_code=410)
+@router.post("/registro", response_model=TokenResponse, status_code=201)
 def registrar(data: ClienteRegistro, db: Session = Depends(get_db)):
-    """Cerrado desde el 2026-10-16: el alta es por invitacion.
+    """Alta propia. Queda pendiente de dos cosas antes de poder pedir:
+    que el cliente confirme su correo y que BROT lo apruebe.
 
-    Permitia que cualquiera con el enlace se creara una cuenta y viera el
-    catalogo con los precios B2B. Los clientes son conocidos y pocos, asi que
-    ahora los da de alta Felipe desde el panel y al cliente le llega un correo
-    para poner su contrasena (POST /api/clientes-b2b/{id}/invitar).
+    Estuvo cerrada unas horas el 2026-10-16 (solo invitacion) y se reabrio el
+    mismo dia: con invitacion, cada cliente nuevo era trabajo manual de
+    Felipe. El riesgo que motivo cerrarla -- que cualquiera viera el catalogo
+    con precios B2B -- se resuelve ahora en el otro extremo: sin aprobar no
+    hay catalogo (ver `cliente_aprobado` en auth_cliente.py).
 
-    Se deja la ruta devolviendo 410 en vez de borrarla para que un frontend
-    viejo o un enlace guardado reciba un mensaje claro y no un 404 confuso.
+    Devuelve sesion iniciada a proposito: el cliente entra y ve en que estado
+    esta su alta, en vez de registrarse y quedarse mirando un login.
     """
-    raise HTTPException(
-        status_code=410,
-        detail="El registro es por invitacion. Pedinos acceso y te llega un correo.",
+    email = normalizar_email(data.email)
+    if db.query(ClienteB2B).filter(func.lower(func.trim(ClienteB2B.email)) == email).first():
+        raise HTTPException(status_code=409, detail="Ya hay una cuenta con ese correo")
+
+    cliente = ClienteB2B(
+        email=email,
+        password_hash=hash_password(data.password),
+        nombre=data.nombre.strip(),
+        telefono=data.telefono,
+        direccion=data.direccion,
+        is_active=True,
+        created_at=datetime.now(timezone.utc),
+        # Las dos puertas quedan cerradas: las abre el cliente (verificando)
+        # y Felipe (aprobando), cada uno la suya.
+        email_verificado_at=None,
+        aprobado_at=None,
     )
+    db.add(cliente)
+    db.flush()
+
+    enviar_verificacion(db, cliente)
+    avisar_alta_a_brot(cliente)
+    db.commit()
+    return {"token": create_cliente_token(cliente.id)}
+
+
+@router.post("/verificar", status_code=204)
+def verificar_email(data: VerificarEmail, db: Session = Depends(get_db)):
+    """Canjea el enlace del correo de alta."""
+    cliente = consumir_token(db, data.token)
+    if not cliente:
+        raise HTTPException(
+            status_code=400, detail="El enlace no es valido o ya se uso. Pedi uno nuevo."
+        )
+    if not cliente.email_verificado_at:
+        cliente.email_verificado_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.commit()
+
+
+@router.post("/reenviar-verificacion", status_code=202)
+def reenviar_verificacion(
+    cliente: ClienteB2B = Depends(get_current_cliente),
+    db: Session = Depends(get_db),
+):
+    """Para el cliente que ya entro y se le vencio el enlace de verificacion."""
+    if cliente.email_verificado_at:
+        return {"ok": True}
+    enviado = enviar_verificacion(db, cliente)
+    db.commit()
+    return {"enviado": enviado}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -73,6 +127,9 @@ def me(cliente: ClienteB2B = Depends(get_current_cliente)):
         nombre=cliente.nombre,
         telefono=cliente.telefono,
         direccion=cliente.direccion,
+        email_verificado=bool(cliente.email_verificado_at),
+        aprobado=bool(cliente.aprobado_at),
+        puede_pedir=cliente.puede_pedir,
     )
 
 

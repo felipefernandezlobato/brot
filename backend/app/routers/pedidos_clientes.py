@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.auth_cliente import get_current_cliente
+from app.auth_cliente import get_cliente_aprobado, get_current_cliente
 from app.database import get_db
 from app.models import (
     ClienteB2B,
@@ -112,7 +112,7 @@ def _build_entrega_out(
 @router.post("", response_model=PedidoClienteOut, status_code=201)
 def create_pedido(
     data: _PedidoRequest,
-    cliente: ClienteB2B = Depends(get_current_cliente),
+    cliente: ClienteB2B = Depends(get_cliente_aprobado),
     db: Session = Depends(get_db),
 ):
     if data.fecha_entrega.weekday() not in VALID_DELIVERY_DAYS:
@@ -171,7 +171,7 @@ def create_pedido(
 
 @router.get("", response_model=list[PedidoClienteOut])
 def list_pedidos(
-    cliente: ClienteB2B = Depends(get_current_cliente),
+    cliente: ClienteB2B = Depends(get_cliente_aprobado),
     db: Session = Depends(get_db),
 ):
     nombres = _nombres_productos(db)
@@ -198,7 +198,7 @@ def list_pedidos(
 @router.get("/{pedido_id}", response_model=PedidoClienteOut)
 def get_pedido(
     pedido_id: int,
-    cliente: ClienteB2B = Depends(get_current_cliente),
+    cliente: ClienteB2B = Depends(get_cliente_aprobado),
     db: Session = Depends(get_db),
 ):
     pedido = (

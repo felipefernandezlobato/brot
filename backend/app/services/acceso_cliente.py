@@ -16,6 +16,7 @@ cliente de reparto al que nunca se invito simplemente no tiene acceso.
 """
 
 import hashlib
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -27,7 +28,14 @@ from app.services.email import app_url, enviar_email
 
 # El alta da margen para que Felipe avise al cliente; el reset es corto a
 # proposito, que es el caso en el que un enlace filtrado hace mas dano.
-DURACION = {"alta": timedelta(hours=48), "reset": timedelta(hours=1)}
+DURACION = {
+    "alta": timedelta(hours=48),
+    "reset": timedelta(hours=1),
+    # Mas largo que el alta: el cliente acaba de registrarse y puede mirar el
+    # correo al dia siguiente. Si se le vence, la pantalla de "cuenta
+    # pendiente" tiene un boton para reenviarlo.
+    "verificacion": timedelta(days=7),
+}
 
 
 def _hash(token: str) -> str:
@@ -139,5 +147,62 @@ Si no fuiste vos, ignora este correo: tu contrasena actual sigue funcionando y
 nadie ha entrado en tu cuenta.
 
 BROT La Panaderia
+""",
+    )
+
+
+def enviar_verificacion(db: Session, cliente: ClienteB2B) -> bool:
+    """Confirma que el correo del alta existe y es suyo.
+
+    Con el registro abierto el email deja de estar verificado por
+    construccion -- cuando el alta era por invitacion, usar el enlace ya lo
+    demostraba. Ahora cualquiera puede teclear una direccion con una errata, y
+    Felipe se encontraria aprobando a alguien que nunca va a recibir nada, ni
+    siquiera para recuperar su contrasena.
+    """
+    token = crear_token(db, cliente, "verificacion")
+    return enviar_email(
+        cliente.email,
+        "Confirma tu correo - BROT",
+        f"""Hola {cliente.nombre},
+
+Gracias por registrarte en el portal de pedidos de BROT La Panaderia.
+Confirma que este correo es tuyo entrando aca:
+
+{app_url()}/cliente/verificar?token={token}
+
+Despues de confirmarlo revisamos tu alta y te avisamos en cuanto puedas
+empezar a pedir.
+
+El enlace vale 7 dias.
+
+BROT La Panaderia
+""",
+    )
+
+
+def avisar_alta_a_brot(cliente: ClienteB2B) -> bool:
+    """Le avisa a BROT que hay alguien esperando aprobacion.
+
+    Sin esto, un cliente que se registra un viernes puede quedarse esperando
+    hasta que alguien entre al panel por casualidad. El contador de la
+    pantalla ayuda, pero solo si alguien la mira.
+    """
+    destino = os.getenv("SMTP_USER")
+    if not destino:
+        return False
+    return enviar_email(
+        destino,
+        f"Nuevo cliente en el portal: {cliente.nombre}",
+        f"""Se registro un cliente nuevo y esta esperando tu aprobacion.
+
+  Nombre:    {cliente.nombre}
+  Correo:    {cliente.email}
+  Telefono:  {cliente.telefono or "-"}
+  Direccion: {cliente.direccion or "-"}
+
+Hasta que lo apruebes no ve el catalogo ni puede pedir.
+
+Aprobalo o rechazalo en {app_url()}/entregas/clientes
 """,
     )

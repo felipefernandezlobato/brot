@@ -44,6 +44,9 @@ class ClienteLogin(BaseModel):
 class RecuperarPassword(BaseModel):
     email: str
 
+class VerificarEmail(BaseModel):
+    token: str
+
 class EstablecerPassword(BaseModel):
     """Canje del token del correo. Sirve igual para el alta y el reset."""
     token: str
@@ -61,6 +64,12 @@ class ClienteOut(BaseModel):
     nombre: str
     telefono: Optional[str] = None
     direccion: Optional[str] = None
+    # El portal necesita saber en cual de las dos puertas esta parado para
+    # decirle al cliente que le falta: confirmar el correo (cosa suya) o
+    # esperar a que BROT lo apruebe (cosa nuestra).
+    email_verificado: bool = True
+    aprobado: bool = True
+    puede_pedir: bool = True
 
 
 # --- Permissions ---
@@ -960,6 +969,10 @@ class ClienteB2BOut(BaseModel):
     # "cliente con acceso al portal". La pantalla lo usa para saber a quien
     # ofrecerle invitar y a quien reenviarle el enlace.
     tiene_acceso: bool = False
+    # Las dos puertas del alta propia. Un cliente que creo Felipe nace con
+    # las dos abiertas; uno que se registro solo, con las dos cerradas.
+    email_verificado: bool = True
+    aprobado: bool = True
     direccion: Optional[str] = None
     telefono: Optional[str] = None
     contacto: Optional[str] = None

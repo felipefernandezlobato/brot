@@ -4,7 +4,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { BrotLogo } from "./BrotLogo";
 
-export function CustomerNav({ nombre }: { nombre?: string }) {
+export function CustomerNav({
+  nombre,
+  pendiente = false,
+}: {
+  nombre?: string;
+  /** Oculta lo que un alta sin aprobar no puede usar: esas pantallas piden
+   *  catalogo y pedidos, y el backend les responde 403. */
+  pendiente?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -13,12 +21,17 @@ export function CustomerNav({ nombre }: { nombre?: string }) {
     router.push("/cliente/login");
   };
 
-  const navLinks = [
-    { href: "/cliente", label: "Inicio" },
-    { href: "/cliente/pedidos", label: "Mis Pedidos" },
-    { href: "/cliente/recurrentes", label: "Recurrentes" },
-    { href: "/cliente/cuenta", label: "Mi cuenta" },
-  ];
+  const navLinks = pendiente
+    ? [
+        { href: "/cliente", label: "Inicio" },
+        { href: "/cliente/cuenta", label: "Mi cuenta" },
+      ]
+    : [
+        { href: "/cliente", label: "Inicio" },
+        { href: "/cliente/pedidos", label: "Mis Pedidos" },
+        { href: "/cliente/recurrentes", label: "Recurrentes" },
+        { href: "/cliente/cuenta", label: "Mi cuenta" },
+      ];
 
   return (
     <header className="bg-brot text-white shadow-md">

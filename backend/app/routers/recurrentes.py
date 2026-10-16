@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.auth_cliente import get_current_cliente
+from app.auth_cliente import get_cliente_aprobado, get_current_cliente
 from app.database import get_db
 from app.models import ClienteB2B, LineaPedidoRecurrente, PedidoRecurrente
 from app.schemas import LineaPedidoRecurrenteIn, PedidoRecurrenteOut
@@ -49,7 +49,7 @@ def _build_out(rec: PedidoRecurrente) -> PedidoRecurrenteOut:
 @router.post("", response_model=PedidoRecurrenteOut, status_code=201)
 def create_recurrente(
     data: _RecurrenteRequest,
-    cliente: ClienteB2B = Depends(get_current_cliente),
+    cliente: ClienteB2B = Depends(get_cliente_aprobado),
     db: Session = Depends(get_db),
 ):
     rec = PedidoRecurrente(
@@ -78,7 +78,7 @@ def create_recurrente(
 
 @router.get("", response_model=list[PedidoRecurrenteOut])
 def list_recurrentes(
-    cliente: ClienteB2B = Depends(get_current_cliente),
+    cliente: ClienteB2B = Depends(get_cliente_aprobado),
     db: Session = Depends(get_db),
 ):
     recs = (
@@ -93,7 +93,7 @@ def list_recurrentes(
 def update_recurrente(
     rec_id: int,
     data: _RecurrenteUpdate,
-    cliente: ClienteB2B = Depends(get_current_cliente),
+    cliente: ClienteB2B = Depends(get_cliente_aprobado),
     db: Session = Depends(get_db),
 ):
     rec = (
@@ -131,7 +131,7 @@ def update_recurrente(
 @router.delete("/{rec_id}")
 def deactivate_recurrente(
     rec_id: int,
-    cliente: ClienteB2B = Depends(get_current_cliente),
+    cliente: ClienteB2B = Depends(get_cliente_aprobado),
     db: Session = Depends(get_db),
 ):
     rec = (

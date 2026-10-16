@@ -12,6 +12,8 @@ interface ClienteB2B {
   // Calculado en el backend a partir de password_hash: distingue al cliente
   // de reparto del que ademas entra al portal.
   tiene_acceso: boolean;
+  email_verificado: boolean;
+  aprobado: boolean;
   direccion: string | null;
   telefono: string | null;
   contacto: string | null;
@@ -240,6 +242,46 @@ export default function ClientesB2BPage() {
     }
   };
 
+  const [decidiendo, setDecidiendo] = useState<number | null>(null);
+
+  // Pendiente = se registro solo y todavia no se aprobo. Los que crea Felipe
+  // nacen aprobados, asi que nunca caen aqui.
+  const pendientes = clientes.filter((c) => !c.aprobado && c.is_active);
+
+  const aprobar = async (c: ClienteB2B) => {
+    setDecidiendo(c.id);
+    try {
+      const r = await apiFetch<{ aprobado: boolean; avisado: boolean }>(
+        `/api/clientes-b2b/${c.id}/aprobar`, { method: "POST" }
+      );
+      toast(r.avisado ? `${c.nombre} ya puede pedir, le avisamos por correo`
+                      : `${c.nombre} ya puede pedir (no se pudo enviar el aviso)`);
+      load();
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : "No se pudo aprobar", "error");
+    } finally {
+      setDecidiendo(null);
+    }
+  };
+
+  const rechazar = async (c: ClienteB2B) => {
+    if (!confirm(
+      `¿Rechazar el alta de ${c.nombre}?\n\n` +
+      `Queda desactivado y no podrá entrar. No se le avisa por correo, y la ` +
+      `cuenta no se borra: podés reactivarla más adelante.`
+    )) return;
+    setDecidiendo(c.id);
+    try {
+      await apiFetch(`/api/clientes-b2b/${c.id}/rechazar`, { method: "POST" });
+      toast(`Alta de ${c.nombre} rechazada`);
+      load();
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : "No se pudo rechazar", "error");
+    } finally {
+      setDecidiendo(null);
+    }
+  };
+
   const startEdit = (c: ClienteB2B) => {
     setEditId(c.id);
     setEditForm({
@@ -315,6 +357,55 @@ export default function ClientesB2BPage() {
         </Link>
       </div>
 
+      {/* Altas pendientes: arriba y aparte, porque es lo unico de esta
+          pantalla que pide una decision. Mezclados en la lista general se
+          pasarian por alto, y un cliente esperando no puede pedir. */}
+      {pendientes.length > 0 && (
+        <div className="mb-6 rounded-xl border border-brot/40 bg-brot/5 p-4">
+          <h2 className="titulo text-sm text-brot mb-3">
+            {pendientes.length === 1
+              ? "1 alta esperando tu aprobación"
+              : `${pendientes.length} altas esperando tu aprobación`}
+          </h2>
+          <div className="space-y-3">
+            {pendientes.map((c) => (
+              <div key={c.id} className="bg-card rounded-lg border border-cream-dark p-4">
+                <p className="font-medium text-text">{c.nombre}</p>
+                <div className="mt-1 space-y-0.5 text-xs text-warm-gray">
+                  <p className="break-all">{c.email}</p>
+                  {c.telefono && <p>{c.telefono}</p>}
+                  {c.direccion && <p>{c.direccion}</p>}
+                </div>
+                {c.email_verificado ? (
+                  <p className="text-xs text-brot mt-2">Correo confirmado</p>
+                ) : (
+                  <p className="text-xs text-orange-600 mt-2">
+                    Todavía no confirmó su correo. No se puede aprobar hasta
+                    que lo haga.
+                  </p>
+                )}
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => aprobar(c)}
+                    disabled={!c.email_verificado || decidiendo === c.id}
+                    className="px-4 py-2 bg-brot text-white rounded-lg text-sm min-h-[44px] hover:bg-brot-dark disabled:opacity-40"
+                  >
+                    {decidiendo === c.id ? "..." : "Aprobar"}
+                  </button>
+                  <button
+                    onClick={() => rechazar(c)}
+                    disabled={decidiendo === c.id}
+                    className="px-4 py-2 border border-cream-dark rounded-lg text-sm min-h-[44px] hover:bg-cream-dark disabled:opacity-40"
+                  >
+                    Rechazar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Client list */}
       <div className="space-y-3 mb-6">
         {loading ? (
@@ -326,7 +417,7 @@ export default function ClientesB2BPage() {
             Sin clientes registrados.
           </div>
         ) : (
-          clientes.map((c) => {
+          clientes.filter((c) => c.aprobado || !c.is_active).map((c) => {
             if (editId === c.id) {
               return (
                 <div key={c.id} className="bg-card rounded-xl border border-brot/30 p-5">

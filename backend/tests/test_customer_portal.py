@@ -1,7 +1,7 @@
 """
 Customer portal tests: catalog, customer orders, recurring orders, admin management.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from app.auth import hash_pin
 from app.main import app
@@ -85,6 +85,11 @@ def _register_and_login_cliente(client, db, email="cliente@test.com", password="
         email=email,
         password_hash=hash_password(password),
         is_active=True,
+        # Alta completa: estos tests prueban el portal, no la puerta de
+        # entrada. El alta propia con aprobacion tiene sus tests aparte en
+        # test_acceso_cliente.py.
+        email_verificado_at=datetime.now(timezone.utc),
+        aprobado_at=datetime.now(timezone.utc),
     )
     db.add(cliente)
     db.commit()
@@ -137,30 +142,62 @@ def _dar_cadena_de_stock(db, catalogo_id, unidades=50.0):
 # Tests
 # ---------------------------------------------------------------------------
 
-def test_catalogo_public(client, db):
-    """Public catalog endpoint requires no authentication."""
+def test_catalogo_ya_no_es_publico(client, db):
+    """Hasta el 2026-10-16 respondia sin credenciales, asi que los precios
+    B2B estaban a la vista de cualquiera con la URL. Eso hacia inutil
+    esconderle el catalogo al cliente no aprobado: el dato salia igual."""
     admin_tok = _admin_token(client, db)
     _create_catalog_product(client, admin_tok, nombre="Baguette", precio=2.5)
 
-    # List without any auth header
-    res = client.get("/api/catalogo")
-    assert res.status_code == 200
-    nombres = [p["nombre"] for p in res.json()]
-    assert "Baguette" in nombres
+    assert client.get("/api/catalogo").status_code == 401
 
 
-def test_catalogo_public_hides_unavailable(client, db):
-    """Products with disponible=False do not appear in the public catalog."""
+def test_catalogo_lo_ve_el_empleado_y_el_cliente_aprobado(client, db):
+    """Dos credenciales distintas valen: /entregas arma las entregas con esta
+    misma lista."""
+    admin_tok = _admin_token(client, db)
+    _create_catalog_product(client, admin_tok, nombre="Baguette", precio=2.5)
+    cliente_tok = _register_and_login_cliente(client, db)
+
+    for tok in (admin_tok, cliente_tok):
+        res = client.get("/api/catalogo", headers={"Authorization": f"Bearer {tok}"})
+        assert res.status_code == 200, res.text
+        assert "Baguette" in [p["nombre"] for p in res.json()]
+
+
+def test_un_cliente_sin_aprobar_no_ve_el_catalogo(client, db):
+    """El motivo de todo esto: que alguien se registre no le da derecho a ver
+    la lista de precios."""
+    from app.auth_cliente import hash_password
+
+    admin_tok = _admin_token(client, db)
+    _create_catalog_product(client, admin_tok, nombre="Baguette", precio=2.5)
+    pendiente = ClienteB2B(
+        nombre="Curioso", email="curioso@test.com",
+        password_hash=hash_password("secret123"), is_active=True,
+        email_verificado_at=datetime.now(timezone.utc), aprobado_at=None,
+    )
+    db.add(pendiente)
+    db.commit()
+    tok = client.post("/api/auth/cliente/login", json={
+        "email": "curioso@test.com", "password": "secret123"
+    }).json()["token"]
+
+    res = client.get("/api/catalogo", headers={"Authorization": f"Bearer {tok}"})
+    assert res.status_code == 403
+    assert "pendiente" in res.json()["detail"].lower()
+
+
+def test_catalogo_oculta_lo_no_disponible(client, db):
     admin_tok = _admin_token(client, db)
     client.post(
         "/api/admin/catalogo",
         json={"nombre": "Hidden Product", "precio": 1.0, "categoria": "Panes", "disponible": False, "posicion": 99},
         headers={"Authorization": f"Bearer {admin_tok}"},
     )
-    res = client.get("/api/catalogo")
+    res = client.get("/api/catalogo", headers={"Authorization": f"Bearer {admin_tok}"})
     assert res.status_code == 200
-    nombres = [p["nombre"] for p in res.json()]
-    assert "Hidden Product" not in nombres
+    assert "Hidden Product" not in [p["nombre"] for p in res.json()]
 
 
 def test_place_order(client, db):

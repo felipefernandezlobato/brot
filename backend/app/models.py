@@ -591,6 +591,21 @@ class ClienteB2B(Base):
     is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
     created_at: Mapped[Optional[datetime]] = mapped_column(sa.DateTime, nullable=True)
 
+    # Alta propia con aprobacion (2026-10-16). Son dos puertas distintas y
+    # deliberadamente separadas:
+    #   email_verificado_at  el cliente demostro que el correo es suyo
+    #   aprobado_at          Felipe acepto a este cliente
+    # Null en cualquiera de las dos = no puede pedir ni ver el catalogo.
+    # Un cliente que crea Felipe a mano nace con las dos puestas: darlo de
+    # alta el mismo ya es aprobarlo. La migracion rellena las dos en todas
+    # las filas que existian, que son clientes suyos de siempre.
+    email_verificado_at: Mapped[Optional[datetime]] = mapped_column(sa.DateTime, nullable=True)
+    aprobado_at: Mapped[Optional[datetime]] = mapped_column(sa.DateTime, nullable=True)
+
+    @property
+    def puede_pedir(self) -> bool:
+        return bool(self.is_active and self.aprobado_at and self.email_verificado_at)
+
 
 class EntregaB2B(Base):
     __tablename__ = "entregas_b2b"

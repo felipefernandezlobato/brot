@@ -47,7 +47,16 @@ def get_current_user(
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido")
 
-    user = db.query(User).filter(User.id == payload["user_id"]).first()
+    # Los dos tipos de token se firman con la MISMA clave, asi que uno de
+    # cliente decodifica aqui perfectamente: solo le falta `user_id`. Con un
+    # `payload["user_id"]` directo eso era un KeyError, o sea un 500 en
+    # cualquier endpoint de empleado al que llegara un token de cliente.
+    # Salio a la luz al aceptar ambas credenciales en /api/catalogo.
+    user_id = payload.get("user_id")
+    if user_id is None or payload.get("type") == "cliente":
+        raise HTTPException(status_code=401, detail="Token de tipo incorrecto")
+
+    user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Usuario no encontrado")
     return user
