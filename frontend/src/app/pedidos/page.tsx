@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/format";
 import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
+import { EstadisticasCompras } from "@/components/EstadisticasCompras";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -231,16 +232,25 @@ function TabActivos({
     </div>
   );
 
-  if (borradores.length === 0 && enviados.length === 0) {
-    return (
-      <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
-        No hay pedidos activos. Ve a "Propuesta Pedido" para crear uno basado en el stock actual.
-      </div>
-    );
-  }
+  // Lo que ya se envio y todavia no llego. Estimado: sale de lo pedido por el
+  // precio esperado, que es lo unico que hay antes de recibir. Sin useMemo a
+  // proposito: `enviados` es un array nuevo en cada render del padre, asi que
+  // el memo nunca acertaria, y son un par de pedidos.
+  const pendiente = {
+    pedidos: enviados.length,
+    estimadoArs: enviados.reduce((s, p) => s + calcTotal(p.lineas), 0),
+  };
+
+  const sinActivos = borradores.length === 0 && enviados.length === 0;
 
   return (
     <div className="space-y-6">
+      {sinActivos && (
+        <div className="bg-card rounded-xl border border-cream-dark p-8 text-center text-warm-gray">
+          No hay pedidos activos. Ve a "Propuesta Pedido" para crear uno basado en el stock actual.
+        </div>
+      )}
+
       {borradores.length > 0 && (
         <div>
           <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wide mb-3">
@@ -290,6 +300,11 @@ function TabActivos({
           </div>
         </div>
       )}
+
+      {/* Las compras del mes no dependen de que haya pedidos activos ahora
+          mismo: se muestran igual con la lista vacia, que es justo cuando uno
+          mira en que viene gastando antes de armar el proximo pedido. */}
+      <EstadisticasCompras pendiente={pendiente} />
     </div>
   );
 }

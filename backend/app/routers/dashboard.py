@@ -21,7 +21,11 @@ from app.models import (
     RegistroProduccion,
     User,
 )
-from app.services.mensual import monto_compras_recibidas, resumen_mensual
+from app.services.mensual import (
+    monto_compras_recibidas,
+    resumen_compras_mensual,
+    resumen_mensual,
+)
 from app.services.produccion_registro import movimiento_no_revertido
 from app.services.stock import es_conteo_manual, get_saldos_congelado
 
@@ -42,6 +46,25 @@ def estadisticas_mensuales(
     La aritmetica vive en services/mensual.py para poder testearla directo.
     """
     return resumen_mensual(db, meses=meses)
+
+
+@router.get("/compras-mensual")
+def estadisticas_compras_mensual(
+    meses: int = Query(6, ge=1, le=24),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Solo la mitad de compras de /mensual, para la pantalla de Compras.
+
+    Cualquier empleado, no solo admin: no expone facturacion, margen ni
+    clientes, y el que carga los pedidos necesita ver en que se gasta. La
+    propia pantalla /pedidos ya le muestra a cualquiera el total en pesos de
+    cada pedido, asi que esconder el acumulado del mes no protegeria nada.
+
+    Comparte resumen_compras_mensual() con /mensual, asi que el gasto de un mes
+    no puede dar distinto entre esta pantalla y la de inicio.
+    """
+    return resumen_compras_mensual(db, meses=meses)
 
 
 @router.get("/flujo")

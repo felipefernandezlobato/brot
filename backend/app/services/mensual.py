@@ -114,6 +114,7 @@ class _LineaVenta:
 @dataclass
 class _LineaCompra:
     clave_mes: str
+    pedido_id: int
     ingrediente_id: int
     proveedor_id: int | None
     cantidad: float
@@ -195,7 +196,8 @@ def _compras(db: Session, desde: date, hasta: date) -> list[_LineaCompra]:
         else:
             monto = l.cantidad_recibida * l.precio_unitario
         out.append(_LineaCompra(
-            clave_mes=_clave(p.fecha_recepcion), ingrediente_id=l.ingrediente_id,
+            clave_mes=_clave(p.fecha_recepcion), pedido_id=p.id,
+            ingrediente_id=l.ingrediente_id,
             proveedor_id=p.proveedor_id,
             cantidad=(l.cantidad_recibida if l.cantidad_recibida is not None else l.cantidad_pedida) or 0,
             monto=monto,
@@ -210,6 +212,113 @@ def monto_compras_recibidas(db: Session, desde: date, hasta: date) -> float:
     which used to carry its own copy of this query. Two copies drift.
     """
     return sum(c.monto or 0 for c in _compras(db, desde, hasta))
+
+
+# ── compras por mes ───────────────────────────────────────────────────────────
+
+
+@dataclass
+class _AcumCompras:
+    total: float = 0.0
+    lineas_sin_precio: int = 0
+    pedidos: set = field(default_factory=set)  # ids, para contar pedidos y no lineas
+    por_ingrediente: dict = field(default_factory=lambda: defaultdict(float))
+    por_proveedor: dict = field(default_factory=lambda: defaultdict(float))
+    cambios_precio: list = field(default_factory=list)
+
+
+def resumen_compras_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> dict:
+    """La mitad de compras de un mes: gasto, desgloses y cambios de precio.
+
+    El UNICO lugar que le da forma a compras_total_ars / top_ingredientes /
+    por_proveedor / cambios_precio. resumen_mensual() compone su salida desde
+    aca en vez de quedarse con una segunda copia, asi que la pantalla de
+    Compras y la de inicio no pueden mostrar numeros distintos para el mismo
+    mes -- lo que cambia entre las dos es QUE se muestra, no CUANTO.
+
+    Separado porque tiene una barrera de permisos mas baja: no expone ventas,
+    margen ni concentracion de clientes, asi que lo ve cualquier empleado
+    (ver GET /api/dashboard/compras-mensual), mientras resumen_mensual() sigue
+    siendo solo-admin.
+    """
+    hoy = hoy or date.today()
+    rangos = ultimos_n_meses(meses, hoy=hoy)
+    desde, hasta = rangos[0].inicio, rangos[-1].fin
+
+    compras = _compras(db, desde, hasta)
+    cambios = (
+        db.query(HistorialPrecio)
+        .options(joinedload(HistorialPrecio.ingrediente_rel))
+        .filter(HistorialPrecio.fecha_cambio >= desde, HistorialPrecio.fecha_cambio <= hasta)
+        .order_by(HistorialPrecio.fecha_cambio)
+        .all()
+    )
+    ingredientes = {i.id: i.nombre for i in db.query(Ingrediente).all()}
+    proveedores = {p.id: p.nombre for p in db.query(Proveedor).all()}
+
+    acum: dict[str, _AcumCompras] = defaultdict(_AcumCompras)
+
+    for c in compras:
+        a = acum[c.clave_mes]
+        # Un pedido cuenta si le gastamos plata, aunque alguna de sus lineas no
+        # tenga precio: lo que se cuenta es el pedido, no la linea.
+        a.pedidos.add(c.pedido_id)
+        if c.monto is None:
+            a.lineas_sin_precio += 1
+        else:
+            a.total += c.monto
+            a.por_ingrediente[c.ingrediente_id] += c.monto
+            if c.proveedor_id:
+                a.por_proveedor[c.proveedor_id] += c.monto
+
+    for h in cambios:
+        a = acum[_clave(h.fecha_cambio)]
+        ant = h.precio_anterior or 0
+        a.cambios_precio.append({
+            "ingrediente_id": h.ingrediente_id,
+            "nombre": ingredientes.get(h.ingrediente_id, f"#{h.ingrediente_id}"),
+            "precio_anterior": round(ant, 2),
+            "precio_nuevo": round(h.precio_nuevo or 0, 2),
+            "fecha_cambio": str(h.fecha_cambio),
+            "variacion_pct": round(100 * ((h.precio_nuevo or 0) - ant) / ant, 1) if ant else None,
+        })
+
+    meses_out = []
+    for r in rangos:
+        a = acum.get(r.clave, _AcumCompras())
+        meses_out.append({
+            "mes": r.clave,
+            "es_parcial": r.es_parcial,
+            "dias_transcurridos": r.dias_transcurridos,
+            "dias_totales": r.dias_totales,
+            "compras_total_ars": round(a.total, 2),
+            "pedidos_recibidos": len(a.pedidos),
+            "top_ingredientes": [
+                {
+                    "ingrediente_id": iid,
+                    "nombre": ingredientes.get(iid, f"#{iid}"),
+                    "monto_ars": round(monto, 2),
+                }
+                for iid, monto in sorted(a.por_ingrediente.items(), key=lambda kv: -kv[1])[:TOP_N]
+            ],
+            # Sin cortar en TOP_N, a diferencia de top_ingredientes: son pocos
+            # proveedores y se quieren todos.
+            "por_proveedor": [
+                {
+                    "proveedor_id": pid,
+                    "nombre": proveedores.get(pid, f"#{pid}"),
+                    "monto_ars": round(monto, 2),
+                }
+                for pid, monto in sorted(a.por_proveedor.items(), key=lambda kv: -kv[1])
+            ],
+            "cambios_precio": a.cambios_precio,
+            "lineas_sin_precio": a.lineas_sin_precio,
+        })
+
+    return {
+        "periodo": {"desde": str(desde), "hasta": str(hasta), "meses": meses},
+        "meses": meses_out,
+    }
 
 
 # ── cost of goods sold ────────────────────────────────────────────────────────
@@ -274,13 +383,8 @@ class _Acum:
     # cost would inflate the margin instead of flagging the gap.
     ventas_costeadas: float = 0.0
     lineas_sin_costo: int = 0
-    compras: float = 0.0
-    lineas_sin_precio: int = 0
-    por_ingrediente: dict = field(default_factory=lambda: defaultdict(float))
-    por_proveedor: dict = field(default_factory=lambda: defaultdict(float))
     mermas: float = 0.0
     mermas_count: int = 0
-    cambios_precio: list = field(default_factory=list)
 
 
 def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> dict:
@@ -289,25 +393,23 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
     desde, hasta = rangos[0].inicio, rangos[-1].fin
 
     ventas = _ventas(db, desde, hasta)
-    compras = _compras(db, desde, hasta)
     mermas = (
         db.query(MermaRegistro)
         .filter(MermaRegistro.fecha >= desde, MermaRegistro.fecha <= hasta)
         .all()
     )
-    cambios = (
-        db.query(HistorialPrecio)
-        .options(joinedload(HistorialPrecio.ingrediente_rel))
-        .filter(HistorialPrecio.fecha_cambio >= desde, HistorialPrecio.fecha_cambio <= hasta)
-        .order_by(HistorialPrecio.fecha_cambio)
-        .all()
-    )
+
+    # Toda la mitad de compras sale de una sola implementacion compartida con
+    # GET /api/dashboard/compras-mensual, que es lo que mira la pantalla de
+    # Compras. Aca solo se la indexa por mes para armar la salida de siempre.
+    compras_por_mes = {
+        m["mes"]: m
+        for m in resumen_compras_mensual(db, meses=meses, hoy=hoy)["meses"]
+    }
 
     # small tables for a single bakery: loaded whole, once
     catalogo = {p.id: p for p in db.query(ProductoCatalogo).all()}
-    ingredientes = {i.id: i.nombre for i in db.query(Ingrediente).all()}
     clientes = {c.id: c.nombre for c in db.query(ClienteB2B).all()}
-    proveedores = {p.id: p.nombre for p in db.query(Proveedor).all()}
 
     acum: dict[str, _Acum] = defaultdict(_Acum)
     cache_costo: dict[tuple[int, date], float | None] = {}
@@ -333,36 +435,15 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
             a.cogs += cu * v.cantidad
             a.ventas_costeadas += v.monto
 
-    for c in compras:
-        a = acum[c.clave_mes]
-        if c.monto is None:
-            a.lineas_sin_precio += 1
-        else:
-            a.compras += c.monto
-            a.por_ingrediente[c.ingrediente_id] += c.monto
-            if c.proveedor_id:
-                a.por_proveedor[c.proveedor_id] += c.monto
-
     for m in mermas:
         a = acum[_clave(m.fecha)]
         a.mermas += m.coste_total or 0
         a.mermas_count += 1
 
-    for h in cambios:
-        a = acum[_clave(h.fecha_cambio)]
-        ant = h.precio_anterior or 0
-        a.cambios_precio.append({
-            "ingrediente_id": h.ingrediente_id,
-            "nombre": ingredientes.get(h.ingrediente_id, f"#{h.ingrediente_id}"),
-            "precio_anterior": round(ant, 2),
-            "precio_nuevo": round(h.precio_nuevo or 0, 2),
-            "fecha_cambio": str(h.fecha_cambio),
-            "variacion_pct": round(100 * ((h.precio_nuevo or 0) - ant) / ant, 1) if ant else None,
-        })
-
     meses_out = []
     for r in rangos:
         a = acum.get(r.clave, _Acum())
+        compras = compras_por_mes[r.clave]
         ventas_total = a.ventas_b2b + a.ventas_portal
         # over the costed subset only -- see _Acum.ventas_costeadas
         margen = a.ventas_costeadas - a.cogs
@@ -377,7 +458,7 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
                 "portal_ars": round(a.ventas_portal, 2),
                 "unidades": round(a.unidades, 2),
             },
-            "compras_total_ars": round(a.compras, 2),
+            "compras_total_ars": compras["compras_total_ars"],
             "margen": {
                 "cogs_ars": round(a.cogs, 2),
                 "bruto_ars": round(margen, 2),
@@ -403,14 +484,7 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
                 }
                 for pid, d in sorted(a.por_producto.items(), key=lambda kv: -kv[1]["monto"])[:TOP_N]
             ],
-            "top_ingredientes": [
-                {
-                    "ingrediente_id": iid,
-                    "nombre": ingredientes.get(iid, f"#{iid}"),
-                    "monto_ars": round(monto, 2),
-                }
-                for iid, monto in sorted(a.por_ingrediente.items(), key=lambda kv: -kv[1])[:TOP_N]
-            ],
+            "top_ingredientes": compras["top_ingredientes"],
             "por_cliente": [
                 {
                     "cliente_id": cid,
@@ -420,18 +494,11 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
                 }
                 for cid, monto in sorted(a.por_cliente.items(), key=lambda kv: -kv[1])
             ],
-            "por_proveedor": [
-                {
-                    "proveedor_id": pid,
-                    "nombre": proveedores.get(pid, f"#{pid}"),
-                    "monto_ars": round(monto, 2),
-                }
-                for pid, monto in sorted(a.por_proveedor.items(), key=lambda kv: -kv[1])
-            ],
-            "cambios_precio": a.cambios_precio,
+            "por_proveedor": compras["por_proveedor"],
+            "cambios_precio": compras["cambios_precio"],
             "avisos": {
                 "lineas_precio_cero": a.lineas_precio_cero,
-                "lineas_compra_sin_precio": a.lineas_sin_precio,
+                "lineas_compra_sin_precio": compras["lineas_sin_precio"],
             },
         })
 

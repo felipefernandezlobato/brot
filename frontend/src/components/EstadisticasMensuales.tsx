@@ -14,6 +14,14 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { formatARS } from "@/lib/format";
 import { loadPermissions } from "@/lib/permissions";
+import {
+  Fila,
+  Panel,
+  SelectorMes,
+  Tarjeta,
+  type CambioPrecio,
+  type ItemMonto,
+} from "@/components/stats/common";
 
 interface Ventas {
   total_ars: number;
@@ -34,10 +42,6 @@ interface Mermas {
   registros: number;
   pct_sobre_ventas: number | null;
 }
-interface ItemMonto {
-  nombre: string;
-  monto_ars: number;
-}
 interface TopProducto extends ItemMonto {
   producto_id: number;
   unidades: number;
@@ -45,14 +49,6 @@ interface TopProducto extends ItemMonto {
 interface PorCliente extends ItemMonto {
   cliente_id: number;
   pct: number | null;
-}
-interface CambioPrecio {
-  ingrediente_id: number;
-  nombre: string;
-  precio_anterior: number;
-  precio_nuevo: number;
-  fecha_cambio: string;
-  variacion_pct: number | null;
 }
 interface Mes {
   mes: string;
@@ -73,79 +69,6 @@ interface Mes {
 interface MensualData {
   periodo: { desde: string; hasta: string; meses: number };
   meses: Mes[];
-}
-
-const NOMBRE_MES = [
-  "enero", "febrero", "marzo", "abril", "mayo", "junio",
-  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-];
-
-function etiquetaMes(clave: string): string {
-  const [a, m] = clave.split("-").map(Number);
-  return `${NOMBRE_MES[m - 1]} ${a}`;
-}
-
-function Tarjeta({
-  label,
-  valor,
-  detalle,
-  aviso,
-}: {
-  label: string;
-  valor: string;
-  detalle?: string;
-  aviso?: string;
-}) {
-  return (
-    <div className="bg-card border border-cream-dark rounded-xl p-4">
-      <p className="text-xs text-warm-gray">{label}</p>
-      <p className="text-xl font-bold text-text tabular-nums">{valor}</p>
-      {detalle && <p className="text-xs text-warm-gray mt-0.5">{detalle}</p>}
-      {aviso && (
-        <p className="text-xs text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-1 inline-block">
-          {aviso}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function Panel({
-  titulo,
-  nota,
-  vacio,
-  children,
-}: {
-  titulo: string;
-  nota?: string;
-  vacio: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-card border border-cream-dark rounded-xl p-4">
-      <div className="flex items-baseline justify-between mb-2">
-        <h3 className="font-medium text-text text-sm">{titulo}</h3>
-        {nota && <span className="text-xs text-warm-gray">{nota}</span>}
-      </div>
-      {vacio ? (
-        <p className="text-xs text-warm-gray">Sin datos este mes</p>
-      ) : (
-        <div className="space-y-1.5 max-h-[280px] overflow-y-auto">{children}</div>
-      )}
-    </div>
-  );
-}
-
-function Fila({ nombre, derecha, sub }: { nombre: string; derecha: string; sub?: string }) {
-  return (
-    <div className="flex items-center justify-between text-sm gap-3">
-      <span className="text-text truncate">{nombre}</span>
-      <span className="text-warm-gray tabular-nums whitespace-nowrap">
-        {sub && <span className="text-xs mr-2">{sub}</span>}
-        {derecha}
-      </span>
-    </div>
-  );
 }
 
 export function EstadisticasMensuales() {
@@ -187,19 +110,7 @@ export function EstadisticasMensuales() {
     <div className="mb-6">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
         <h2 className="titulo text-lg text-brot">Resumen mensual</h2>
-        <div className="flex gap-1 flex-wrap">
-          {data.meses.map((x, i) => (
-            <button
-              key={x.mes}
-              onClick={() => setIdx(i)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors min-h-[36px] ${
-                i === idx ? "bg-brot text-white" : "bg-cream text-warm-gray hover:text-brot"
-              }`}
-            >
-              {etiquetaMes(x.mes)}
-            </button>
-          ))}
-        </div>
+        <SelectorMes meses={data.meses.map((x) => x.mes)} idx={idx} onSelect={setIdx} />
       </div>
 
       {m.es_parcial && (

@@ -23,8 +23,10 @@ from app.models import (
 )
 from app.services.costes import precio_compra_en
 from app.services.mensual import (
+    TOP_N,
     monto_compras_recibidas,
     rango_mes,
+    resumen_compras_mensual,
     resumen_mensual,
     ultimos_n_meses,
 )
@@ -433,6 +435,99 @@ def test_flujo_y_mensual_dan_el_mismo_gasto(db):
 # ── groupings ─────────────────────────────────────────────────────────────────
 
 
+def _ingrediente(db, nombre, categoria_id, precio=1000.0):
+    ing = Ingrediente(
+        nombre=nombre, categoria_id=categoria_id, unidad_compra="kg",
+        cantidad_compra=1, precio_compra=precio, unidad_uso="kg",
+        merma_porcentaje=0, activo=True,
+    )
+    db.add(ing)
+    db.flush()
+    return ing
+
+
+def _comprar(db, prov, ing, fecha, *, cantidad=10, precio=100.0, pedido=None):
+    """Una linea de compra recibida. Pasa `pedido` para sumarle otra linea."""
+    if pedido is None:
+        pedido = Pedido(fecha=fecha, proveedor_id=prov.id, estado="recibido",
+                        fecha_recepcion=fecha)
+        db.add(pedido)
+        db.flush()
+    db.add(LineaPedido(pedido_id=pedido.id, ingrediente_id=ing.id,
+                       cantidad_pedida=cantidad, unidad="kg",
+                       cantidad_recibida=cantidad, precio_unitario=precio))
+    db.flush()
+    return pedido
+
+
+def test_desglose_de_compras_por_proveedor_y_por_ingrediente(db):
+    """Pinea la FORMA de los dos desgloses de compras, no solo el total.
+
+    Hasta ahora solo estaba cubierto compras_total_ars, asi que un cambio en el
+    agrupamiento (o moverlo de lugar) pasaba sin que nada se quejara.
+    """
+    harina, *_ = _setup(db)
+    azucar = _ingrediente(db, "Azucar", harina.categoria_id)
+    forzani = Proveedor(nombre="Forzani")
+    diarco = Proveedor(nombre="Diarco")
+    db.add_all([forzani, diarco])
+    db.flush()
+    _comprar(db, forzani, harina, date(2026, 10, 2), cantidad=10, precio=100.0)  # 1000
+    _comprar(db, diarco, azucar, date(2026, 10, 5), cantidad=2, precio=250.0)    # 500
+    _comprar(db, diarco, harina, date(2026, 10, 6), cantidad=1, precio=100.0)    # 100
+    db.commit()
+
+    m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")
+    assert m["compras_total_ars"] == 1600.0
+    # ambos ordenados por monto descendente
+    assert [(p["nombre"], p["monto_ars"]) for p in m["por_proveedor"]] == [
+        ("Forzani", 1000.0), ("Diarco", 600.0),
+    ]
+    assert [(i["nombre"], i["monto_ars"]) for i in m["top_ingredientes"]] == [
+        ("Harina 000", 1100.0), ("Azucar", 500.0),
+    ]
+
+
+def test_top_ingredientes_se_corta_en_top_n_y_proveedores_no(db):
+    """Asimetria deliberada: top_ingredientes esta capado en TOP_N y
+    por_proveedor NO (son pocos y se quieren todos). Es lo mas facil de
+    uniformar sin querer al mover este codigo."""
+    harina, *_ = _setup(db)
+    for n in range(12):
+        prov = Proveedor(nombre=f"Prov {n:02d}")
+        db.add(prov)
+        db.flush()
+        ing = _ingrediente(db, f"Ing {n:02d}", harina.categoria_id)
+        _comprar(db, prov, ing, date(2026, 10, 2), cantidad=1, precio=100.0 * (n + 1))
+    db.commit()
+
+    m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")
+    assert len(m["top_ingredientes"]) == TOP_N
+    assert len(m["por_proveedor"]) == 12
+
+
+def test_cambios_precio_se_agrupan_por_mes_del_cambio(db):
+    ing, *_ = _setup(db)
+    db.add_all([
+        HistorialPrecio(ingrediente_id=ing.id, precio_anterior=1250.0,
+                        precio_nuevo=2400.0, fecha_cambio=date(2026, 10, 4)),
+        HistorialPrecio(ingrediente_id=ing.id, precio_anterior=0,
+                        precio_nuevo=500.0, fecha_cambio=date(2026, 10, 5)),
+        HistorialPrecio(ingrediente_id=ing.id, precio_anterior=100.0,
+                        precio_nuevo=200.0, fecha_cambio=date(2026, 9, 30)),
+    ])
+    db.commit()
+
+    res = resumen_mensual(db, meses=2, hoy=HOY)
+    octubre = _mes(res, "2026-10")
+    assert [(c["fecha_cambio"], c["variacion_pct"]) for c in octubre["cambios_precio"]] == [
+        ("2026-10-04", 92.0),
+        ("2026-10-05", None),  # sin precio anterior no hay variacion que calcular
+    ]
+    assert octubre["cambios_precio"][0]["nombre"] == "Harina 000"
+    assert len(_mes(res, "2026-09")["cambios_precio"]) == 1
+
+
 def test_concentracion_por_cliente(db):
     _, _, producto, cliente = _setup(db)
     otro = ClienteB2B(nombre="Creme", email="c@c.com", password_hash="x", is_active=True)
@@ -459,6 +554,87 @@ def _login(client, db, role):
     return res.json()["token"]
 
 
+def test_compras_mensual_coincide_con_mensual(db):
+    """resumen_mensual() compone su mitad de compras desde
+    resumen_compras_mensual(), asi que la pantalla de Compras y la de inicio no
+    pueden discrepar. Si alguien vuelve a duplicar el agrupamiento, esto lo
+    agarra."""
+    harina, *_ = _setup(db)
+    azucar = _ingrediente(db, "Azucar", harina.categoria_id)
+    forzani = Proveedor(nombre="Forzani")
+    diarco = Proveedor(nombre="Diarco")
+    db.add_all([forzani, diarco])
+    db.flush()
+    _comprar(db, forzani, harina, date(2026, 10, 2), cantidad=10, precio=100.0)
+    _comprar(db, diarco, azucar, date(2026, 10, 5), cantidad=2, precio=250.0)
+    # una linea sin precio, para que el aviso tambien tenga que coincidir
+    p = Pedido(fecha=date(2026, 10, 7), proveedor_id=forzani.id, estado="recibido",
+               fecha_recepcion=date(2026, 10, 7))
+    db.add(p)
+    db.flush()
+    db.add(LineaPedido(pedido_id=p.id, ingrediente_id=harina.id, cantidad_pedida=3,
+                       unidad="kg", cantidad_recibida=3, precio_unitario=None))
+    db.add(HistorialPrecio(ingrediente_id=harina.id, precio_anterior=1250.0,
+                           precio_nuevo=2400.0, fecha_cambio=date(2026, 10, 4)))
+    db.commit()
+
+    completo = _mes(resumen_mensual(db, meses=3, hoy=HOY), "2026-10")
+    solo_compras = _mes(resumen_compras_mensual(db, meses=3, hoy=HOY), "2026-10")
+
+    assert solo_compras["compras_total_ars"] == completo["compras_total_ars"]
+    assert solo_compras["top_ingredientes"] == completo["top_ingredientes"]
+    assert solo_compras["por_proveedor"] == completo["por_proveedor"]
+    assert solo_compras["cambios_precio"] == completo["cambios_precio"]
+    assert solo_compras["lineas_sin_precio"] == completo["avisos"]["lineas_compra_sin_precio"]
+
+
+def test_pedidos_recibidos_cuenta_pedidos_y_no_lineas(db):
+    harina, *_ = _setup(db)
+    azucar = _ingrediente(db, "Azucar", harina.categoria_id)
+    prov = Proveedor(nombre="Forzani")
+    db.add(prov)
+    db.flush()
+    # un pedido con DOS lineas, mas otro pedido aparte
+    p = _comprar(db, prov, harina, date(2026, 10, 2))
+    _comprar(db, prov, azucar, date(2026, 10, 2), pedido=p)
+    _comprar(db, prov, harina, date(2026, 10, 9))
+    db.commit()
+
+    m = _mes(resumen_compras_mensual(db, meses=1, hoy=HOY), "2026-10")
+    assert m["pedidos_recibidos"] == 2
+
+
+def test_pedido_con_una_linea_sin_precio_igual_se_cuenta(db):
+    """El pedido llego; que no sepamos lo que costo una linea no lo borra."""
+    harina, *_ = _setup(db)
+    prov = Proveedor(nombre="Forzani")
+    db.add(prov)
+    db.flush()
+    p = Pedido(fecha=date(2026, 10, 2), proveedor_id=prov.id, estado="recibido",
+               fecha_recepcion=date(2026, 10, 2))
+    db.add(p)
+    db.flush()
+    db.add(LineaPedido(pedido_id=p.id, ingrediente_id=harina.id, cantidad_pedida=5,
+                       unidad="kg", cantidad_recibida=5, precio_unitario=None))
+    db.commit()
+
+    m = _mes(resumen_compras_mensual(db, meses=1, hoy=HOY), "2026-10")
+    assert m["pedidos_recibidos"] == 1
+    assert m["compras_total_ars"] == 0.0
+    assert m["lineas_sin_precio"] == 1
+
+
+def test_compras_mensual_no_expone_ventas_ni_margen(db):
+    """La razon por la que esta separado de /mensual. Si alguien le agrega
+    ventas o margen, deja de poder ser visible para el staff."""
+    _setup(db)
+    db.commit()
+
+    m = _mes(resumen_compras_mensual(db, meses=1, hoy=HOY), "2026-10")
+    for prohibido in ("ventas", "margen", "por_cliente", "top_productos", "mermas"):
+        assert prohibido not in m, f"{prohibido} no puede viajar en este payload"
+
+
 def test_mensual_solo_admin(client, db):
     """Felipe pidio que las metricas de plata las vea solo el manager (admin).
     El staff ve el panel operativo pero no facturacion ni margenes."""
@@ -477,6 +653,24 @@ def test_mensual_admin_entra(client, db):
     assert len(body["meses"]) == 2
     assert body["meses"][-1]["es_parcial"] is True, "el ultimo mes es el en curso"
     assert body["advertencias"]["sin_ventas_mostrador"] is True
+
+
+def test_compras_mensual_lo_ve_el_staff(client, db):
+    """Al contrario de /mensual: el que carga los pedidos necesita ver el gasto.
+    Es un get_current_user pelado, no require_permission, asi que tampoco se
+    puede apagar sin querer desde la pantalla de permisos."""
+    token = _login(client, db, "staff")
+    res = client.get("/api/dashboard/compras-mensual?meses=2",
+                     headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body["meses"]) == 2
+    assert body["meses"][-1]["es_parcial"] is True
+    assert "ventas" not in body["meses"][-1]
+
+
+def test_compras_mensual_pide_login(client, db):
+    assert client.get("/api/dashboard/compras-mensual").status_code == 401
 
 
 def test_mermas_como_porcentaje_de_ventas(db):
