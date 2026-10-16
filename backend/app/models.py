@@ -687,7 +687,10 @@ class TokenAccesoCliente(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     cliente_b2b_id: Mapped[int] = mapped_column(ForeignKey("clientes_b2b.id", ondelete="CASCADE"), index=True)
     token_hash: Mapped[str] = mapped_column(sa.String(64), unique=True, index=True)
-    tipo: Mapped[str] = mapped_column(sa.String(10))  # "alta" | "reset"
+    # 20 y no 10: "verificacion" son 12 caracteres y reventaba en Postgres
+    # con StringDataRightTruncation. SQLite ignora el limite de los VARCHAR,
+    # asi que la suite entera pasaba y el fallo solo salio en produccion.
+    tipo: Mapped[str] = mapped_column(sa.String(20))  # "alta" | "reset" | "verificacion"
     expira_at: Mapped[datetime] = mapped_column(sa.DateTime)
     usado_at: Mapped[Optional[datetime]] = mapped_column(sa.DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))

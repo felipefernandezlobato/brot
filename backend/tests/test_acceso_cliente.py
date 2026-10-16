@@ -356,3 +356,29 @@ def test_un_cliente_que_crea_felipe_nace_aprobado(client, db):
     assert res.status_code == 201
     assert res.json()["aprobado"] is True
     assert res.json()["email_verificado"] is True
+
+
+# ------------------------------------------- limites que SQLite no comprueba
+
+
+def test_los_tipos_de_token_caben_en_su_columna():
+    """SQLite ignora la longitud de los VARCHAR y Postgres no.
+
+    El 2026-10-16 esto fallo en produccion: la columna era String(10) y
+    "verificacion" son 12 caracteres, asi que el alta de clientes daba 500
+    con StringDataRightTruncation mientras los 381 tests pasaban en verde.
+
+    Este test compara los valores que el codigo usa de verdad contra el
+    limite declarado en el modelo, que es lo unico que el motor de los tests
+    no puede hacer por nosotros. Anadir un tipo nuevo mas largo lo rompe aca,
+    en local, en vez de en produccion.
+    """
+    from app.models import TokenAccesoCliente
+    from app.services.acceso_cliente import DURACION
+
+    limite = TokenAccesoCliente.__table__.c.tipo.type.length
+    for tipo in DURACION:
+        assert len(tipo) <= limite, (
+            f"el tipo de token '{tipo}' mide {len(tipo)} y la columna admite "
+            f"{limite}; ampliá la columna con una migración"
+        )
