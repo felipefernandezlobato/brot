@@ -244,7 +244,15 @@ Customer-facing ordering system for B2C sales.
 - **Recurring orders:** Customers can set up a weekly standing order with default products/quantities. Each week the system auto-generates an order from the template for the next available delivery day. The customer can edit (add/remove items, change quantities) or skip any specific week before a cutoff time. Admin can also view and manage all recurring orders.
 
 **New models:**
-- `Cliente` — email, password_hash, nombre, telefono, direccion, is_active
+- ~~`Cliente`~~ — **no existe: el portal autentica contra `ClienteB2B`.** La
+  migración `b1e4f5a2c890` (2026-08-13) unificó los dos conceptos — movió
+  `email`/`password_hash` a `clientes_b2b` y reapuntó las FK de
+  `pedidos_clientes` y `pedidos_recurrentes` allá — pero el modelo `Cliente` se
+  quedó en `models.py` sin que nadie lo importara hasta que se borró el
+  2026-10-16. **El usuario del portal y el cliente de reparto son el mismo
+  registro.** `ClienteB2B.password_hash` es nullable y el login filtra
+  `isnot(None)`, así que un cliente de reparto sin contraseña simplemente no
+  tiene acceso al portal.
 - `PedidoCliente` — cliente_id, fecha_pedido, fecha_entrega (Wed/Sat only), estado, notas, total, pedido_recurrente_id (nullable, links back to the template that generated it)
 - `LineaPedidoCliente` — pedido_cliente_id, producto_id, cantidad, precio_unitario_snapshot, subtotal
 - `ProductoCatalogo` — nombre, descripcion, precio, categoria, imagen_url, disponible, posicion

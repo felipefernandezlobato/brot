@@ -19,17 +19,15 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
 
-class Cliente(Base):
-    __tablename__ = "clientes"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(sa.String(200), unique=True)
-    password_hash: Mapped[str] = mapped_column(sa.String(200))
-    nombre: Mapped[str] = mapped_column(sa.String(200))
-    telefono: Mapped[Optional[str]] = mapped_column(sa.String(50), nullable=True)
-    direccion: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
-    is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+# `Cliente` (tabla `clientes`) vivio aca hasta el 2026-10-16. Era el usuario
+# del portal, separado del cliente de reparto. La migracion b1e4f5a2c890
+# (2026-08-13) unifico los dos: movio `email`/`password_hash` a `clientes_b2b`
+# y reapunto las FK de `pedidos_clientes` y `pedidos_recurrentes` alla. Desde
+# entonces el portal autentica contra ClienteB2B -- ver auth_cliente.py -- y
+# este modelo no lo importaba nadie. **El cliente del portal y el cliente B2B
+# son el mismo registro**, que es lo que hace natural el alta por invitacion:
+# Felipe ya crea el ClienteB2B para repartirle, darle acceso es ponerle email
+# y contrasena al mismo.
 
 
 class Permission(Base):
@@ -244,63 +242,13 @@ class LineaPedido(Base):
 # ============================================================
 
 
-class ProductoProduccion(Base):
-    __tablename__ = "productos_produccion"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    nombre: Mapped[str] = mapped_column(sa.String(200))
-    categoria: Mapped[str] = mapped_column(sa.String(50))
-    unidad: Mapped[str] = mapped_column(sa.String(20))
-    shelf_life_days: Mapped[int] = mapped_column(sa.Integer, default=30)
-    default_qty: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
-    is_active: Mapped[bool] = mapped_column(default=True, server_default=sa_text("true"))
-    position: Mapped[int] = mapped_column(sa.Integer, default=0)
-
-    plan_entries: Mapped[list["PlanProduccion"]] = relationship(
-        back_populates="producto", cascade="all, delete-orphan"
-    )
-    logs: Mapped[list["LogProduccion"]] = relationship(
-        back_populates="producto", cascade="all, delete-orphan"
-    )
-
-
-class PlanProduccion(Base):
-    __tablename__ = "planes_produccion"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    producto_id: Mapped[int] = mapped_column(ForeignKey("productos_produccion.id"))
-    week_number: Mapped[int] = mapped_column(sa.Integer)
-    day_of_week: Mapped[int] = mapped_column(sa.Integer)
-    planned_qty: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("producto_id", "week_number", "day_of_week", name="uq_plan_produccion"),
-    )
-
-    producto: Mapped["ProductoProduccion"] = relationship(back_populates="plan_entries")
-
-
-class LogProduccion(Base):
-    __tablename__ = "logs_produccion"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    producto_id: Mapped[int] = mapped_column(ForeignKey("productos_produccion.id"))
-    target_date: Mapped[str] = mapped_column(sa.String(10))
-    planned_qty: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
-    actual_qty: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
-    duration_minutes_machine: Mapped[Optional[int]] = mapped_column(sa.Integer, nullable=True)
-    duration_minutes_human: Mapped[Optional[int]] = mapped_column(sa.Integer, nullable=True)
-    is_unplanned: Mapped[bool] = mapped_column(default=False, server_default=sa_text("false"))
-    notes: Mapped[Optional[str]] = mapped_column(sa.String(500), nullable=True)
-    recorded_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    recorded_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
-
-    __table_args__ = (
-        UniqueConstraint("producto_id", "target_date", name="uq_log_produccion"),
-    )
-
-    producto: Mapped["ProductoProduccion"] = relationship(back_populates="logs")
-    user: Mapped["User"] = relationship(foreign_keys=[recorded_by])
+# ProductoProduccion / PlanProduccion / LogProduccion vivieron aca hasta el
+# 2026-10-16. Eran el sistema de produccion original (catalogo propio de
+# productos + plan rotativo de 4 semanas + log diario), reemplazado hace
+# tiempo por TareaProduccion/RegistroProduccion. Sus rutas se borraron
+# entonces; los modelos se quedaron sin que nadie los importara, y sus tablas
+# (`productos_produccion`, `planes_produccion`, `logs_produccion`) estan en 0
+# filas. Si aparece una referencia en un script viejo, es de esa epoca.
 
 
 class TareaProduccion(Base):
