@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -8,9 +7,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.secretos import get_secret_key
 from app.models import ClienteB2B
 
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
+SECRET_KEY = get_secret_key()
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_DAYS = 30
 

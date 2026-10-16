@@ -5,8 +5,10 @@ from datetime import date, timedelta
 
 from app.auth import hash_pin
 from app.main import app
+from app.auth_cliente import hash_password
 from app.models import (
     Categoria,
+    ClienteB2B,
     ProductoCatalogo,
     ProductoCongelado,
     Receta,
@@ -69,12 +71,23 @@ def _admin_token(client, db):
     return res.json()["token"]
 
 
-def _register_and_login_cliente(client, email="cliente@test.com", password="secret123", nombre="Test Cliente"):
-    client.post("/api/auth/cliente/registro", json={
-        "email": email,
-        "password": password,
-        "nombre": nombre,
-    })
+def _register_and_login_cliente(client, db, email="cliente@test.com", password="secret123", nombre="Test Cliente"):
+    """Crea el cliente ya con contrasena y devuelve su token de sesion.
+
+    Antes llamaba a POST /api/auth/cliente/registro, que se cerro el
+    2026-10-16 (el alta es por invitacion). Estos tests no estan probando el
+    alta, solo necesitan un cliente con el que entrar, asi que se crea
+    directo. El flujo real de invitacion y recuperacion tiene sus propios
+    tests en test_acceso_cliente.py.
+    """
+    cliente = ClienteB2B(
+        nombre=nombre,
+        email=email,
+        password_hash=hash_password(password),
+        is_active=True,
+    )
+    db.add(cliente)
+    db.commit()
     res = client.post("/api/auth/cliente/login", json={"email": email, "password": password})
     assert res.status_code == 200, res.text
     return res.json()["token"]
@@ -155,7 +168,7 @@ def test_place_order(client, db):
     admin_tok = _admin_token(client, db)
     product = _create_catalog_product(client, admin_tok, nombre="Croissant", precio=3.0)
 
-    cliente_tok = _register_and_login_cliente(client)
+    cliente_tok = _register_and_login_cliente(client, db)
 
     res = client.post(
         "/api/cliente/pedidos",
@@ -178,7 +191,7 @@ def test_place_order_saturday(client, db):
     admin_tok = _admin_token(client, db)
     product = _create_catalog_product(client, admin_tok, nombre="Pain au Chocolat", precio=2.0)
 
-    cliente_tok = _register_and_login_cliente(client, email="sat@test.com")
+    cliente_tok = _register_and_login_cliente(client, db, email="sat@test.com")
 
     res = client.post(
         "/api/cliente/pedidos",
@@ -197,7 +210,7 @@ def test_order_invalid_delivery_day(client, db):
     admin_tok = _admin_token(client, db)
     product = _create_catalog_product(client, admin_tok)
 
-    cliente_tok = _register_and_login_cliente(client, email="invalid@test.com")
+    cliente_tok = _register_and_login_cliente(client, db, email="invalid@test.com")
 
     res = client.post(
         "/api/cliente/pedidos",
@@ -224,8 +237,8 @@ def test_customer_sees_only_own_orders(client, db):
     admin_tok = _admin_token(client, db)
     product = _create_catalog_product(client, admin_tok)
 
-    tok_a = _register_and_login_cliente(client, email="a@test.com")
-    tok_b = _register_and_login_cliente(client, email="b@test.com")
+    tok_a = _register_and_login_cliente(client, db, email="a@test.com")
+    tok_b = _register_and_login_cliente(client, db, email="b@test.com")
 
     # Customer A places an order
     client.post(
@@ -244,7 +257,7 @@ def test_order_lifecycle(client, db):
     """Admin can advance an order through the full status lifecycle."""
     admin_tok = _admin_token(client, db)
     product = _create_catalog_product(client, admin_tok)
-    cliente_tok = _register_and_login_cliente(client, email="lifecycle@test.com")
+    cliente_tok = _register_and_login_cliente(client, db, email="lifecycle@test.com")
 
     # Place order
     order_res = client.post(
@@ -296,7 +309,7 @@ def test_admin_list_filter_by_estado(client, db):
     """Admin can filter orders by estado."""
     admin_tok = _admin_token(client, db)
     product = _create_catalog_product(client, admin_tok)
-    cliente_tok = _register_and_login_cliente(client, email="filter@test.com")
+    cliente_tok = _register_and_login_cliente(client, db, email="filter@test.com")
 
     order_res = client.post(
         "/api/cliente/pedidos",
@@ -326,7 +339,7 @@ def test_recurring_order_create(client, db):
     admin_tok = _admin_token(client, db)
     product = _create_catalog_product(client, admin_tok, nombre="Sourdough", precio=5.0)
 
-    cliente_tok = _register_and_login_cliente(client, email="recurring@test.com")
+    cliente_tok = _register_and_login_cliente(client, db, email="recurring@test.com")
 
     res = client.post(
         "/api/cliente/recurrentes",
@@ -349,7 +362,7 @@ def test_recurring_order_list_and_deactivate(client, db):
     admin_tok = _admin_token(client, db)
     product = _create_catalog_product(client, admin_tok, nombre="Brioche", precio=6.0)
 
-    cliente_tok = _register_and_login_cliente(client, email="deact@test.com")
+    cliente_tok = _register_and_login_cliente(client, db, email="deact@test.com")
 
     create_res = client.post(
         "/api/cliente/recurrentes",
@@ -400,7 +413,7 @@ def test_cliente_ve_sus_entregas_b2b(client, db):
     el cliente llevara doce entregas."""
     admin_tok = _admin_token(client, db)
     producto = _create_catalog_product(client, admin_tok, precio=100.0)
-    tok = _register_and_login_cliente(client, email="olula@test.com", nombre="Olula")
+    tok = _register_and_login_cliente(client, db, email="olula@test.com", nombre="Olula")
 
     me = client.get("/api/auth/cliente/me", headers={"Authorization": f"Bearer {tok}"})
     cliente_id = me.json()["id"]
@@ -424,7 +437,7 @@ def test_cliente_ve_sus_entregas_b2b(client, db):
 def test_historial_mezcla_pedidos_y_entregas(client, db):
     admin_tok = _admin_token(client, db)
     producto = _create_catalog_product(client, admin_tok, precio=100.0)
-    tok = _register_and_login_cliente(client, email="mixto@test.com")
+    tok = _register_and_login_cliente(client, db, email="mixto@test.com")
     cliente_id = client.get("/api/auth/cliente/me",
                             headers={"Authorization": f"Bearer {tok}"}).json()["id"]
 
@@ -451,8 +464,8 @@ def test_historial_mezcla_pedidos_y_entregas(client, db):
 def test_las_entregas_de_otro_cliente_no_se_ven(client, db):
     admin_tok = _admin_token(client, db)
     producto = _create_catalog_product(client, admin_tok, precio=100.0)
-    tok_a = _register_and_login_cliente(client, email="uno@test.com")
-    tok_b = _register_and_login_cliente(client, email="dos@test.com")
+    tok_a = _register_and_login_cliente(client, db, email="uno@test.com")
+    tok_b = _register_and_login_cliente(client, db, email="dos@test.com")
     cliente_a = client.get("/api/auth/cliente/me",
                            headers={"Authorization": f"Bearer {tok_a}"}).json()["id"]
 
@@ -466,7 +479,7 @@ def test_los_pedidos_del_portal_llevan_nombre_de_producto(client, db):
     """Antes el detalle mostraba 'Producto #4' porque la linea no traia nombre."""
     admin_tok = _admin_token(client, db)
     producto = _create_catalog_product(client, admin_tok, nombre="Croissant", precio=100.0)
-    tok = _register_and_login_cliente(client, email="nombres@test.com")
+    tok = _register_and_login_cliente(client, db, email="nombres@test.com")
 
     client.post(
         "/api/cliente/pedidos",

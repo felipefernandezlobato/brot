@@ -19,6 +19,7 @@ from app.models import (
     Receta,
     User,
 )
+from app.services.acceso_cliente import enviar_invitacion
 from app.services.costes import costo_receta, receta_incompleta
 from app.services.stock import deducir_congelado_por_catalogo, revertir_consumos
 from app.permissions import require_permission
@@ -41,7 +42,7 @@ def list_clientes_b2b(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return db.query(ClienteB2B).order_by(ClienteB2B.nombre).all()
+    return [_cliente_out(c) for c in db.query(ClienteB2B).order_by(ClienteB2B.nombre).all()]
 
 
 @clientes_router.get("/{cliente_id}", response_model=ClienteB2BOut)
@@ -53,7 +54,47 @@ def get_cliente_b2b(
     obj = db.query(ClienteB2B).filter(ClienteB2B.id == cliente_id).first()
     if not obj:
         raise HTTPException(status_code=404, detail="Cliente B2B no encontrado")
-    return obj
+    return _cliente_out(obj)
+
+
+def _cliente_out(c: ClienteB2B) -> dict:
+    """`tiene_acceso` no es una columna: es "ya puso contrasena". Distingue al
+    cliente de reparto del que ademas entra al portal, sin necesidad de un
+    campo aparte que se pueda desincronizar del password_hash real."""
+    return {
+        "id": c.id,
+        "nombre": c.nombre,
+        "email": c.email,
+        "tiene_acceso": bool(c.password_hash),
+        "direccion": c.direccion,
+        "telefono": c.telefono,
+        "contacto": c.contacto,
+        "notas": c.notas,
+        "dia_entrega_preferido": c.dia_entrega_preferido,
+        "is_active": c.is_active,
+    }
+
+
+def _email_libre(db: Session, email, excluir_id: int | None = None):
+    """Normaliza el email y comprueba que no lo tenga ya otro cliente.
+
+    Lo hacia el registro abierto, que se cerro el 2026-10-16; al pasar el alta
+    por aca habia que traerselo o se perdia la garantia. Importa por dos
+    motivos: el login compara en minusculas por los dos lados (el teclado del
+    movil capitaliza la primera letra, ver normalizar_email), asi que
+    "A@x.com" y "a@x.com" serian el MISMO login pero dos filas distintas, y
+    `.first()` elegiria una al azar. La unicidad de la columna no lo evita:
+    en Postgres distingue mayusculas.
+    """
+    if not email:
+        return None
+    normalizado = email.strip().lower()
+    q = db.query(ClienteB2B).filter(func.lower(func.trim(ClienteB2B.email)) == normalizado)
+    if excluir_id is not None:
+        q = q.filter(ClienteB2B.id != excluir_id)
+    if q.first():
+        raise HTTPException(status_code=409, detail="Ese email ya lo tiene otro cliente")
+    return normalizado
 
 
 @clientes_router.post("", response_model=ClienteB2BOut, status_code=201)
@@ -62,11 +103,13 @@ def create_cliente_b2b(
     user: User = require_permission("entregas_b2b", "create"),
     db: Session = Depends(get_db),
 ):
-    obj = ClienteB2B(**data.model_dump())
+    campos = data.model_dump()
+    campos["email"] = _email_libre(db, campos.get("email"))
+    obj = ClienteB2B(**campos)
     db.add(obj)
     db.commit()
     db.refresh(obj)
-    return obj
+    return _cliente_out(obj)
 
 
 @clientes_router.put("/{cliente_id}", response_model=ClienteB2BOut)
@@ -79,11 +122,14 @@ def update_cliente_b2b(
     obj = db.query(ClienteB2B).filter(ClienteB2B.id == cliente_id).first()
     if not obj:
         raise HTTPException(status_code=404, detail="Cliente B2B no encontrado")
-    for key, val in data.model_dump(exclude_unset=True).items():
+    campos = data.model_dump(exclude_unset=True)
+    if "email" in campos:
+        campos["email"] = _email_libre(db, campos["email"], excluir_id=cliente_id)
+    for key, val in campos.items():
         setattr(obj, key, val)
     db.commit()
     db.refresh(obj)
-    return obj
+    return _cliente_out(obj)
 
 
 @clientes_router.delete("/{cliente_id}")
@@ -98,6 +144,39 @@ def delete_cliente_b2b(
     db.delete(obj)
     db.commit()
     return {"ok": True}
+
+
+@clientes_router.post("/{cliente_id}/invitar")
+def invitar_cliente_b2b(
+    cliente_id: int,
+    user: User = require_permission("entregas_b2b", "edit"),
+    db: Session = Depends(get_db),
+):
+    """Le manda al cliente un enlace para que ponga su contrasena del portal.
+
+    Es el alta: desde el 2026-10-16 nadie puede registrarse solo. Vale tambien
+    para reenviar la invitacion si se le vencio, y el token anterior queda
+    muerto al crear el nuevo.
+
+    Devuelve `enviado: false` cuando el SMTP no esta configurado o el envio
+    fallo, en vez de fingir que salio. El cliente queda igualmente con su
+    token creado, pero si el correo no sale nadie lo va a usar -- la pantalla
+    tiene que decirlo.
+    """
+    cliente = db.query(ClienteB2B).filter(ClienteB2B.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente B2B no encontrado")
+    if not cliente.email:
+        raise HTTPException(
+            status_code=422,
+            detail="Este cliente no tiene email. Agregaselo antes de invitarlo.",
+        )
+    if not cliente.is_active:
+        raise HTTPException(status_code=409, detail="El cliente esta desactivado.")
+
+    enviado = enviar_invitacion(db, cliente)
+    db.commit()
+    return {"enviado": enviado, "email": cliente.email}
 
 
 # ─── Entregas B2B ─────────────────────────────────────────────────────────────

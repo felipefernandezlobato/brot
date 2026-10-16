@@ -1,0 +1,238 @@
+"""Alta por invitacion y recuperacion de contrasena del portal de clientes.
+
+El alta abierta se cerro el 2026-10-16: ahora Felipe da de alta al cliente y
+le llega un correo con un enlace de un solo uso para poner su contrasena. El
+mismo mecanismo sirve para "olvide mi contrasena".
+
+Los tests no mandan correo de verdad -- SMTP no esta configurado en el
+entorno de test, asi que `enviar_email` devuelve False sin tocar la red -- y
+leen el token de la base, que es lo unico que el correo llevaria.
+"""
+
+from datetime import datetime, timedelta, timezone
+
+from app.auth import hash_pin
+from app.auth_cliente import hash_password
+from app.main import app
+from app.models import ClienteB2B, Permission, TokenAccesoCliente, User
+from app.routers import auth_cliente, entregas_b2b
+
+app.include_router(auth_cliente.router)
+app.include_router(entregas_b2b.clientes_router)
+
+
+def _admin(client, db):
+    db.add(User(name="Admin", pin_hash=hash_pin("0000"), role="admin"))
+    db.commit()
+    return client.post("/api/auth/login", json={"name": "Admin", "pin": "0000"}).json()["token"]
+
+
+def _cliente(db, email="olula@test.com", nombre="Olula", password=None, activo=True):
+    c = ClienteB2B(
+        nombre=nombre,
+        email=email,
+        is_active=activo,
+        password_hash=hash_password(password) if password else None,
+    )
+    db.add(c)
+    db.commit()
+    return c
+
+
+def _token_de(db, cliente_id):
+    """El token en claro solo existe en el correo; en la base esta su hash.
+    Los tests lo recuperan parcheando la generacion."""
+    fila = (
+        db.query(TokenAccesoCliente)
+        .filter(TokenAccesoCliente.cliente_b2b_id == cliente_id)
+        .order_by(TokenAccesoCliente.id.desc())
+        .first()
+    )
+    return fila
+
+
+# ---------------------------------------------------------------- alta
+
+
+def test_el_registro_abierto_esta_cerrado(client, db):
+    res = client.post("/api/auth/cliente/registro", json={
+        "email": "random@internet.com", "password": "loquesea123", "nombre": "Random",
+    })
+    assert res.status_code == 410
+    assert db.query(ClienteB2B).count() == 0
+
+
+def test_invitar_crea_un_token_de_alta(client, db, monkeypatch):
+    capturado = {}
+    monkeypatch.setattr(
+        "app.services.acceso_cliente.enviar_email",
+        lambda destino, asunto, cuerpo: capturado.update(destino=destino, cuerpo=cuerpo) or True,
+    )
+    tok = _admin(client, db)
+    c = _cliente(db)
+
+    res = client.post(f"/api/clientes-b2b/{c.id}/invitar", headers={"Authorization": f"Bearer {tok}"})
+    assert res.status_code == 200, res.text
+    assert res.json() == {"enviado": True, "email": "olula@test.com"}
+
+    fila = _token_de(db, c.id)
+    assert fila is not None and fila.tipo == "alta" and fila.usado_at is None
+    # El enlace del correo lleva el token en claro; la base solo su hash.
+    assert "/cliente/establecer?token=" in capturado["cuerpo"]
+    assert fila.token_hash not in capturado["cuerpo"]
+
+
+def test_invitar_sin_email_no_se_puede(client, db):
+    tok = _admin(client, db)
+    c = _cliente(db, email=None)
+    res = client.post(f"/api/clientes-b2b/{c.id}/invitar", headers={"Authorization": f"Bearer {tok}"})
+    assert res.status_code == 422
+
+
+def test_invitar_avisa_cuando_el_correo_no_sale(client, db, monkeypatch):
+    """Sin SMTP configurado el alta no revienta, pero tiene que decir que no
+    se envio -- si no, Felipe cree que el cliente recibio algo."""
+    monkeypatch.setattr("app.services.acceso_cliente.enviar_email", lambda *a: False)
+    tok = _admin(client, db)
+    c = _cliente(db)
+    res = client.post(f"/api/clientes-b2b/{c.id}/invitar", headers={"Authorization": f"Bearer {tok}"})
+    assert res.status_code == 200
+    assert res.json()["enviado"] is False
+
+
+# ---------------------------------------------------- canje del token
+
+
+def _invitar_y_sacar_token(client, db, monkeypatch, cliente):
+    enlaces = []
+    monkeypatch.setattr(
+        "app.services.acceso_cliente.enviar_email",
+        lambda destino, asunto, cuerpo: enlaces.append(cuerpo) or True,
+    )
+    tok = _admin(client, db)
+    client.post(f"/api/clientes-b2b/{cliente.id}/invitar", headers={"Authorization": f"Bearer {tok}"})
+    cuerpo = enlaces[-1]
+    return cuerpo.split("token=")[1].split()[0]
+
+
+def test_establecer_password_y_entrar(client, db, monkeypatch):
+    c = _cliente(db)
+    token = _invitar_y_sacar_token(client, db, monkeypatch, c)
+
+    res = client.post("/api/auth/cliente/establecer", json={"token": token, "password": "miclave123"})
+    assert res.status_code == 200, res.text
+    assert res.json()["token"]  # entra directo, sin volver a escribir el correo
+
+    login = client.post("/api/auth/cliente/login", json={"email": c.email, "password": "miclave123"})
+    assert login.status_code == 200
+
+
+def test_el_token_es_de_un_solo_uso(client, db, monkeypatch):
+    c = _cliente(db)
+    token = _invitar_y_sacar_token(client, db, monkeypatch, c)
+    assert client.post("/api/auth/cliente/establecer", json={"token": token, "password": "clave12345"}).status_code == 200
+    segundo = client.post("/api/auth/cliente/establecer", json={"token": token, "password": "otraclave99"})
+    assert segundo.status_code == 400
+
+
+def test_un_token_vencido_no_sirve(client, db, monkeypatch):
+    c = _cliente(db)
+    token = _invitar_y_sacar_token(client, db, monkeypatch, c)
+    fila = _token_de(db, c.id)
+    fila.expira_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=1)
+    db.commit()
+
+    res = client.post("/api/auth/cliente/establecer", json={"token": token, "password": "clave12345"})
+    assert res.status_code == 400
+
+
+def test_pedir_otro_enlace_mata_el_anterior(client, db, monkeypatch):
+    c = _cliente(db)
+    primero = _invitar_y_sacar_token(client, db, monkeypatch, c)
+    segundo = _invitar_y_sacar_token(client, db, monkeypatch, c)
+    assert primero != segundo
+    assert client.post("/api/auth/cliente/establecer", json={"token": primero, "password": "clave12345"}).status_code == 400
+    assert client.post("/api/auth/cliente/establecer", json={"token": segundo, "password": "clave12345"}).status_code == 200
+
+
+def test_password_corta_se_rechaza(client, db, monkeypatch):
+    c = _cliente(db)
+    token = _invitar_y_sacar_token(client, db, monkeypatch, c)
+    assert client.post("/api/auth/cliente/establecer", json={"token": token, "password": "corta"}).status_code == 422
+
+
+# ------------------------------------------------------- recuperacion
+
+
+def test_recuperar_no_revela_si_el_correo_existe(client, db, monkeypatch):
+    """La respuesta tiene que ser identica exista o no, o cualquiera puede
+    averiguar quienes son los clientes de BROT probando direcciones."""
+    monkeypatch.setattr("app.services.acceso_cliente.enviar_email", lambda *a: True)
+    _cliente(db, email="existe@test.com")
+
+    a = client.post("/api/auth/cliente/recuperar", json={"email": "existe@test.com"})
+    b = client.post("/api/auth/cliente/recuperar", json={"email": "noexiste@test.com"})
+    assert a.status_code == b.status_code == 202
+    assert a.json() == b.json()
+    # pero solo se creo token para el que existe
+    assert db.query(TokenAccesoCliente).count() == 1
+
+
+def test_recuperar_y_cambiar(client, db, monkeypatch):
+    cuerpos = []
+    monkeypatch.setattr(
+        "app.services.acceso_cliente.enviar_email",
+        lambda destino, asunto, cuerpo: cuerpos.append(cuerpo) or True,
+    )
+    c = _cliente(db, password="vieja12345")
+    client.post("/api/auth/cliente/recuperar", json={"email": c.email})
+    token = cuerpos[-1].split("token=")[1].split()[0]
+
+    assert client.post("/api/auth/cliente/establecer", json={"token": token, "password": "nueva12345"}).status_code == 200
+    assert client.post("/api/auth/cliente/login", json={"email": c.email, "password": "nueva12345"}).status_code == 200
+    assert client.post("/api/auth/cliente/login", json={"email": c.email, "password": "vieja12345"}).status_code == 401
+
+
+def test_un_cliente_desactivado_no_recibe_enlace(client, db, monkeypatch):
+    monkeypatch.setattr("app.services.acceso_cliente.enviar_email", lambda *a: True)
+    _cliente(db, email="baja@test.com", activo=False)
+    res = client.post("/api/auth/cliente/recuperar", json={"email": "baja@test.com"})
+    assert res.status_code == 202
+    assert db.query(TokenAccesoCliente).count() == 0
+
+
+# --------------------------------------------- cambio desde el portal
+
+
+def test_cambiar_password_desde_dentro(client, db):
+    c = _cliente(db, password="actual12345")
+    tok = client.post("/api/auth/cliente/login", json={"email": c.email, "password": "actual12345"}).json()["token"]
+
+    res = client.post(
+        "/api/auth/cliente/cambiar-password",
+        json={"actual": "actual12345", "nueva": "flamante123"},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert res.status_code == 204
+    assert client.post("/api/auth/cliente/login", json={"email": c.email, "password": "flamante123"}).status_code == 200
+
+
+def test_cambiar_password_exige_la_actual(client, db):
+    """Una sesion abierta en un movil ajeno no debe bastar para dejar al
+    cliente fuera de su propia cuenta."""
+    c = _cliente(db, password="actual12345")
+    tok = client.post("/api/auth/cliente/login", json={"email": c.email, "password": "actual12345"}).json()["token"]
+
+    res = client.post(
+        "/api/auth/cliente/cambiar-password",
+        json={"actual": "me-la-invento", "nueva": "flamante123"},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert res.status_code == 401
+    assert client.post("/api/auth/cliente/login", json={"email": c.email, "password": "actual12345"}).status_code == 200
+
+
+def test_cambiar_password_requiere_sesion(client, db):
+    assert client.post(
+        "/api/auth/cliente/cambiar-password", json={"actual": "x", "nueva": "flamante123"}
+    ).status_code in (401, 403)

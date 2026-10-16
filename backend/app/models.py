@@ -647,3 +647,34 @@ class MovimientoStock(Base):
     notas: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
     registrado_por: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     registrado_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+
+
+# ============================================================
+# Acceso de clientes al portal
+# ============================================================
+
+
+class TokenAccesoCliente(Base):
+    """Token de un solo uso para que un cliente ponga su contrasena.
+
+    Sirve para las dos cosas con el mismo mecanismo: el alta por invitacion
+    (`tipo="alta"`) y el "olvide mi contrasena" (`tipo="reset"`). Lo unico que
+    cambia entre ambas es el texto del correo y cuanto dura.
+
+    Se guarda el HASH del token, no el token. Si alguien llegara a leer esta
+    tabla no puede usar nada de lo que hay dentro para entrar en una cuenta --
+    mismo motivo por el que no se guardan contrasenas en claro. El token va
+    solo en el enlace del correo.
+    """
+
+    __tablename__ = "tokens_acceso_cliente"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cliente_b2b_id: Mapped[int] = mapped_column(ForeignKey("clientes_b2b.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(sa.String(64), unique=True, index=True)
+    tipo: Mapped[str] = mapped_column(sa.String(10))  # "alta" | "reset"
+    expira_at: Mapped[datetime] = mapped_column(sa.DateTime)
+    usado_at: Mapped[Optional[datetime]] = mapped_column(sa.DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+
+    cliente: Mapped["ClienteB2B"] = relationship()

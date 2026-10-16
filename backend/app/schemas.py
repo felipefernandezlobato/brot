@@ -41,6 +41,20 @@ class ClienteLogin(BaseModel):
     email: str
     password: str
 
+class RecuperarPassword(BaseModel):
+    email: str
+
+class EstablecerPassword(BaseModel):
+    """Canje del token del correo. Sirve igual para el alta y el reset."""
+    token: str
+    # El minimo se valida aca y no en el router para que el 422 salga con el
+    # formato de Pydantic que el frontend ya sabe mostrar.
+    password: str = Field(min_length=8)
+
+class CambiarPassword(BaseModel):
+    actual: str
+    nueva: str = Field(min_length=8)
+
 class ClienteOut(BaseModel):
     id: int
     email: str
@@ -916,6 +930,9 @@ class PedidoClienteOut(BaseModel):
 
 class ClienteB2BCreate(BaseModel):
     nombre: str
+    # Sin esto el alta nacia con email None y el cliente no podia ser invitado
+    # al portal -- mismo agujero que ProductoCatalogo.receta_id (ver CLAUDE.md).
+    email: Optional[str] = None
     direccion: Optional[str] = None
     telefono: Optional[str] = None
     contacto: Optional[str] = None
@@ -926,6 +943,7 @@ class ClienteB2BCreate(BaseModel):
 
 class ClienteB2BUpdate(BaseModel):
     nombre: Optional[str] = None
+    email: Optional[str] = None
     direccion: Optional[str] = None
     telefono: Optional[str] = None
     contacto: Optional[str] = None
@@ -937,6 +955,11 @@ class ClienteB2BUpdate(BaseModel):
 class ClienteB2BOut(BaseModel):
     id: int
     nombre: str
+    email: Optional[str] = None
+    # True si ya puso contrasena: es lo que distingue "cliente de reparto" de
+    # "cliente con acceso al portal". La pantalla lo usa para saber a quien
+    # ofrecerle invitar y a quien reenviarle el enlace.
+    tiene_acceso: bool = False
     direccion: Optional[str] = None
     telefono: Optional[str] = None
     contacto: Optional[str] = None
