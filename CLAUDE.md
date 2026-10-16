@@ -731,6 +731,47 @@ Dropping an uncosted line's cost while keeping its revenue *inflates* the margin
 Live: 65,5–67,0% over 97% of sales. If `cobertura_pct` is null there was nothing
 costable and the card shows "—", never a number.
 
+### Compras del mes en /pedidos, y la mitad de compras compartida (2026-10-16)
+
+`services/mensual.py::resumen_compras_mensual()` es **el único lugar** que le da
+forma a `compras_total_ars` / `top_ingredientes` / `por_proveedor` /
+`cambios_precio` por mes. `resumen_mensual()` la **compone** en vez de quedarse
+con una copia, así que el gasto de un mes no puede dar distinto entre
+`/pedidos` y inicio por construcción, no por coincidencia. El monto por línea
+sigue saliendo de `_compras()` sin tocarse. Pinchado por
+`test_compras_mensual_coincide_con_mensual`.
+
+`GET /api/dashboard/compras-mensual?meses=N` → **`get_current_user`, NO
+`require_admin`** (a diferencia de `/mensual`): no expone facturación, margen ni
+clientes, y el que carga los pedidos necesita ver en qué se gasta. La propia
+pantalla ya le muestra a cualquiera el total en pesos de cada pedido, así que
+esconder el acumulado no protegía nada. Es un `get_current_user` pelado y no
+`require_permission` a propósito, para que no se apague sin querer desde la
+pantalla de permisos. `test_compras_mensual_no_expone_ventas_ni_margen` falla si
+alguien le agrega ventas: ahí deja de poder ser visible para el staff.
+
+Lo renderiza `components/EstadisticasCompras.tsx` al pie de la pestaña
+**Activos** de `/pedidos`, y se muestra **también cuando no hay pedidos activos**
+— es justo cuando uno mira en qué viene gastando antes de armar el próximo.
+
+**Ojo con las dos fórmulas de plata de esta pantalla, que discrepan a
+propósito.** `calcTotal()` (`pedidos/page.tsx`) es
+`cantidad_pedida × (precio_unitario ?? 0)`; `_compras()` es
+`cantidad_recibida × precio_unitario` salteando los nulos. La tarjeta
+**"Pendiente de recibir"** es el ÚNICO uso legítimo de `calcTotal` para un
+número de plata acá: un pedido sin recibir no tiene cantidad recibida ni precio
+final, así que es un estimado, está etiquetado como tal, y es una foto de HOY —
+no cambia al cambiar de mes. Para el gasto del mes nunca usar `calcTotal`.
+
+Asimetría deliberada y fácil de uniformar sin querer al mover este código:
+`top_ingredientes` se corta en `TOP_N`, `por_proveedor` **no** (son pocos
+proveedores y se quieren todos). Hay test.
+
+`Tarjeta` / `Panel` / `Fila` / `SelectorMes` / `etiquetaMes` viven en
+`components/stats/common.tsx`, compartidas con `EstadisticasMensuales`. Son
+presentacionales puras: ninguna sabe de roles ni pide datos — el gate de admin
+lo hace la pantalla que las usa, no ellas.
+
 ### Portal orders deduct stock on `entregado`, same as a B2B delivery (added 2026-09-30)
 Portal orders never touched stock: the estado handler was a bare `pedido.estado = ...; commit()`. That was invisible while the customer portal was unused, but Olula started ordering through it on 2026-09-29 and its first order — 14 products, $265.900 — sat marked `entregado` having deducted nothing at all. Felipe's instruction was "igual que los que se hacen en la pagina de brot interna", so the B2B machinery is mirrored exactly.
 - `_aplicar_pedido_portal` / `_revertir_pedido_portal` (`routers/entregas_b2b.py`) mirror `_aplicar_entrega`/`_revertir_entrega`. `aplicar_cambio_estado_portal` is the shared entry point used by **both** estado endpoints (this router's and `pedidos_clientes_admin`'s) — either one alone left a way to mark an order delivered without deducting. `delete_pedido_portal` reverts first, or deleting a delivered order would orphan its deduction with nothing able to undo it.
