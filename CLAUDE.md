@@ -910,7 +910,15 @@ GET  /api/export/csv
 - Backend: https://brot-api.onrender.com
 
 **Database:** Neon PostgreSQL (project: `BROT`, region: `aws-eu-central-1`)
-- Connection: `postgresql://neondb_owner:npg_l2UDXiHuW7KJ@ep-noisy-star-b2b44bno.c-6.eu-central-1.aws.neon.tech/neondb?sslmode=require`
+- **La cadena de conexión NO va en este archivo.** Este repo es público en
+  GitHub, y la contraseña estuvo escrita acá en texto plano desde el commit
+  `a25c39c` hasta el 2026-10-16, cuando hubo que rotar el rol `neondb_owner`
+  de urgencia. Git conserva el historial para siempre, así que publicar una
+  credencial una vez es publicarla definitivamente: lo único que cerró el
+  agujero fue cambiarla, no borrarla de acá.
+- Vive en **`DATABASE_URL`**: en el panel de Render para producción, y en
+  `.env.local` (cubierto por el comodín `.env*` del `.gitignore`) para trabajar
+  en local. Ningún script debería llevarla escrita; que la lea del entorno.
 
 **Deploy Checklist:**
 1. `git push` — triggers Vercel auto-deploy for frontend
@@ -932,9 +940,11 @@ Render start command runs `alembic upgrade head` + uvicorn — migrations auto-a
 ## Local Development
 
 Two options for local dev:
-1. **Connect to Neon (recommended)** — same data as production:
+1. **Connect to Neon (recommended)** — same data as production. La cadena sale
+   de `.env.local`, nunca escrita en el comando ni en este archivo:
    ```bash
-   DATABASE_URL="postgresql://neondb_owner:npg_l2UDXiHuW7KJ@ep-noisy-star-b2b44bno.c-6.eu-central-1.aws.neon.tech/neondb?sslmode=require" uvicorn app.main:app --reload --port 8003
+   set -a && . ../.env.local && set +a
+   uvicorn app.main:app --reload --port 8003
    ```
 2. **Use local SQLite** — no env var needed, isolated dev database (data lost on restart if in-memory)
 
@@ -944,7 +954,8 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-DATABASE_URL="postgresql://neondb_owner:npg_l2UDXiHuW7KJ@ep-noisy-star-b2b44bno.c-6.eu-central-1.aws.neon.tech/neondb?sslmode=require" uvicorn app.main:app --reload --port 8003
+set -a && . ../.env.local && set +a   # carga DATABASE_URL; omitir para usar SQLite
+uvicorn app.main:app --reload --port 8003
 
 # Frontend
 cd frontend
