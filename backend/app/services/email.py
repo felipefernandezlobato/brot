@@ -58,8 +58,15 @@ def enviar_email(destino: str, asunto: str, cuerpo: str) -> bool:
             s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
             s.send_message(msg)
         return True
-    except Exception:
-        # Sin exc_info completo en el log: un traceback de smtplib puede incluir
-        # la linea de login y no queremos la contrasena en los logs de Render.
-        logger.error("Fallo el envio de '%s' a %s", asunto, destino)
+    except Exception as e:
+        # Sin `exc_info=True` a proposito: un traceback con locals podria
+        # arrastrar la contrasena a los logs de Render. Pero el TIPO y el
+        # mensaje de la excepcion si hacen falta -- sin ellos, un fallo de
+        # envio es indistinguible de otro y no hay por donde empezar
+        # (paso el 2026-10-16: no llegaba ningun correo y el log solo decia
+        # "fallo"). smtplib pone el motivo en el mensaje, no las credenciales.
+        logger.error(
+            "Fallo el envio de '%s' a %s -- %s: %s",
+            asunto, destino, type(e).__name__, str(e)[:300],
+        )
         return False

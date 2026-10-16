@@ -151,20 +151,18 @@ BROT La Panaderia
     )
 
 
-def enviar_verificacion(db: Session, cliente: ClienteB2B) -> bool:
-    """Confirma que el correo del alta existe y es suyo.
+def enviar_email_verificacion(email: str, nombre: str, token: str) -> bool:
+    """Solo el envio, sin tocar la base.
 
-    Con el registro abierto el email deja de estar verificado por
-    construccion -- cuando el alta era por invitacion, usar el enlace ya lo
-    demostraba. Ahora cualquiera puede teclear una direccion con una errata, y
-    Felipe se encontraria aprobando a alguien que nunca va a recibir nada, ni
-    siquiera para recuperar su contrasena.
+    Las tareas en segundo plano corren DESPUES de que la peticion termino y
+    `get_db` cerro la sesion, asi que no pueden recibirla: usarla alli da un
+    error de sesion cerrada. El token se crea en el endpoint, que si la
+    tiene, y aqui solo llega el texto.
     """
-    token = crear_token(db, cliente, "verificacion")
     return enviar_email(
-        cliente.email,
+        email,
         "Confirma tu correo - BROT",
-        f"""Hola {cliente.nombre},
+        f"""Hola {nombre},
 
 Gracias por registrarte en el portal de pedidos de BROT La Panaderia.
 Confirma que este correo es tuyo entrando aca:
@@ -181,7 +179,21 @@ BROT La Panaderia
     )
 
 
-def avisar_alta_a_brot(cliente: ClienteB2B) -> bool:
+def enviar_verificacion(db: Session, cliente: ClienteB2B) -> bool:
+    """Confirma que el correo del alta existe y es suyo.
+
+    Con el registro abierto el email deja de estar verificado por
+    construccion -- cuando el alta era por invitacion, usar el enlace ya lo
+    demostraba. Ahora cualquiera puede teclear una direccion con una errata, y
+    Felipe se encontraria aprobando a alguien que nunca va a recibir nada, ni
+    siquiera para recuperar su contrasena.
+    """
+    return enviar_email_verificacion(
+        cliente.email, cliente.nombre, crear_token(db, cliente, "verificacion")
+    )
+
+
+def avisar_alta_a_brot(nombre: str, email: str, telefono=None, direccion=None) -> bool:
     """Le avisa a BROT que hay alguien esperando aprobacion.
 
     Sin esto, un cliente que se registra un viernes puede quedarse esperando
@@ -193,13 +205,13 @@ def avisar_alta_a_brot(cliente: ClienteB2B) -> bool:
         return False
     return enviar_email(
         destino,
-        f"Nuevo cliente en el portal: {cliente.nombre}",
+        f"Nuevo cliente en el portal: {nombre}",
         f"""Se registro un cliente nuevo y esta esperando tu aprobacion.
 
-  Nombre:    {cliente.nombre}
-  Correo:    {cliente.email}
-  Telefono:  {cliente.telefono or "-"}
-  Direccion: {cliente.direccion or "-"}
+  Nombre:    {nombre}
+  Correo:    {email}
+  Telefono:  {telefono or "-"}
+  Direccion: {direccion or "-"}
 
 Hasta que lo apruebes no ve el catalogo ni puede pedir.
 

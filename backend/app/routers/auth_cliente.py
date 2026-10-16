@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,8 @@ from app.schemas import (
 from app.services.acceso_cliente import (
     avisar_alta_a_brot,
     consumir_token,
+    crear_token,
+    enviar_email_verificacion,
     enviar_recuperacion,
     enviar_verificacion,
 )
@@ -38,7 +40,11 @@ def normalizar_email(email: str) -> str:
 
 
 @router.post("/registro", response_model=TokenResponse, status_code=201)
-def registrar(data: ClienteRegistro, db: Session = Depends(get_db)):
+def registrar(
+    data: ClienteRegistro,
+    tareas: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """Alta propia. Queda pendiente de dos cosas antes de poder pedir:
     que el cliente confirme su correo y que BROT lo apruebe.
 
@@ -71,9 +77,19 @@ def registrar(data: ClienteRegistro, db: Session = Depends(get_db)):
     db.add(cliente)
     db.flush()
 
-    enviar_verificacion(db, cliente)
-    avisar_alta_a_brot(cliente)
+    # El token se crea YA (necesita la sesion y la fila del cliente), pero el
+    # correo se manda despues de responder. Mandarlo dentro dejaba la pantalla
+    # en "Creando cuenta..." mientras Gmail contestaba DOS veces, con 20s de
+    # margen cada una: el cliente veia el boton colgado y volvia a pulsarlo.
+    # Un envio de correo no puede bloquear una pantalla.
+    token = crear_token(db, cliente, "verificacion")
     db.commit()
+
+    tareas.add_task(enviar_email_verificacion, cliente.email, cliente.nombre, token)
+    tareas.add_task(
+        avisar_alta_a_brot,
+        cliente.nombre, cliente.email, cliente.telefono, cliente.direccion,
+    )
     return {"token": create_cliente_token(cliente.id)}
 
 
