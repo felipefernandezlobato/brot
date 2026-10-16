@@ -228,7 +228,9 @@ def test_cambiar_password_exige_la_actual(client, db):
         json={"actual": "me-la-invento", "nueva": "flamante123"},
         headers={"Authorization": f"Bearer {tok}"},
     )
-    assert res.status_code == 401
+    # 422 y no 401: la sesion es valida, lo que falla es el campo. Con un 401
+    # el cliente de API del portal lo echaria al login por teclear mal.
+    assert res.status_code == 422
     assert client.post("/api/auth/cliente/login", json={"email": c.email, "password": "actual12345"}).status_code == 200
 
 

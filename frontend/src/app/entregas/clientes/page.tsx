@@ -8,6 +8,10 @@ import { useToast } from "@/components/Toast";
 interface ClienteB2B {
   id: number;
   nombre: string;
+  email: string | null;
+  // Calculado en el backend a partir de password_hash: distingue al cliente
+  // de reparto del que ademas entra al portal.
+  tiene_acceso: boolean;
   direccion: string | null;
   telefono: string | null;
   contacto: string | null;
@@ -18,6 +22,7 @@ interface ClienteB2B {
 
 const EMPTY_FORM = {
   nombre: "",
+  email: "",
   contacto: "",
   telefono: "",
   direccion: "",
@@ -68,6 +73,25 @@ function ClienteForm({
             placeholder="Persona de contacto"
             className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
           />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-warm-gray mb-1">
+            Correo electrónico
+          </label>
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => onChange({ ...form, email: e.target.value })}
+            placeholder="cliente@email.com"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            className="w-full px-3 py-2 border border-cream-dark rounded-lg bg-cream text-sm focus:outline-none focus:ring-2 focus:ring-brot/30"
+          />
+          <p className="text-[11px] text-warm-gray mt-1">
+            Hace falta para darle acceso al portal de pedidos.
+          </p>
         </div>
 
         <div>
@@ -171,6 +195,7 @@ export default function ClientesB2BPage() {
         method: "POST",
         body: JSON.stringify({
           nombre: newForm.nombre.trim(),
+          email: newForm.email.trim() || null,
           contacto: newForm.contacto || null,
           telefono: newForm.telefono || null,
           direccion: newForm.direccion || null,
@@ -189,10 +214,37 @@ export default function ClientesB2BPage() {
     }
   };
 
+  const [invitando, setInvitando] = useState<number | null>(null);
+
+  const invitar = async (c: ClienteB2B) => {
+    const reenvio = c.tiene_acceso;
+    if (reenvio && !confirm(
+      `${c.nombre} ya tiene acceso. Enviarle un enlace nuevo no le borra la contraseña actual, ` +
+      `pero el enlace anterior deja de servir. ¿Seguimos?`
+    )) return;
+    setInvitando(c.id);
+    try {
+      const r = await apiFetch<{ enviado: boolean; email: string }>(
+        `/api/clientes-b2b/${c.id}/invitar`, { method: "POST" }
+      );
+      // El backend crea el token aunque el correo falle, asi que decirlo
+      // importa: si no sale, nadie va a usar ese enlace y el cliente se queda
+      // esperando sin que nos enteremos.
+      if (r.enviado) toast(`Enlace enviado a ${r.email}`);
+      else toast("No se pudo enviar el correo. Revisá la configuración de envío.", "error");
+      load();
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : "No se pudo invitar", "error");
+    } finally {
+      setInvitando(null);
+    }
+  };
+
   const startEdit = (c: ClienteB2B) => {
     setEditId(c.id);
     setEditForm({
       nombre: c.nombre,
+      email: c.email ?? "",
       contacto: c.contacto ?? "",
       telefono: c.telefono ?? "",
       direccion: c.direccion ?? "",
@@ -211,6 +263,7 @@ export default function ClientesB2BPage() {
         method: "PUT",
         body: JSON.stringify({
           nombre: editForm.nombre.trim(),
+          email: editForm.email.trim() || null,
           contacto: editForm.contacto || null,
           telefono: editForm.telefono || null,
           direccion: editForm.direccion || null,
@@ -324,9 +377,15 @@ export default function ClientesB2BPage() {
                           Inactivo
                         </span>
                       )}
+                      {c.tiene_acceso && (
+                        <span className="text-xs text-brot bg-brot/10 px-1.5 py-0.5 rounded">
+                          Portal
+                        </span>
+                      )}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-warm-gray">
                       {c.contacto && <span>{c.contacto}</span>}
+                      {c.email && <span>{c.email}</span>}
                       {c.telefono && <span>{c.telefono}</span>}
                       {c.dia_entrega_preferido && <span>Entrega: {c.dia_entrega_preferido}</span>}
                     </div>
@@ -338,6 +397,18 @@ export default function ClientesB2BPage() {
                     )}
                   </div>
                   <div className="flex gap-2 shrink-0">
+                    {c.email && c.is_active && (
+                      <button
+                        onClick={() => invitar(c)}
+                        disabled={invitando === c.id}
+                        title={c.tiene_acceso
+                          ? "Reenviar el enlace para cambiar la contraseña"
+                          : "Darle acceso al portal de pedidos"}
+                        className="px-3 py-2 text-sm text-brot hover:text-brot-dark transition-colors min-h-[44px] disabled:opacity-50"
+                      >
+                        {invitando === c.id ? "Enviando..." : c.tiene_acceso ? "Reenviar" : "Dar acceso"}
+                      </button>
+                    )}
                     <button
                       onClick={() => startEdit(c)}
                       className="px-3 py-2 text-sm text-brot hover:text-brot-dark transition-colors min-h-[44px]"

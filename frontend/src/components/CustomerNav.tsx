@@ -17,6 +17,7 @@ export function CustomerNav({ nombre }: { nombre?: string }) {
     { href: "/cliente", label: "Inicio" },
     { href: "/cliente/pedidos", label: "Mis Pedidos" },
     { href: "/cliente/recurrentes", label: "Recurrentes" },
+    { href: "/cliente/cuenta", label: "Mi cuenta" },
   ];
 
   return (

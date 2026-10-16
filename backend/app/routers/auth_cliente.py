@@ -128,7 +128,11 @@ def cambiar_password(
     abierta en un movil, sin esto cualquiera que lo agarre le cambia la
     contrasena y lo deja fuera de su propia cuenta.
     """
+    # 422 y no 401 a proposito: la peticion SI esta autenticada, lo que esta
+    # mal es un campo del formulario. Con un 401 el cliente de API del portal
+    # borra el token y manda al login, asi que equivocarse al teclear la
+    # contrasena actual te echaba de la sesion en vez de avisarte.
     if not cliente.password_hash or not verify_password(data.actual, cliente.password_hash):
-        raise HTTPException(status_code=401, detail="La contrasena actual no es correcta")
+        raise HTTPException(status_code=422, detail="La contrasena actual no es correcta")
     cliente.password_hash = hash_password(data.nueva)
     db.commit()

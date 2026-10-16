@@ -109,14 +109,21 @@ export default function ClienteLoginPage() {
           </button>
         </form>
 
-        <p className="mt-5 text-center text-sm text-warm-gray">
-          ¿Aún no tienes cuenta?{" "}
+        {/* El registro abierto se cerro el 2026-10-16: el alta la hace BROT y
+            al cliente le llega un correo con el enlace. Lo que de verdad hace
+            falta aqui es la recuperacion. */}
+        <p className="mt-5 text-center text-sm">
           <Link
-            href="/cliente/registro"
+            href="/cliente/recuperar"
             className="text-brot font-medium hover:underline"
           >
-            Regístrate
+            ¿Olvidaste tu contraseña?
           </Link>
+        </p>
+
+        <p className="mt-4 pt-4 border-t border-cream-dark text-center text-xs text-warm-gray leading-relaxed">
+          ¿Todavía no tenés acceso? Pedíselo a BROT y te llega un correo para
+          crear tu contraseña.
         </p>
       </div>
     </div>
