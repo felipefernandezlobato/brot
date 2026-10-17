@@ -2,14 +2,13 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
 from pydantic import AliasChoices, BaseModel, Field
 
 from app.models import (
-    Ingrediente,
     LineaReceta,
     ProductoCongelado,
     Receta,
@@ -33,7 +32,9 @@ from app.schemas import (
 router = APIRouter(prefix="/api/produccion", tags=["produccion"])
 
 
-def _padre_declarable(db: Session, producto_congelado_id: int | None) -> Optional[ProductoCongelado]:
+def _padre_declarable(
+    productos: dict[int, ProductoCongelado], producto_congelado_id: int | None
+) -> Optional[ProductoCongelado]:
     """The parent product whose consumption may be declared by hand, or None.
 
     Returning the padre itself (not a bool) is what lets the screen label the
@@ -41,21 +42,26 @@ def _padre_declarable(db: Session, producto_congelado_id: int | None) -> Optiona
     instead of the old fixed "bast.", which said nothing when you were logging
     bread. The rule lives in services/stock.admite_consumo_declarado; this just
     resolves the parent and asks.
+
+    Lee de `productos` en vez de consultar: este ayudante corre una vez por
+    tarea y hacia dos consultas cada vez. Ver _contexto_dia.
     """
     if not producto_congelado_id:
         return None
-    prod = db.query(ProductoCongelado).filter(ProductoCongelado.id == producto_congelado_id).first()
+    prod = productos.get(producto_congelado_id)
     if not prod or not prod.producto_padre_id:
         return None
-    padre = db.query(ProductoCongelado).filter(ProductoCongelado.id == prod.producto_padre_id).first()
+    padre = productos.get(prod.producto_padre_id)
     return padre if admite_consumo_declarado(padre) else None
 
 
-def _consumo_padre_campos(db: Session, producto_congelado_id: int | None) -> dict:
+def _consumo_padre_campos(
+    productos: dict[int, ProductoCongelado], producto_congelado_id: int | None
+) -> dict:
     """Fields the day view needs to render (or hide) the declared-consumption
     input. `consumo_padre_label` is the parent's own name, which the input uses
     as its label."""
-    padre = _padre_declarable(db, producto_congelado_id)
+    padre = _padre_declarable(productos, producto_congelado_id)
     return {
         "consumo_padre_id": padre.id if padre else None,
         "consumo_padre_label": padre.nombre if padre else None,
@@ -154,25 +160,25 @@ def get_calendario(
 # ==============================================================
 
 
-def _preview_consumo(db: Session, t: TareaProduccion) -> dict:
-    """Portions per unit typed, plus the heaviest ingredient line, for the UI preview."""
+def _preview_consumo(recetas: dict[int, Receta], t: TareaProduccion) -> dict:
+    """Portions per unit typed, plus the heaviest ingredient line, for the UI preview.
+
+    Las lineas y su ingrediente vienen ya cargados en `recetas` (ver
+    _contexto_dia); antes eran tres consultas mas por cada tarea del dia.
+    """
     empty = {"porciones_por_lote": None, "ingrediente_principal": None}
     if not t.receta_id:
         return empty
 
-    receta = db.query(Receta).filter(Receta.id == t.receta_id).first()
+    receta = recetas.get(t.receta_id)
     if not receta:
         return empty
 
-    lineas = (
-        db.query(LineaReceta)
-        .filter(LineaReceta.receta_id == receta.id, LineaReceta.ingrediente_id.isnot(None))
-        .all()
-    )
+    lineas = [l for l in receta.lineas if l.ingrediente_id]
     principal = None
     if lineas:
         mayor = max(lineas, key=lambda x: x.cantidad)
-        ing = db.query(Ingrediente).filter(Ingrediente.id == mayor.ingrediente_id).first()
+        ing = mayor.ingrediente_rel
         if ing:
             principal = {
                 "nombre": ing.nombre,
@@ -184,6 +190,52 @@ def _preview_consumo(db: Session, t: TareaProduccion) -> dict:
         "porciones_por_lote": receta.porciones_por_lote,
         "ingrediente_principal": principal,
     }
+
+
+def _contexto_dia(
+    db: Session,
+    tareas: list[TareaProduccion],
+    registros: list[RegistroProduccion],
+) -> tuple[dict[int, ProductoCongelado], dict[int, Receta]]:
+    """Trae de una vez todo lo que la vista del dia va a mirar.
+
+    La pantalla hacia 5-6 consultas POR TAREA -- el producto congelado, su
+    padre, la receta, las lineas de la receta y el ingrediente mayor -- o sea
+    63 consultas para 12 tareas. Cada una es un viaje a Neon, asi que el jueves
+    (el dia mas cargado del plan) la pantalla tardaba en abrir aunque el
+    trabajo real fuese trivial.
+
+    Dos consultas para los productos, no una: hace falta el padre de cada
+    producto y el padre es otra fila de la misma tabla. El bucle sigue mientras
+    aparezcan padres nuevos, asi que soporta la cadena entera
+    (masa -> baston -> crudo -> terminado) sin suponer que tiene tres escalones.
+    """
+    ids_prod = {
+        x.producto_congelado_id
+        for x in (*tareas, *registros)
+        if x.producto_congelado_id
+    }
+    productos: dict[int, ProductoCongelado] = {}
+    while ids_prod:
+        lote = db.query(ProductoCongelado).filter(ProductoCongelado.id.in_(ids_prod)).all()
+        productos.update({p.id: p for p in lote})
+        ids_prod = {
+            p.producto_padre_id
+            for p in lote
+            if p.producto_padre_id and p.producto_padre_id not in productos
+        }
+
+    ids_rec = {t.receta_id for t in tareas if t.receta_id}
+    recetas: dict[int, Receta] = {}
+    if ids_rec:
+        recetas = {
+            r.id: r
+            for r in db.query(Receta)
+            .options(joinedload(Receta.lineas).joinedload(LineaReceta.ingrediente_rel))
+            .filter(Receta.id.in_(ids_rec))
+            .all()
+        }
+    return productos, recetas
 
 
 @router.get("/dia")
@@ -203,6 +255,7 @@ def get_dia(
 
     tareas = (
         db.query(TareaProduccion)
+        .options(joinedload(TareaProduccion.receta))
         .filter(TareaProduccion.dia_semana == dow, TareaProduccion.is_active == True)
         .order_by(TareaProduccion.hora, TareaProduccion.posicion)
         .all()
@@ -210,9 +263,11 @@ def get_dia(
 
     registros = (
         db.query(RegistroProduccion)
+        .options(joinedload(RegistroProduccion.receta), joinedload(RegistroProduccion.tarea))
         .filter(RegistroProduccion.fecha == d)
         .all()
     )
+    productos, recetas = _contexto_dia(db, tareas, registros)
     reg_by_tarea = {r.tarea_id: r for r in registros if r.tarea_id is not None}
     # Un registro cuya tarea salio del plan (is_active=False) no entra en
     # `items` -- ese bucle solo recorre tareas activas -- y antes tampoco
@@ -238,7 +293,7 @@ def get_dia(
             "receta_id": t.receta_id,
             "receta_nombre": t.receta.nombre if t.receta else None,
             "producto_congelado_id": t.producto_congelado_id,
-            **_consumo_padre_campos(db, t.producto_congelado_id),
+            **_consumo_padre_campos(productos, t.producto_congelado_id),
             "tipo": t.tipo,
             "registro_id": reg.id if reg else None,
             "completada": reg.completada if reg else False,
@@ -248,15 +303,12 @@ def get_dia(
             "consumo_padre_declarado": reg.consumo_padre_declarado if reg else None,
             # Lets the screen show what one unit will consume, so the operator can
             # sanity-check the deduction before committing to it.
-            **_preview_consumo(db, t),
+            **_preview_consumo(recetas, t),
         })
 
     extras_out = []
     for r in extras:
-        prod_extra = (
-            db.query(ProductoCongelado).filter(ProductoCongelado.id == r.producto_congelado_id).first()
-            if r.producto_congelado_id else None
-        )
+        prod_extra = productos.get(r.producto_congelado_id) if r.producto_congelado_id else None
         extras_out.append({
             "registro_id": r.id,
             # El titulo de la tarea es el ultimo recurso, pero para una tarea
@@ -268,7 +320,7 @@ def get_dia(
             "receta_id": r.receta_id,
             "producto_congelado_id": r.producto_congelado_id,
             "unidad_cantidad": r.unidad_extra or (prod_extra.unidad if prod_extra else None),
-            **_consumo_padre_campos(db, r.producto_congelado_id),
+            **_consumo_padre_campos(productos, r.producto_congelado_id),
             "completada": r.completada,
             "cantidad_real": r.cantidad_real,
             "duracion_real": r.duracion_real,

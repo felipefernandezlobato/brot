@@ -1,9 +1,66 @@
+from collections.abc import Iterable
 from datetime import date
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models import HistorialPrecio, Ingrediente, LineaReceta, ProductoCongelado, Receta
 from app.services.conversiones import convertir
+
+
+def precargar_arbol(db: Session, recetas: Iterable[Receta]) -> None:
+    """Trae de golpe el arbol de subrecetas de `recetas`, para que costearlo no
+    haga ni una consulta mas.
+
+    El costeo baja por `subreceta_id` y en cada escalon pide las lineas de la
+    subreceta y el ingrediente de cada linea. Si no estan cargadas, SQLAlchemy
+    las va a buscar de una en una: una receta suelta costaba 7 consultas y
+    `/api/recetas?buscar=` 40 para 12 recetas, porque las subrecetas quedan
+    fuera del filtro y ninguna venia cargada. Duele por la LATENCIA, no por el
+    trabajo: el backend esta en Render y la base en Neon, asi que cada consulta
+    es un viaje de red aunque tarde 0,2ms en ejecutarse.
+
+    Una consulta por NIVEL del arbol, no por receta: la cadena real es
+    masa -> baston -> terminado, o sea tres. Deliberadamente no carga el
+    catalogo entero -- seria una sola consulta hoy con 42 recetas, pero ata el
+    costo de abrir una receta al tamaño del catalogo, y no hace falta.
+
+    No cambia ningun numero: solo deja los objetos en la sesion antes de que
+    `costo_receta` los pida. El calculo es identico con precarga y sin ella
+    (test_el_costo_es_el_mismo_con_y_sin_precarga).
+    """
+    pendientes = {r.id for r in recetas if r.id}
+    vistos: set[int] = set()
+    while pendientes:
+        lote = (
+            db.query(Receta)
+            .options(
+                joinedload(Receta.lineas).joinedload(LineaReceta.ingrediente_rel),
+                # Cargar `subreceta_rel` no es solo para ahorrarse esa consulta:
+                # es lo que MANTIENE VIVO lo precargado. El mapa de identidad de
+                # SQLAlchemy guarda referencias DEBILES, asi que las subrecetas
+                # de un nivel se recolectaban en cuanto terminaba su vuelta del
+                # bucle, y el costeo volvia a pedirlas una por una. Cargadas
+                # aqui, cada linea referencia a su subreceta y el arbol entero
+                # queda colgando de la lista que tiene el endpoint.
+                joinedload(Receta.lineas).joinedload(LineaReceta.subreceta_rel),
+            )
+            # Y sin populate_existing tampoco sirve: SQLAlchemy no aplica la
+            # carga anticipada a objetos que YA estan en la sesion, y las
+            # subrecetas ya estan (las acaba de traer la vuelta anterior).
+            # Traeria las filas dejando `lineas` sin cargar.
+            # Solo se usa en endpoints de lectura: refresca lo ya cargado, asi
+            # que no debe llamarse con cambios pendientes sin confirmar.
+            .populate_existing()
+            .filter(Receta.id.in_(pendientes))
+            .all()
+        )
+        vistos |= pendientes
+        pendientes = {
+            l.subreceta_id
+            for r in lote
+            for l in r.lineas
+            if l.subreceta_id and l.subreceta_id not in vistos
+        }
 
 
 def precio_compra_en(db: Session, ing: Ingrediente, fecha: date | None = None) -> float:

@@ -8,7 +8,7 @@ from sqlalchemy import func
 from app.models import Ingrediente, LineaReceta, MovimientoStock, ProductoCongelado, Receta, StockCongelado, User
 from app.permissions import require_permission
 from app.schemas import RecetaCreate, RecetaOut, RecetaUpdate, LineaRecetaOut
-from app.services.costes import costo_linea, costo_receta
+from app.services.costes import costo_linea, costo_receta, precargar_arbol
 from app.services.produccion_registro import describir_referencia, movimiento_no_revertido
 from app.services.recetas_validacion import validar_lineas_receta
 from app.services.stock import (
@@ -84,6 +84,12 @@ def list_recetas(
     if buscar:
         q = q.filter(Receta.nombre.ilike(f"%{buscar}%"))
     recetas = q.order_by(Receta.nombre).all()
+    # Sin filtro el arbol ya venia entero (toda subreceta esta en el resultado)
+    # y esto cuesta dos consultas de mas; con `buscar` o `categoria_id` las
+    # subrecetas quedan fuera y el costeo se las iba a buscar de una en una: 40
+    # consultas para 12 recetas. Se precarga siempre, que son dos consultas
+    # fijas a cambio de que el camino filtrado no dependa del filtro.
+    precargar_arbol(db, recetas)
     return [_to_out(r, db) for r in recetas]
 
 
@@ -96,6 +102,7 @@ def get_receta(rec_id: int, user: User = Depends(get_current_user), db: Session 
     ).filter(Receta.id == rec_id).first()
     if not receta:
         raise HTTPException(status_code=404, detail="Receta no encontrada")
+    precargar_arbol(db, [receta])
     return _to_out(receta, db)
 
 
@@ -113,6 +120,7 @@ def get_receta_completo(
     ).filter(Receta.id == rec_id).first()
     if not receta:
         raise HTTPException(status_code=404, detail="Receta no encontrada")
+    precargar_arbol(db, [receta])
     receta_out = _to_out(receta, db)
 
     # Find linked ProductoCongelado (prefer masa > semi > crudo > terminado)
