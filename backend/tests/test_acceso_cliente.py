@@ -382,3 +382,24 @@ def test_los_tipos_de_token_caben_en_su_columna():
             f"el tipo de token '{tipo}' mide {len(tipo)} y la columna admite "
             f"{limite}; ampliá la columna con una migración"
         )
+
+
+def test_cambiar_password_avisa_por_correo(client, db, monkeypatch):
+    """No bloquea el cambio -- quien lo hace ya sabia la contrasena anterior --
+    pero si no fue el dueño, se entera en el momento."""
+    avisos = []
+    monkeypatch.setattr(
+        "app.services.acceso_cliente.enviar_email",
+        lambda destino, asunto, cuerpo: avisos.append((destino, asunto)) or True,
+    )
+    c = _cliente(db, password="actual12345")
+    tok = client.post("/api/auth/cliente/login", json={
+        "email": c.email, "password": "actual12345"}).json()["token"]
+
+    res = client.post(
+        "/api/auth/cliente/cambiar-password",
+        json={"actual": "actual12345", "nueva": "flamante123"},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert res.status_code == 204
+    assert any(d == c.email and "cambiado" in a.lower() for d, a in avisos), avisos

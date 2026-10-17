@@ -69,6 +69,12 @@ function Cuenta({ cliente }: { cliente: Cliente }) {
                 <dd className="text-text text-right">{cliente.telefono}</dd>
               </div>
             )}
+            {cliente.direccion && (
+              <div className="flex justify-between gap-4">
+                <dt className="text-warm-gray">Dirección</dt>
+                <dd className="text-text text-right">{cliente.direccion}</dd>
+              </div>
+            )}
         </dl>
         <p className="text-xs text-warm-gray mt-4 leading-relaxed">
           Para cambiar tu nombre, dirección o teléfono, escribinos y lo

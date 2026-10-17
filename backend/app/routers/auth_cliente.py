@@ -19,6 +19,7 @@ from app.schemas import (
 )
 from app.services.acceso_cliente import (
     avisar_alta_a_brot,
+    avisar_password_cambiada,
     consumir_token,
     crear_token,
     enviar_email_verificacion,
@@ -192,6 +193,7 @@ def establecer_password(data: EstablecerPassword, db: Session = Depends(get_db))
 @router.post("/cambiar-password", status_code=204)
 def cambiar_password(
     data: CambiarPassword,
+    tareas: BackgroundTasks,
     cliente: ClienteB2B = Depends(get_current_cliente),
     db: Session = Depends(get_db),
 ):
@@ -208,4 +210,7 @@ def cambiar_password(
     if not cliente.password_hash or not verify_password(data.actual, cliente.password_hash):
         raise HTTPException(status_code=422, detail="La contrasena actual no es correcta")
     cliente.password_hash = hash_password(data.nueva)
+    nombre, email = cliente.nombre, cliente.email
     db.commit()
+    if email:
+        tareas.add_task(avisar_password_cambiada, email, nombre)

@@ -218,3 +218,28 @@ Hasta que lo apruebes no ve el catalogo ni puede pedir.
 Aprobalo o rechazalo en {app_url()}/entregas/clientes
 """,
     )
+
+
+def avisar_password_cambiada(email: str, nombre: str) -> bool:
+    """Avisa al cliente de que su contrasena acaba de cambiar.
+
+    No bloquea nada -- quien la cambia ya sabia la anterior, asi que exigirle
+    ademas confirmar por correo molestaria mucho para lo poco que anade. Lo
+    que si aporta es enterarse: si el cambio no fue cosa suya, se entera en el
+    momento en vez de descubrirlo el dia que no pueda entrar.
+    """
+    return enviar_email(
+        email,
+        "Tu contrasena de BROT ha cambiado",
+        f"""Hola {nombre},
+
+Te avisamos de que la contrasena de tu cuenta del portal acaba de cambiar.
+
+Si fuiste vos, no tenes que hacer nada.
+
+Si NO fuiste vos, entra cuanto antes en {app_url()}/cliente/recuperar para
+recuperar tu cuenta, y avisanos.
+
+BROT La Panaderia
+""",
+    )
