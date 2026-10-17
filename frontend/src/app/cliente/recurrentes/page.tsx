@@ -79,9 +79,8 @@ function RecurrentesContent({ cliente }: { cliente: Cliente }) {
     setLoading(true);
     Promise.all([
       apiClienteFetch<PedidoRecurrente[]>("/api/cliente/recurrentes"),
-      fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8003"}/api/catalogo`
-      ).then((r) => r.json() as Promise<Producto[]>),
+      // Con token: /api/catalogo dejo de ser publico el 2026-10-16.
+      apiClienteFetch<Producto[]>("/api/catalogo"),
     ])
       .then(([recs, prods]) => {
         setRecurrentes(recs);

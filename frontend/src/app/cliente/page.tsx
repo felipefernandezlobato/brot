@@ -130,11 +130,10 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
 
   const loadProductos = useCallback(() => {
     setLoadingProductos(true);
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8003"}/api/catalogo`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Error al cargar catalogo");
-        return r.json() as Promise<Producto[]>;
-      })
+    // apiClienteFetch y no un fetch pelado: /api/catalogo dejo de ser publico
+    // el 2026-10-16 y ahora exige el token del cliente. Con el fetch crudo
+    // respondia 401 y la pantalla mostraba "Error al cargar el catalogo".
+    apiClienteFetch<Producto[]>("/api/catalogo")
       .then((data) => setProductos(data.filter((p) => p.disponible)))
       .catch(() => toast("Error al cargar el catalogo", "error"))
       .finally(() => setLoadingProductos(false));
