@@ -71,8 +71,9 @@ export default function IngredientesPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6 gap-4">
+      {/* Header. flex-wrap por lo mismo que en /produccion y /proveedores: el
+          boton lleva whitespace-nowrap y no encoge, asi que desbordaba. */}
+      <div className="flex items-center justify-between flex-wrap mb-6 gap-4">
         <h1 className="titulo text-3xl text-brot">
           Ingredientes
         </h1>
@@ -84,14 +85,19 @@ export default function IngredientesPage() {
         </button>
       </div>
 
-      {/* Search + supplier filter */}
-      <div className="flex gap-3 mb-4">
+      {/* Search + supplier filter.
+          El <select> lo ensancha su opcion mas larga ("Todos los proveedores" =
+          217px) y no encoge; el input es flex-1 pero su min-width por defecto es
+          auto, asi que tampoco cedia. Juntos se iban a 446px en un movil de 375.
+          Con flex-wrap el select baja a su propia linea, y min-w-0 deja que el
+          buscador encoja de verdad cuando si caben los dos. */}
+      <div className="flex flex-wrap gap-3 mb-4">
         <input
           type="search"
           placeholder="Buscar ingrediente..."
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
-          className="flex-1 px-4 py-2.5 rounded-lg border border-cream-dark bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
+          className="flex-1 min-w-0 px-4 py-2.5 rounded-lg border border-cream-dark bg-card text-text placeholder:text-warm-gray focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[44px]"
         />
         <select
           value={proveedorFiltro}

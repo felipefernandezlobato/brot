@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import { formatARS, formatDate } from "@/lib/format";
+import { formatARS, formatCantidad, formatDate } from "@/lib/format";
 import { PERSONAJE } from "@/lib/ilustraciones";
 import { EstadisticasMensuales } from "@/components/EstadisticasMensuales";
 
@@ -311,7 +311,7 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
               .map((p) => (
                 <div key={p.nombre} className="flex items-center justify-between text-sm">
                   <span className="text-text truncate">{p.nombre}</span>
-                  <span className="font-medium text-text tabular-nums ml-2">{p.cantidad}</span>
+                  <span className="font-medium text-text tabular-nums ml-2">{formatCantidad(p.cantidad)}</span>
                 </div>
               ))}
           </div>
@@ -327,7 +327,7 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
                 <div key={item.ingrediente} className="flex items-center justify-between text-sm">
                   <span className="text-text truncate">
                     {item.ingrediente}
-                    <span className="text-warm-gray text-xs ml-1">{item.cantidad} {item.unidad}</span>
+                    <span className="text-warm-gray text-xs ml-1">{formatCantidad(item.cantidad)} {item.unidad}</span>
                   </span>
                   <span className="font-medium text-text tabular-nums ml-2">{formatARS(item.valor)}</span>
                 </div>
@@ -349,11 +349,11 @@ function TabFlujo({ fechaDesde, fechaHasta }: { fechaDesde: string; fechaHasta: 
                   <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium mr-2 ${
                     m.cantidad > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                   }`}>
-                    {m.cantidad > 0 ? "+" : ""}{m.cantidad}
+                    {m.cantidad > 0 ? "+" : ""}{formatCantidad(m.cantidad)}
                   </span>
                   <span className="text-warm-gray">
                     {movLabel[m.tipo_movimiento] || m.tipo_movimiento}
-                    {m.saldo_despues != null && ` · ${Math.round(m.saldo_despues * 100) / 100} en stock`}
+                    {m.saldo_despues != null && ` · ${formatCantidad(m.saldo_despues)} en stock`}
                   </span>
                 </div>
                 <span className="text-xs text-warm-gray">{formatDate(m.fecha)}</span>

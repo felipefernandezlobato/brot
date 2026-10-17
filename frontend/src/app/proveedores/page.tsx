@@ -165,7 +165,10 @@ export default function ProveedoresPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 gap-4">
+      {/* flex-wrap por lo mismo que en /produccion: el boton tiene
+          whitespace-nowrap, asi que no encoge y desbordaba la pagina a 414px
+          en un movil de 375. */}
+      <div className="flex items-center justify-between flex-wrap mb-6 gap-4">
         <h1 className="titulo text-3xl text-brot">
           Proveedores
         </h1>

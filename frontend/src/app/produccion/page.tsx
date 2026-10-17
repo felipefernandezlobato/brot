@@ -518,7 +518,11 @@ export default function ProduccionHoy() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
+      {/* flex-wrap: en un movil de 390px el titulo (161px) mas los tres botones
+          (281px) no entran, y la fila empujaba la pagina entera a 458px de ancho
+          -- "Analytics" quedaba fuera de la pantalla. Envolviendo, los botones
+          bajan a su propia linea. En escritorio sobra sitio y no cambia nada. */}
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
         <h1 className="titulo text-2xl text-gray-900">
           Produccion
         </h1>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { PermissionGate } from "@/components/PermissionGate";
-import { formatDate, parseCantidad } from "@/lib/format";
+import { formatCantidad, formatDate, parseCantidad } from "@/lib/format";
 import {
   ComposedChart,
   Line,
@@ -103,10 +103,6 @@ function valorCalculadoEnFecha(puntos: CalculadoPunto[] | undefined, fecha: stri
     result = p.cantidad;
   }
   return result;
-}
-
-function formatCantidad(n: number): string {
-  return Number.isInteger(n) ? String(n) : (Math.round(n * 100) / 100).toString();
 }
 
 const NOTAS_AUTOMATICAS = ["Produccion:", "Ajuste por reversion", "Reversion de", "Stock insuficiente"];
