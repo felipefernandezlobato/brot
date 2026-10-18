@@ -40,6 +40,7 @@ from app.routers import (  # noqa: E402
     categorias,
     competencia,
     congelados,
+    diagnostico,
     entregas_b2b,
     ingredientes,
     inventario,
@@ -82,6 +83,7 @@ app.include_router(protocolos.router)
 app.include_router(temperaturas.router)
 app.include_router(stock_movimientos.router)
 app.include_router(dashboard.router)
+app.include_router(diagnostico.router)
 
 
 @app.get("/api/health")

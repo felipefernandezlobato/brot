@@ -22,19 +22,18 @@ from app.models import (
 )
 
 HOY = date.today()
-# `GET /dia` colapsa el domingo al sabado (`if dow > 6: dow = 6`), asi que una
-# tarea creada con este dow aparece al preguntar por hoy cualquier dia.
-DOW_HOY = min(HOY.isoweekday(), 6)
 
-# `GET /analytics` NO hace eso: saltea los domingos enteros (`isoweekday() <= 6`,
-# el obrador trabaja Lun-Sab), asi que un rango domingo-domingo da una respuesta
-# vacia y cualquier test que pregunte por "hoy" falla los domingos. Los tests de
-# analytics usan el ultimo dia laborable para no depender del calendario.
-# Que los dos endpoints traten el domingo distinto es real, no cosa del test:
-# un domingo /produccion muestra el plan del sabado y analytics dice que no
-# hubo plan. Esta anotado para decidirlo, no lo arregla este archivo.
+# El plan del domingo esta vacio a proposito (el obrador trabaja Lun-Sab), y
+# ninguna tarea puede tener dia_semana=7. Asi que un test que crea una tarea
+# del plan y espera verla "hoy" tiene que trabajar sobre un dia laborable, o
+# los domingos falla por el calendario y no por un fallo real.
+# Esto vale para los dos endpoints: `/dia` devuelve el domingo vacio y
+# `/analytics` lo lista solo si hubo algo cargado.
 HOY_LABORAL = HOY if HOY.isoweekday() <= 6 else HOY - timedelta(days=1)
 DOW_LABORAL = HOY_LABORAL.isoweekday()
+
+# Un domingo de verdad, para los tests que prueban justamente el domingo.
+DOMINGO = HOY + timedelta(days=7 - HOY.isoweekday())
 
 
 def _setup(client, db):
@@ -147,12 +146,12 @@ def test_calendario_groups_tareas_by_dia(client, db):
 
 def test_dia_view_shows_todays_tareas(client, db):
     token, _ = _setup(client, db)
-    tarea = _crear_tarea(client, token, titulo="Tarea de hoy", dia_semana=DOW_HOY)
+    tarea = _crear_tarea(client, token, titulo="Tarea de hoy", dia_semana=DOW_LABORAL)
 
-    res = client.get(f"/api/produccion/dia?fecha={HOY.isoformat()}", headers=_headers(token))
+    res = client.get(f"/api/produccion/dia?fecha={HOY_LABORAL.isoformat()}", headers=_headers(token))
     assert res.status_code == 200
     data = res.json()
-    assert data["dia_semana"] == DOW_HOY
+    assert data["dia_semana"] == DOW_LABORAL
     entry = next((t for t in data["tareas"] if t["tarea_id"] == tarea["id"]), None)
     assert entry is not None
     assert entry["completada"] is False
@@ -167,25 +166,25 @@ def test_dia_view_rejects_bad_date(client, db):
 def test_registro_toggle_completada_without_producto(client, db):
     """A task with no product tied (cleaning, notes) never needs a cantidad."""
     token, _ = _setup(client, db)
-    tarea = _crear_tarea(client, token, titulo="Limpiar obrador", dia_semana=DOW_HOY, tipo="limpieza")
+    tarea = _crear_tarea(client, token, titulo="Limpiar obrador", dia_semana=DOW_LABORAL, tipo="limpieza")
 
     res = client.post(
         "/api/produccion/registro",
-        json={"tarea_id": tarea["id"], "fecha": HOY.isoformat(), "completada": True},
+        json={"tarea_id": tarea["id"], "fecha": HOY_LABORAL.isoformat(), "completada": True},
         headers=_headers(token),
     )
     assert res.status_code == 201
     assert res.json()["completada"] is True
     assert res.json()["movimientos"] == 0
 
-    dia = client.get(f"/api/produccion/dia?fecha={HOY.isoformat()}", headers=_headers(token)).json()
+    dia = client.get(f"/api/produccion/dia?fecha={HOY_LABORAL.isoformat()}", headers=_headers(token)).json()
     entry = next(t for t in dia["tareas"] if t["tarea_id"] == tarea["id"])
     assert entry["completada"] is True
 
     # Un-completing (undo) upserts the same record back to false.
     res2 = client.post(
         "/api/produccion/registro",
-        json={"tarea_id": tarea["id"], "fecha": HOY.isoformat(), "completada": False},
+        json={"tarea_id": tarea["id"], "fecha": HOY_LABORAL.isoformat(), "completada": False},
         headers=_headers(token),
     )
     assert res2.status_code == 201
@@ -195,13 +194,19 @@ def test_registro_toggle_completada_without_producto(client, db):
 def test_registro_requires_cantidad_when_tarea_has_producto(client, db):
     token, _ = _setup(client, db)
     prod, receta, ing = _producto_con_receta(db)
-    tarea = _crear_tarea(client, token, titulo="Hornear Pan de Prueba", dia_semana=DOW_HOY, receta_id=receta.id)
+    tarea = _crear_tarea(client, token, titulo="Hornear Pan de Prueba", dia_semana=DOW_LABORAL, receta_id=receta.id)
     # producto_congelado_id isn't settable via TareaProduccionCreate (real schedules
     # seed it directly), so wire it up the same way here.
     t_row = db.query(TareaProduccion).filter(TareaProduccion.id == tarea["id"]).first()
     t_row.producto_congelado_id = prod.id
     db.commit()
 
+    # Fecha HOY y no HOY_LABORAL: esta prueba no lee `/dia`, asi que el dia de
+    # la semana no le importa, y el conteo base del ingrediente que arma
+    # `_producto_con_receta` esta fechado HOY. Deducir en una fecha ANTERIOR a
+    # ese conteo no mueve el saldo que lee `_saldo`, porque
+    # `get_saldo_materia_prima` se queda con la fila de `fecha_registro` mas
+    # alta (ver CLAUDE.md, "Two parallel ways to read materia prima stock").
     res = client.post(
         "/api/produccion/registro",
         json={"tarea_id": tarea["id"], "fecha": HOY.isoformat(), "completada": True},
@@ -483,3 +488,113 @@ def test_analytics_surfaces_extras_on_days_with_no_plan(client, db):
     assert dia["porcentaje"] is None
     assert dia["extra_count"] == 1
     assert dia["minutos_totales"] == 45
+
+
+# ==============================================================
+# El domingo: sin plan, pero se puede cargar lo que se produzca
+# ==============================================================
+
+
+def test_el_domingo_no_trae_plan(client, db):
+    """Antes `/dia` colapsaba el domingo al sabado (`if dow > 6: dow = 6`), asi
+    que un domingo la pantalla mostraba las 11 tareas del sabado: nadie
+    trabajaba y el plan decia que habia 11 cosas pendientes."""
+    token, _ = _setup(client, db)
+    _crear_tarea(client, token, titulo="Tarea del sabado", dia_semana=6)
+
+    res = client.get(f"/api/produccion/dia?fecha={DOMINGO.isoformat()}", headers=_headers(token))
+    assert res.status_code == 200
+    data = res.json()
+    assert data["tareas"] == []
+    # Y se llama domingo, no sabado.
+    assert data["dia_semana"] == 7
+    assert data["dia_nombre"] == "Domingo"
+
+
+def test_un_domingo_se_puede_cargar_produccion(client, db):
+    """El plan vacio no puede significar "no se puede registrar nada": si un
+    domingo se produce, hay que poder anotarlo."""
+    token, _ = _setup(client, db)
+    cat = Categoria(nombre="Panes", tipo="receta")
+    db.add(cat)
+    db.flush()
+    receta = Receta(nombre="Pan del domingo", categoria_id=cat.id, porciones_por_lote=1)
+    db.add(receta)
+    db.commit()
+
+    res = client.post(
+        "/api/produccion/registro/extra",
+        json={"fecha": DOMINGO.isoformat(), "receta_id": receta.id, "cantidad_real": 8.0},
+        headers=_headers(token),
+    )
+    assert res.status_code == 201, res.text
+
+    dia = client.get(
+        f"/api/produccion/dia?fecha={DOMINGO.isoformat()}", headers=_headers(token)
+    ).json()
+    assert dia["tareas"] == []  # sigue sin plan
+    assert len(dia["extras"]) == 1
+    assert dia["extras"][0]["titulo"] == "Pan del domingo"
+    assert dia["extras"][0]["cantidad_real"] == 8.0
+
+
+def test_no_se_puede_planificar_una_tarea_en_domingo(client, db):
+    """Mientras el domingo se colapsaba al sabado, una tarea con dia_semana=7
+    era invisible y daba igual. Ahora el domingo se consulta tal cual, asi que
+    sin este tope se podria poblar el plan del domingo sin querer."""
+    token, _ = _setup(client, db)
+    res = client.post(
+        "/api/produccion/tareas",
+        json={"dia_semana": 7, "titulo": "Amasar el domingo", "tipo": "produccion"},
+        headers=_headers(token),
+    )
+    assert res.status_code == 422
+
+    creada = _crear_tarea(client, token, titulo="Valida", dia_semana=6)
+    res2 = client.put(
+        f"/api/produccion/tareas/{creada['id']}",
+        json={"dia_semana": 7},
+        headers=_headers(token),
+    )
+    assert res2.status_code == 422
+
+
+def test_analytics_muestra_un_domingo_con_produccion(client, db):
+    """Cargar produccion un domingo y que el informe no la cuente seria media
+    funcionalidad. `all_dates` salteaba los domingos; la guarda
+    `day_planned > 0 or dia_registros` ya alcanza para no listar los vacios."""
+    token, _ = _setup(client, db)
+    prod, receta, ing = _producto_con_receta(db)
+
+    client.post(
+        "/api/produccion/producir",
+        json={"producto_id": prod.id, "cantidad_producida": 3.0,
+              "fecha": DOMINGO.isoformat(), "duracion_real": 90},
+        headers=_headers(token),
+    )
+
+    res = client.get(
+        f"/api/produccion/analytics?desde={DOMINGO.isoformat()}&hasta={DOMINGO.isoformat()}",
+        headers=_headers(token),
+    )
+    assert res.status_code == 200
+    dias = res.json()["por_dia"]
+    dia = next((d for d in dias if d["fecha"] == DOMINGO.isoformat()), None)
+    assert dia is not None, "el domingo trabajado tiene que salir en el informe"
+    assert dia["dia_nombre"] == "Domingo"
+    assert dia["planificadas"] == 0
+    assert dia["porcentaje"] is None  # 0/0 no es 0%
+    assert dia["extra_count"] == 1
+    assert dia["minutos_totales"] == 90
+
+
+def test_analytics_no_lista_un_domingo_vacio(client, db):
+    """Incluir los domingos en el recorrido no puede llenar el informe de filas
+    de domingos en los que no paso nada."""
+    token, _ = _setup(client, db)
+    res = client.get(
+        f"/api/produccion/analytics?desde={DOMINGO.isoformat()}&hasta={DOMINGO.isoformat()}",
+        headers=_headers(token),
+    )
+    assert res.status_code == 200
+    assert res.json()["por_dia"] == []

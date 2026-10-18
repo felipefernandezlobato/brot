@@ -461,7 +461,13 @@ class LogProduccionOut(BaseModel):
 
 
 class TareaProduccionCreate(BaseModel):
-    dia_semana: int
+    # 1=Lunes .. 6=Sabado (isoweekday). El 7 (domingo) se rechaza a proposito:
+    # el plan del domingo tiene que quedar vacio. Mientras `GET /dia` colapsaba
+    # el domingo al sabado esto no hacia falta, porque una tarea con
+    # dia_semana=7 era invisible; ahora que el domingo se consulta tal cual, sin
+    # este tope se podria poblar el plan del domingo sin querer. Un domingo que
+    # se produzca se carga como produccion extra, no como plan.
+    dia_semana: int = Field(ge=1, le=6)
     hora: Optional[str] = None
     titulo: str
     descripcion: Optional[str] = None
@@ -474,7 +480,7 @@ class TareaProduccionCreate(BaseModel):
 
 
 class TareaProduccionUpdate(BaseModel):
-    dia_semana: Optional[int] = None
+    dia_semana: Optional[int] = Field(default=None, ge=1, le=6)  # ver Create
     hora: Optional[str] = None
     titulo: Optional[str] = None
     descripcion: Optional[str] = None

@@ -67,7 +67,17 @@ def _consumo_padre_campos(
         "consumo_padre_label": padre.nombre if padre else None,
     }
 
-DIAS = {1: "Lunes", 2: "Martes", 3: "Miercoles", 4: "Jueves", 5: "Viernes", 6: "Sabado"}
+# Los dias que el plan semanal contempla. El obrador trabaja Lun-Sab, asi que
+# el domingo NO esta: es lo que hace que el plan del domingo salga vacio.
+# Esto manda las columnas del editor del plan (`GET /calendario`).
+DIAS_PLAN = {1: "Lunes", 2: "Martes", 3: "Miercoles", 4: "Jueves", 5: "Viernes", 6: "Sabado"}
+
+# El nombre de cualquier dia, domingo incluido. Separado de DIAS_PLAN a
+# proposito: el domingo tiene que poder NOMBRARSE (la pantalla del dia dice
+# "Domingo 18/10" y se le puede cargar produccion extra) sin por eso volverse
+# PLANIFICABLE. Cuando era un solo diccionario no se podia tener una cosa sin
+# la otra, y de ahi venia el `if dow > 6: dow = 6` que mostraba el sabado.
+NOMBRE_DIA = {**DIAS_PLAN, 7: "Domingo"}
 
 
 def _tarea_to_out(t: TareaProduccion) -> dict:
@@ -146,7 +156,7 @@ def get_calendario(
         .all()
     )
     result: dict = {}
-    for dia_num, dia_nombre in DIAS.items():
+    for dia_num, dia_nombre in DIAS_PLAN.items():
         result[str(dia_num)] = {"nombre": dia_nombre, "tareas": []}
     for t in tareas:
         key = str(t.dia_semana)
@@ -249,9 +259,15 @@ def get_dia(
     except ValueError:
         raise HTTPException(status_code=400, detail="Formato de fecha invalido")
 
+    # El domingo (7) no se colapsa al sabado. Antes si, y la pantalla mostraba
+    # las 11 tareas del sabado un domingo: nadie trabaja, pero el plan decia
+    # que habia 11 cosas por hacer. Ninguna tarea tiene dia_semana=7 (ni se
+    # puede crear, ver TareaProduccionCreate), asi que la consulta no devuelve
+    # nada y el dia sale vacio -- que es justo lo que el frontend ya esperaba
+    # con su estado "Sin tareas planificadas para este dia".
+    # Los extras NO dependen de esto: se cargan por fecha, no por dia de la
+    # semana, asi que un domingo que si se produce se registra igual.
     dow = d.isoweekday()
-    if dow > 6:
-        dow = 6
 
     tareas = (
         db.query(TareaProduccion)
@@ -331,7 +347,7 @@ def get_dia(
     return {
         "fecha": fecha,
         "dia_semana": dow,
-        "dia_nombre": DIAS.get(dow, ""),
+        "dia_nombre": NOMBRE_DIA.get(dow, ""),
         "tareas": items,
         "extras": extras_out,
     }
@@ -650,11 +666,18 @@ def get_analytics(
     except ValueError:
         raise HTTPException(status_code=400, detail="Formato de fecha invalido")
 
+    # Antes esto saltaba los domingos (`if cur.isoweekday() <= 6`) para no
+    # llenar el informe de filas vacias. Ese filtro quedo REDUNDANTE el
+    # 2026-09-11, cuando `por_dia` paso a incluir un dia solo si tiene plan o
+    # algun registro ("if day_planned > 0 or dia_registros", mas abajo): un
+    # domingo sin nada ya no entra por esa guarda, sin necesidad de saltarlo
+    # aca. Y saltarlo era ademas lo que hacia que un domingo CON produccion
+    # cargada no apareciera en ningun total ni grafico -- el mismo agujero que
+    # ese arreglo venia a tapar para los dias sin plan.
     all_dates: list[date] = []
     cur = d_desde
     while cur <= d_hasta:
-        if cur.isoweekday() <= 6:
-            all_dates.append(cur)
+        all_dates.append(cur)
         cur += timedelta(days=1)
 
     registros = (
@@ -744,7 +767,7 @@ def get_analytics(
         if day_planned > 0 or dia_registros:
             por_dia.append({
                 "fecha": d.isoformat(),
-                "dia_nombre": DIAS.get(dow, ""),
+                "dia_nombre": NOMBRE_DIA.get(dow, ""),
                 "planificadas": day_planned,
                 "completadas": day_completed,
                 "porcentaje": round(day_completed / day_planned * 100, 1) if day_planned > 0 else None,

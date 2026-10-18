@@ -92,10 +92,6 @@ function displayDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-function isDomingo(iso: string): boolean {
-  return new Date(iso + "T12:00:00").getDay() === 0;
-}
-
 
 export default function ProduccionHoy() {
   const searchParams = useSearchParams();
@@ -191,14 +187,20 @@ export default function ProduccionHoy() {
     }
   }, [drafts, draftKey]);
 
+  /** Las flechas ya NO se saltan el domingo.
+   *
+   * Lo hacian porque el domingo no tiene plan, asi que pararse ahi parecia
+   * tiempo perdido. Pero el boton "Hoy" y el selector de fecha nunca lo
+   * saltaron, asi que el domingo se alcanzaba igual -- y desde que un domingo
+   * se puede cargar produccion extra, saltarlo era el camino mas corto para no
+   * poder registrar lo que se hizo: el lunes apretabas ‹ y te ibas derecho al
+   * sabado. Cuesta una flecha mas entre semana, y a cambio los tres modos de
+   * navegar dicen lo mismo.
+   */
   function changeDay(offset: number) {
     const d = new Date(fecha + "T12:00:00");
     d.setDate(d.getDate() + offset);
-    let next = toLocalISO(d);
-    if (isDomingo(next)) {
-      d.setDate(d.getDate() + (offset > 0 ? 1 : -1));
-      next = toLocalISO(d);
-    }
+    const next = toLocalISO(d);
     setFecha(next);
     window.history.replaceState(null, "", `/produccion?fecha=${next}`);
   }
@@ -594,9 +596,14 @@ export default function ProduccionHoy() {
           <p className="text-sm font-semibold text-gray-800">
             {data?.dia_nombre} {displayDate(fecha)}
           </p>
+          {/* Sin plan (domingo) no se dice "0/0 completadas": no hay nada que
+              completar y el recuadro de abajo ya avisa que el dia esta vacio.
+              Los minutos si se muestran, porque si cargaron produccion extra un
+              domingo ese rato trabajado es justo el dato que importa. */}
           <p className="text-xs text-gray-400">
-            {completedCount}/{totalCount} completadas
-            {totalMinutos > 0 && ` · ${formatDuracion(totalMinutos)}`}
+            {totalCount > 0 && `${completedCount}/${totalCount} completadas`}
+            {totalCount > 0 && totalMinutos > 0 && " · "}
+            {totalMinutos > 0 && formatDuracion(totalMinutos)}
           </p>
         </div>
       </div>

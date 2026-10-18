@@ -28,12 +28,15 @@ from app.routers.produccion import router
 app.include_router(router)
 
 HOY = date.today().isoformat()
-# `GET /dia` colapsa el domingo al sabado (`if dow > 6: dow = 6`), asi que una
-# tarea que quiera salir "hoy" tiene que llevar el dow colapsado igual. Con
-# `isoweekday()` pelado, los domingos se creaba con dia_semana=7, el endpoint
-# buscaba el 6 y la tarea no aparecia: la suite se ponia roja un dia por semana
-# por el calendario y no por un fallo.
-DOW_HOY = min(date.today().isoweekday(), 6)
+
+# El plan del domingo esta vacio a proposito y ninguna tarea puede tener
+# dia_semana=7, asi que un test que crea una tarea del plan y la lee en /dia
+# tiene que trabajar sobre un dia laborable. Con `date.today()` pelado, los
+# domingos la suite se ponia roja por el calendario y no por un fallo real.
+_HOY = date.today()
+HOY_LABORAL = _HOY if _HOY.isoweekday() <= 6 else _HOY - timedelta(days=1)
+HOY_LABORAL_ISO = HOY_LABORAL.isoformat()
+DOW_LABORAL = HOY_LABORAL.isoweekday()
 
 
 def _auth(client, db):
@@ -819,7 +822,7 @@ def _masa_con_dos_tamanos(db, ing_harina, *, stock_masa=2.0):
                                  producto_padre_id=masa.id, cantidad_por_padre=cpp)
         db.add(prod)
         db.flush()
-        t = TareaProduccion(dia_semana=DOW_HOY, hora="07:00",
+        t = TareaProduccion(dia_semana=DOW_LABORAL, hora="07:00",
                             titulo=f"Hornear {nombre}",
                             cantidad_planificada=10.0, unidad_cantidad="u",
                             receta_id=r.id, producto_congelado_id=prod.id, tipo="produccion")
@@ -919,7 +922,7 @@ def test_dia_manda_el_nombre_del_padre_como_etiqueta(client, db):
     ing = _harina(db, stock_kg=500.0)
     _masa_con_dos_tamanos(db, ing)
 
-    res = client.get(f"/api/produccion/dia?fecha={HOY}", headers=headers)
+    res = client.get(f"/api/produccion/dia?fecha={HOY_LABORAL_ISO}", headers=headers)
     assert res.status_code == 200
     tareas = res.json()["tareas"]
     etiquetas = {t["titulo"]: t["consumo_padre_label"] for t in tareas}
@@ -1009,22 +1012,25 @@ def test_dia_muestra_el_trabajo_de_una_tarea_retirada_del_plan(client, db):
     ing = _harina(db)
     _receta, _prod, tarea = _masa(db, ing)
     # /dia filtra por el isoweekday de la fecha pedida, no por el id de tarea.
-    tarea.dia_semana = DOW_HOY
+    tarea.dia_semana = DOW_LABORAL
     db.commit()
 
+    # El registro va con la MISMA fecha que se consulta: /dia busca por fecha,
+    # asi que fecharlo "hoy" y leerlo en el dia laborable no encontraria nada
+    # los domingos.
     r = client.post("/api/produccion/registro", json={
-        "tarea_id": tarea.id, "fecha": HOY, "completada": True, "cantidad_real": 1.0,
+        "tarea_id": tarea.id, "fecha": HOY_LABORAL_ISO, "completada": True, "cantidad_real": 1.0,
     }, headers=headers)
     assert r.status_code in (200, 201), r.text
 
-    dia = client.get(f"/api/produccion/dia?fecha={HOY}", headers=headers).json()
+    dia = client.get(f"/api/produccion/dia?fecha={HOY_LABORAL_ISO}", headers=headers).json()
     assert any(t["tarea_id"] == tarea.id for t in dia["tareas"])
     assert dia["extras"] == []
 
     tarea.is_active = False
     db.commit()
 
-    dia = client.get(f"/api/produccion/dia?fecha={HOY}", headers=headers).json()
+    dia = client.get(f"/api/produccion/dia?fecha={HOY_LABORAL_ISO}", headers=headers).json()
     assert all(t["tarea_id"] != tarea.id for t in dia["tareas"])
     assert len(dia["extras"]) == 1, "el registro no puede desaparecer de la pantalla"
     assert dia["extras"][0]["titulo"] == tarea.titulo
