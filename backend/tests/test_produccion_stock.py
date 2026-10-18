@@ -28,6 +28,12 @@ from app.routers.produccion import router
 app.include_router(router)
 
 HOY = date.today().isoformat()
+# `GET /dia` colapsa el domingo al sabado (`if dow > 6: dow = 6`), asi que una
+# tarea que quiera salir "hoy" tiene que llevar el dow colapsado igual. Con
+# `isoweekday()` pelado, los domingos se creaba con dia_semana=7, el endpoint
+# buscaba el 6 y la tarea no aparecia: la suite se ponia roja un dia por semana
+# por el calendario y no por un fallo.
+DOW_HOY = min(date.today().isoweekday(), 6)
 
 
 def _auth(client, db):
@@ -813,7 +819,7 @@ def _masa_con_dos_tamanos(db, ing_harina, *, stock_masa=2.0):
                                  producto_padre_id=masa.id, cantidad_por_padre=cpp)
         db.add(prod)
         db.flush()
-        t = TareaProduccion(dia_semana=date.today().isoweekday(), hora="07:00",
+        t = TareaProduccion(dia_semana=DOW_HOY, hora="07:00",
                             titulo=f"Hornear {nombre}",
                             cantidad_planificada=10.0, unidad_cantidad="u",
                             receta_id=r.id, producto_congelado_id=prod.id, tipo="produccion")
@@ -1003,7 +1009,7 @@ def test_dia_muestra_el_trabajo_de_una_tarea_retirada_del_plan(client, db):
     ing = _harina(db)
     _receta, _prod, tarea = _masa(db, ing)
     # /dia filtra por el isoweekday de la fecha pedida, no por el id de tarea.
-    tarea.dia_semana = date.today().isoweekday()
+    tarea.dia_semana = DOW_HOY
     db.commit()
 
     r = client.post("/api/produccion/registro", json={

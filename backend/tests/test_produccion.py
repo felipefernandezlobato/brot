@@ -7,7 +7,7 @@ system is: a weekly recurring schedule (TareaProduccion), daily completion recor
 unplanned/extra production tied straight to a ProductoCongelado.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from app.auth import hash_pin
 from app.models import (
@@ -22,7 +22,19 @@ from app.models import (
 )
 
 HOY = date.today()
+# `GET /dia` colapsa el domingo al sabado (`if dow > 6: dow = 6`), asi que una
+# tarea creada con este dow aparece al preguntar por hoy cualquier dia.
 DOW_HOY = min(HOY.isoweekday(), 6)
+
+# `GET /analytics` NO hace eso: saltea los domingos enteros (`isoweekday() <= 6`,
+# el obrador trabaja Lun-Sab), asi que un rango domingo-domingo da una respuesta
+# vacia y cualquier test que pregunte por "hoy" falla los domingos. Los tests de
+# analytics usan el ultimo dia laborable para no depender del calendario.
+# Que los dos endpoints traten el domingo distinto es real, no cosa del test:
+# un domingo /produccion muestra el plan del sabado y analytics dice que no
+# hubo plan. Esta anotado para decidirlo, no lo arregla este archivo.
+HOY_LABORAL = HOY if HOY.isoweekday() <= 6 else HOY - timedelta(days=1)
+DOW_LABORAL = HOY_LABORAL.isoweekday()
 
 
 def _setup(client, db):
@@ -418,15 +430,15 @@ def test_delete_registro_reverses_stock(client, db):
 
 def test_analytics_reports_completion_rate(client, db):
     token, _ = _setup(client, db)
-    tarea = _crear_tarea(client, token, titulo="Tarea analitica", dia_semana=DOW_HOY, tipo="produccion")
+    tarea = _crear_tarea(client, token, titulo="Tarea analitica", dia_semana=DOW_LABORAL, tipo="produccion")
     client.post(
         "/api/produccion/registro",
-        json={"tarea_id": tarea["id"], "fecha": HOY.isoformat(), "completada": True},
+        json={"tarea_id": tarea["id"], "fecha": HOY_LABORAL.isoformat(), "completada": True},
         headers=_headers(token),
     )
 
     res = client.get(
-        f"/api/produccion/analytics?desde={HOY.isoformat()}&hasta={HOY.isoformat()}",
+        f"/api/produccion/analytics?desde={HOY_LABORAL.isoformat()}&hasta={HOY_LABORAL.isoformat()}",
         headers=_headers(token),
     )
     assert res.status_code == 200
@@ -455,17 +467,17 @@ def test_analytics_surfaces_extras_on_days_with_no_plan(client, db):
 
     client.post(
         "/api/produccion/producir",
-        json={"producto_id": prod.id, "cantidad_producida": 5.0, "fecha": HOY.isoformat(), "duracion_real": 45},
+        json={"producto_id": prod.id, "cantidad_producida": 5.0, "fecha": HOY_LABORAL.isoformat(), "duracion_real": 45},
         headers=_headers(token),
     )
 
     res = client.get(
-        f"/api/produccion/analytics?desde={HOY.isoformat()}&hasta={HOY.isoformat()}",
+        f"/api/produccion/analytics?desde={HOY_LABORAL.isoformat()}&hasta={HOY_LABORAL.isoformat()}",
         headers=_headers(token),
     )
     assert res.status_code == 200
     data = res.json()
-    dia = next((d for d in data["por_dia"] if d["fecha"] == HOY.isoformat()), None)
+    dia = next((d for d in data["por_dia"] if d["fecha"] == HOY_LABORAL.isoformat()), None)
     assert dia is not None
     assert dia["planificadas"] == 0
     assert dia["porcentaje"] is None
