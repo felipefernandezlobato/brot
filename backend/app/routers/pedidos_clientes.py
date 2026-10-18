@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.models import (
     ProductoCatalogo,
 )
 from app.schemas import PedidoClienteOut
+from app.services.avisos_pedido import avisar_pedido_nuevo
 
 router = APIRouter(prefix="/api/cliente/pedidos", tags=["pedidos-clientes"])
 
@@ -112,6 +113,7 @@ def _build_entrega_out(
 @router.post("", response_model=PedidoClienteOut, status_code=201)
 def create_pedido(
     data: _PedidoRequest,
+    tareas: BackgroundTasks,
     cliente: ClienteB2B = Depends(get_cliente_aprobado),
     db: Session = Depends(get_db),
 ):
@@ -126,6 +128,7 @@ def create_pedido(
 
     total = 0.0
     lineas_db: list[LineaPedidoCliente] = []
+    para_el_aviso: list[tuple[str, float]] = []
 
     for linea in data.lineas:
         producto = db.query(ProductoCatalogo).filter(ProductoCatalogo.id == linea.producto_id).first()
@@ -149,6 +152,9 @@ def create_pedido(
                 subtotal=subtotal,
             )
         )
+        # El nombre se guarda aca, con la sesion viva: el aviso al panadero
+        # corre despues de responder y ya no puede ir a buscarlo.
+        para_el_aviso.append((producto.nombre, linea.cantidad))
 
     pedido = PedidoCliente(
         cliente_id=cliente.id,
@@ -166,6 +172,22 @@ def create_pedido(
 
     db.commit()
     db.refresh(pedido)
+
+    # Despues del commit y en segundo plano, las dos cosas a proposito: el
+    # pedido ya esta guardado cuando se intenta el correo, asi que un fallo de
+    # SMTP no puede perderlo ni dejar al cliente esperando a Gmail. Es lo mismo
+    # que se aprendio en el alta de clientes, que tardaba segundos por mandar
+    # el mail dentro de la peticion.
+    tareas.add_task(
+        avisar_pedido_nuevo,
+        pedido_id=pedido.id,
+        cliente=cliente.nombre,
+        fecha_entrega=pedido.fecha_entrega,
+        fecha_pedido=pedido.fecha_pedido,
+        lineas=para_el_aviso,
+        total=pedido.total,
+        notas=pedido.notas,
+    )
     return _build_pedido_out(pedido)
 
 

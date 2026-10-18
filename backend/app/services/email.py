@@ -9,6 +9,11 @@ entorno; el repo es publico, asi que nada de esto puede ir escrito en codigo:
     SMTP_PASSWORD   la contrasena de aplicacion de Google (NO la del correo)
     EMAIL_FROM      "BROT La Panaderia <brotlapanaderia@gmail.com>"  (opcional)
     APP_URL         https://brot-bruteam.vercel.app  (para armar los enlaces)
+    EMAIL_PANADERO  a quien avisar de cada pedido nuevo del portal; admite
+                    varias separadas por coma. Sin esto no se manda ese aviso
+                    (ver services/avisos_pedido.py). Va en el entorno y no en
+                    el codigo porque el repo es publico y es una direccion
+                    personal.
 
 **Sin configurar, no falla: no envia y devuelve False.** Es deliberado. En
 local y en los tests no hay SMTP, y un alta de cliente no puede reventar con
