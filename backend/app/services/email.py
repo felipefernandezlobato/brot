@@ -62,6 +62,13 @@ def enviar_email(destino: str, asunto: str, cuerpo: str) -> bool:
             s.starttls()
             s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
             s.send_message(msg)
+        # Un envio correcto tambien deja rastro. Antes no dejaba ninguno, y eso
+        # hacia que "¿salio el correo?" no se pudiera contestar mirando: habia
+        # que deducirlo por la AUSENCIA de un error, que es lo mismo que se ve
+        # si el aviso no llego a ejecutarse. Paso el 2026-10-19 con el primer
+        # pedido real. Una linea por envio, que con el volumen de esta
+        # panaderia son unas pocas al dia.
+        logger.info("Correo enviado: '%s' a %s", asunto, destino)
         return True
     except Exception as e:
         # Sin `exc_info=True` a proposito: un traceback con locals podria
