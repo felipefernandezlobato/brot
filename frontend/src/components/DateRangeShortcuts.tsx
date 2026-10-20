@@ -130,20 +130,26 @@ export default function DateRangeShortcuts({ fechaDesde, fechaHasta, onChange }:
         />
       )}
 
+      {/* Los dos campos llevan min-w-0: un <input type="date"> nativo tiene un
+          ancho minimo propio, asi que dos juntos mas el separador no entran en
+          un movil de 390 y empujaban la pagina 2px en horizontal. `flex-1` sin
+          `min-w-0` no alcanza, porque el min-width por defecto de un item flex
+          es `auto` y eso le impide encoger por debajo de su contenido.
+          Los modos dia/semana/mes tienen un solo campo y no necesitan nada. */}
       {modo === "custom" && (
         <div className="flex items-center gap-2">
           <input
             type="date"
             value={fechaDesde}
             onChange={(e) => onChange(e.target.value, fechaHasta)}
-            className="px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+            className="min-w-0 flex-1 px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
           />
-          <span className="text-warm-gray text-xs">a</span>
+          <span className="text-warm-gray text-xs shrink-0">a</span>
           <input
             type="date"
             value={fechaHasta}
             onChange={(e) => onChange(fechaDesde, e.target.value)}
-            className="px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
+            className="min-w-0 flex-1 px-2 py-1.5 rounded-lg border border-cream-dark bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[36px]"
           />
         </div>
       )}

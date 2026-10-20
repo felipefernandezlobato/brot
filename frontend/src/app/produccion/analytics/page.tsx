@@ -226,8 +226,10 @@ export default function ProduccionAnalytics() {
         </div>
 
         {/* Custom date inputs */}
+        {/* min-w-0 en los dos: sin eso los campos de fecha no encogen por
+            debajo de su ancho intrinseco y la fila se pasa en un movil. */}
         <div className="flex items-center gap-2">
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <label className="text-xs text-gray-400 block mb-1">Desde</label>
             <input
               type="date"
@@ -237,7 +239,7 @@ export default function ProduccionAnalytics() {
               style={{ minHeight: 44 }}
             />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <label className="text-xs text-gray-400 block mb-1">Hasta</label>
             <input
               type="date"
