@@ -499,10 +499,13 @@ export default function ClientesB2BPage() {
                       <p className="text-xs text-warm-gray italic mt-0.5">{c.notas}</p>
                     )}
                   </div>
-                  {/* flex-wrap tambien aca dentro: los cuatro botones miden
-                      359px y el ancho util de un movil de 390 son 358. Sin esto
-                      se pasa por dos pixeles y arrastra la pagina entera. */}
-                  <div className="flex flex-wrap gap-2 shrink-0">
+                  {/* Sin `shrink-0`, y eso es justo el arreglo: los cuatro
+                      botones miden 359px y el ancho util de un movil de 390 son
+                      358. Con shrink-0 el grupo se queda en su ancho maximo y el
+                      flex-wrap de aqui NUNCA se dispara, porque solo envuelve
+                      cuando el contenedor se le queda estrecho -- y shrink-0
+                      impedia justamente eso. Se paso dos pixeles hasta quitarlo. */}
+                  <div className="flex flex-wrap gap-2">
                     {/* Solo admin: la ficha enseña facturación por cliente,
                         igual que las estadísticas del inicio. El backend lo
                         bloquea de todos modos; esto evita ofrecer un enlace
