@@ -16,6 +16,7 @@ from app.models import (
 )
 from app.schemas import PedidoClienteOut
 from app.services.avisos_pedido import avisar_pedido_nuevo
+from app.services.pedidos_vista import construir_pedido_out, historial_de_cliente
 
 router = APIRouter(prefix="/api/cliente/pedidos", tags=["pedidos-clientes"])
 
@@ -33,81 +34,6 @@ class _PedidoRequest(BaseModel):
     fecha_entrega: date
     notas: Optional[str] = None
     lineas: list[_LineaIn]
-
-
-def _nombres_productos(db: Session) -> dict[int, str]:
-    return {p.id: p.nombre for p in db.query(ProductoCatalogo).all()}
-
-
-def _build_pedido_out(
-    pedido: PedidoCliente, nombres: Optional[dict[int, str]] = None
-) -> PedidoClienteOut:
-    nombres = nombres or {}
-    return PedidoClienteOut(
-        id=pedido.id,
-        cliente_id=pedido.cliente_id,
-        fecha_pedido=pedido.fecha_pedido,
-        fecha_entrega=pedido.fecha_entrega,
-        estado=pedido.estado,
-        notas=pedido.notas,
-        total=pedido.total,
-        pedido_recurrente_id=pedido.pedido_recurrente_id,
-        origen="portal",
-        lineas=[
-            {
-                "id": l.id,
-                "pedido_cliente_id": l.pedido_cliente_id,
-                "producto_id": l.producto_id,
-                "cantidad": l.cantidad,
-                "precio_unitario_snapshot": l.precio_unitario_snapshot,
-                "subtotal": l.subtotal,
-                "producto_nombre": nombres.get(l.producto_id),
-            }
-            for l in pedido.lineas
-        ],
-    )
-
-
-def _build_entrega_out(
-    entrega: EntregaB2B, nombres: Optional[dict[int, str]] = None
-) -> PedidoClienteOut:
-    """Una EntregaB2B vista como pedido, para el historial del cliente.
-
-    `pedidos_clientes` solo recoge lo que el cliente pide desde la web, pero a
-    los clientes B2B el obrador les carga las entregas a mano como `EntregaB2B`.
-    Con la tabla del portal vacia, "Mis Pedidos" salia vacio para todo el mundo
-    aunque Olula llevara doce entregas. Las dos tablas apuntan al mismo
-    `clientes_b2b.id`, asi que se pueden mezclar directamente.
-
-    Solo de lectura: una entrega la crea y la modifica el obrador, el cliente la
-    ve pero no la toca. De ahi que el detalle y la cancelacion sigan mirando
-    unicamente `PedidoCliente`.
-    """
-    nombres = nombres or {}
-    total = sum(l.cantidad * (l.precio_unitario or 0) for l in entrega.lineas)
-    return PedidoClienteOut(
-        id=entrega.id,
-        cliente_id=entrega.cliente_b2b_id,
-        fecha_pedido=entrega.created_at,
-        fecha_entrega=entrega.fecha_entrega,
-        estado=entrega.estado,
-        notas=entrega.notas,
-        total=total,
-        pedido_recurrente_id=None,
-        origen="entrega",
-        lineas=[
-            {
-                "id": l.id,
-                "pedido_cliente_id": entrega.id,
-                "producto_id": l.producto_id,
-                "cantidad": l.cantidad,
-                "precio_unitario_snapshot": l.precio_unitario or 0,
-                "subtotal": l.cantidad * (l.precio_unitario or 0),
-                "producto_nombre": nombres.get(l.producto_id),
-            }
-            for l in entrega.lineas
-        ],
-    )
 
 
 @router.post("", response_model=PedidoClienteOut, status_code=201)
@@ -188,7 +114,7 @@ def create_pedido(
         total=pedido.total,
         notas=pedido.notas,
     )
-    return _build_pedido_out(pedido)
+    return construir_pedido_out(pedido)
 
 
 @router.get("", response_model=list[PedidoClienteOut])
@@ -196,25 +122,11 @@ def list_pedidos(
     cliente: ClienteB2B = Depends(get_cliente_aprobado),
     db: Session = Depends(get_db),
 ):
-    nombres = _nombres_productos(db)
-    pedidos = (
-        db.query(PedidoCliente)
-        .filter(PedidoCliente.cliente_id == cliente.id)
-        .all()
-    )
-    entregas = (
-        db.query(EntregaB2B)
-        .filter(EntregaB2B.cliente_b2b_id == cliente.id)
-        .all()
-    )
-    salida = (
-        [_build_pedido_out(p, nombres) for p in pedidos]
-        + [_build_entrega_out(e, nombres) for e in entregas]
-    )
-    # Por fecha de entrega, que es lo que el cliente reconoce; el id desempata
-    # dentro del mismo dia para que el orden no baile entre recargas.
-    salida.sort(key=lambda p: (p.fecha_entrega, p.id), reverse=True)
-    return salida
+    # Una sola definicion del historial, compartida con la ficha de cliente del
+    # admin (`services/cuenta_cliente.py`). Si se bifurcaran, el admin y el
+    # cliente verian historiales distintos del mismo cliente, que es el peor
+    # tipo de discrepancia: la que nadie nota hasta que uno de los dos reclama.
+    return historial_de_cliente(db, cliente.id)
 
 
 @router.get("/{pedido_id}", response_model=PedidoClienteOut)
@@ -230,4 +142,4 @@ def get_pedido(
     )
     if not pedido:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
-    return _build_pedido_out(pedido)
+    return construir_pedido_out(pedido)

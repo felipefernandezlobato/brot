@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { loadPermissions } from "@/lib/permissions";
 import { useToast } from "@/components/Toast";
 
 interface ClienteB2B {
@@ -166,6 +167,8 @@ function ClienteForm({
 export default function ClientesB2BPage() {
   const { toast } = useToast();
   const [clientes, setClientes] = useState<ClienteB2B[]>([]);
+  // Para decidir si se ofrece el enlace a la ficha de cuenta, que es admin.
+  const [esAdmin, setEsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -187,6 +190,12 @@ export default function ClientesB2BPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    loadPermissions()
+      .then((p) => setEsAdmin(p.role === "admin"))
+      .catch(() => setEsAdmin(false));
+  }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -459,7 +468,10 @@ export default function ClientesB2BPage() {
 
             return (
               <div key={c.id} className="bg-card rounded-xl border border-cream-dark p-4">
-                <div className="flex items-start justify-between gap-3">
+                {/* flex-wrap: con "Ver cuenta" ya son cuatro botones a la
+                    derecha, y en 375px no entran junto al nombre. Es el mismo
+                    patron que desbordo tres pantallas el 17/10. */}
+                <div className="flex items-start justify-between flex-wrap gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-text">{c.nombre}</p>
@@ -488,6 +500,19 @@ export default function ClientesB2BPage() {
                     )}
                   </div>
                   <div className="flex gap-2 shrink-0">
+                    {/* Solo admin: la ficha enseña facturación por cliente,
+                        igual que las estadísticas del inicio. El backend lo
+                        bloquea de todos modos; esto evita ofrecer un enlace
+                        que va a dar 403. */}
+                    {esAdmin && (
+                      <Link
+                        href={`/entregas/clientes/${c.id}`}
+                        className="px-3 py-2 text-sm text-brot hover:text-brot-dark transition-colors min-h-[44px] flex items-center"
+                        title="Ver sus pedidos y cuánto lleva facturado"
+                      >
+                        Ver cuenta
+                      </Link>
+                    )}
                     {c.email && c.is_active && (
                       <button
                         onClick={() => invitar(c)}

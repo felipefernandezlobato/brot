@@ -100,7 +100,7 @@ def ultimos_n_meses(n: int, *, hoy: date) -> list[RangoMes]:
 
 
 @dataclass
-class _LineaVenta:
+class LineaVenta:
     fecha: date
     clave_mes: str
     canal: str  # "b2b" | "portal"
@@ -125,8 +125,29 @@ def _clave(f: date) -> str:
     return f"{f.year:04d}-{f.month:02d}"
 
 
-def _ventas(db: Session, desde: date, hasta: date) -> list[_LineaVenta]:
-    out: list[_LineaVenta] = []
+def ventas(db: Session, desde: date, hasta: date) -> list[LineaVenta]:
+    """LA definicion de "que cuenta como una venta". Publica a proposito.
+
+    Se llamaba `_ventas` mientras el unico consumidor era el resumen mensual de
+    este mismo archivo. Dejo de ser privada cuando la ficha de cliente del
+    admin (`services/cuenta_cliente.py`) necesito exactamente lo mismo: las
+    alternativas eran importar un `_privado` de otro modulo o escribir una
+    SEXTA version de la multiplicacion del importe -- ya hay cinco escritas a
+    mano repartidas por los routers, y agregar otra que pudiera discrepar de
+    esta es justo lo que no hay que hacer.
+
+    Tres reglas que concentra, y que cualquier copia perderia:
+      * solo `estado == "entregado"` cuenta como venta; el resto es pipeline.
+      * se agrupa por `fecha_entrega`, no por cuando se cargo el pedido.
+      * el importe sale distinto segun el canal: b2b multiplica
+        `cantidad * precio_unitario` porque `EntregaB2B` no guarda su total en
+        ninguna columna, y el portal lee `subtotal`, que ya esta calculado y es
+        inmutable.
+
+    El rango es libre: no esta atada a meses pese a vivir en `mensual.py`.
+    Filtrar por cliente se hace sobre el resultado, que es una lista plana.
+    """
+    out: list[LineaVenta] = []
 
     b2b = (
         db.query(LineaEntregaB2B, EntregaB2B)
@@ -139,7 +160,7 @@ def _ventas(db: Session, desde: date, hasta: date) -> list[_LineaVenta]:
         .all()
     )
     for l, e in b2b:
-        out.append(_LineaVenta(
+        out.append(LineaVenta(
             fecha=e.fecha_entrega, clave_mes=_clave(e.fecha_entrega), canal="b2b",
             cliente_id=e.cliente_b2b_id, producto_id=l.producto_id,
             cantidad=l.cantidad or 0,
@@ -158,7 +179,7 @@ def _ventas(db: Session, desde: date, hasta: date) -> list[_LineaVenta]:
         .all()
     )
     for l, p in portal:
-        out.append(_LineaVenta(
+        out.append(LineaVenta(
             fecha=p.fecha_entrega, clave_mes=_clave(p.fecha_entrega), canal="portal",
             cliente_id=p.cliente_id, producto_id=l.producto_id,
             cantidad=l.cantidad or 0,
@@ -326,7 +347,7 @@ def resumen_compras_mensual(db: Session, *, meses: int = 6, hoy: date | None = N
 
 def _costo_unitario(
     db: Session,
-    linea: _LineaVenta,
+    linea: LineaVenta,
     catalogo: dict[int, ProductoCatalogo],
     cache: dict[tuple[int, date], float | None],
 ) -> float | None:
@@ -392,7 +413,7 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
     rangos = ultimos_n_meses(meses, hoy=hoy)
     desde, hasta = rangos[0].inicio, rangos[-1].fin
 
-    ventas = _ventas(db, desde, hasta)
+    lineas_venta = ventas(db, desde, hasta)
     mermas = (
         db.query(MermaRegistro)
         .filter(MermaRegistro.fecha >= desde, MermaRegistro.fecha <= hasta)
@@ -414,7 +435,7 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
     acum: dict[str, _Acum] = defaultdict(_Acum)
     cache_costo: dict[tuple[int, date], float | None] = {}
 
-    for v in ventas:
+    for v in lineas_venta:
         a = acum[v.clave_mes]
         if v.canal == "b2b":
             a.ventas_b2b += v.monto

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_admin
 from app.database import get_db
 from app.models import (
     ClienteB2B,
@@ -20,6 +20,7 @@ from app.models import (
     User,
 )
 from app.services.acceso_cliente import enviar_invitacion
+from app.services.cuenta_cliente import cuenta_de_cliente
 from app.services.email import app_url, enviar_email
 from app.services.costes import costo_receta, receta_incompleta
 from app.services.stock import deducir_congelado_por_catalogo, revertir_consumos
@@ -56,6 +57,29 @@ def get_cliente_b2b(
     if not obj:
         raise HTTPException(status_code=404, detail="Cliente B2B no encontrado")
     return _cliente_out(obj)
+
+
+@clientes_router.get("/{cliente_id}/cuenta")
+def get_cuenta_cliente(
+    cliente_id: int,
+    desde: Optional[date] = Query(None),
+    hasta: Optional[date] = Query(None),
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """La cuenta del cliente: historial, totales y qué compra más.
+
+    **`require_admin`, no `get_current_user` como el resto de este router.**
+    Los listados de clientes y entregas los ve cualquier empleado porque son
+    operativos, pero esto expone facturación por cliente y el ranking entre
+    ellos — el mismo motivo por el que `GET /api/dashboard/mensual` es admin.
+    Eagle y Wolf siguen viendo las entregas del día en `/entregas`, que es lo
+    que necesitan para trabajar.
+    """
+    obj = db.query(ClienteB2B).filter(ClienteB2B.id == cliente_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Cliente B2B no encontrado")
+    return cuenta_de_cliente(db, obj, desde=desde, hasta=hasta)
 
 
 def _cliente_out(c: ClienteB2B) -> dict:

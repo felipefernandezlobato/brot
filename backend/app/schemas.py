@@ -936,6 +936,10 @@ class PedidoClienteOut(BaseModel):
     # obrador como EntregaB2B. Los ids de las dos tablas se solapan, asi que el
     # front tiene que combinar origen+id como clave.
     origen: str = "portal"
+    # Solo lo rellenan las vistas de admin. El cliente que mira su propio
+    # historial ya sabe quien es; el admin, que ve los pedidos de todos,
+    # necesita el nombre -- esa pantalla mostraba "Cliente #23".
+    cliente_nombre: Optional[str] = None
 
 
 # ============================================================

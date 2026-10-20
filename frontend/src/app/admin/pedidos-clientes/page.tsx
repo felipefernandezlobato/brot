@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { EstadoPedidoBadge, ESTADOS_PEDIDO, claseEstado } from "@/components/EstadoPedidoBadge";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -13,11 +14,13 @@ interface LineaPedido {
   cantidad: number;
   precio_unitario_snapshot: number;
   subtotal: number;
+  producto_nombre: string | null;
 }
 
 interface PedidoCliente {
   id: number;
   cliente_id: number;
+  cliente_nombre: string | null;
   fecha_pedido: string;
   fecha_entrega: string;
   estado: string;
@@ -48,35 +51,6 @@ function formatPrice(n: number): string {
   }).format(n);
 }
 
-const ESTADOS = [
-  { value: "pendiente", label: "Pendiente" },
-  { value: "confirmado", label: "Confirmado" },
-  { value: "en_proceso", label: "En proceso" },
-  { value: "entregado", label: "Entregado" },
-  { value: "cancelado", label: "Cancelado" },
-];
-
-const ESTADO_CONFIG: Record<string, { label: string; className: string }> = {
-  pendiente: { label: "Pendiente", className: "bg-yellow-100 text-yellow-800" },
-  confirmado: { label: "Confirmado", className: "bg-blue-100 text-blue-800" },
-  en_proceso: { label: "En proceso", className: "bg-orange-100 text-orange-800" },
-  entregado: { label: "Entregado", className: "bg-green-100 text-green-800" },
-  cancelado: { label: "Cancelado", className: "bg-red-100 text-red-800" },
-};
-
-function EstadoBadge({ estado }: { estado: string }) {
-  const cfg = ESTADO_CONFIG[estado] ?? {
-    label: estado,
-    className: "bg-cream-dark text-warm-gray",
-  };
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cfg.className}`}
-    >
-      {cfg.label}
-    </span>
-  );
-}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -162,10 +136,9 @@ export default function AdminPedidosClientesPage() {
       {/* Stats strip */}
       {!loading && pedidos.length > 0 && (
         <div className="flex gap-3 mb-6 flex-wrap">
-          {ESTADOS.map(({ value, label }) => {
+          {ESTADOS_PEDIDO.map(({ value, label }) => {
             const count = stats.byEstado[value] ?? 0;
             if (count === 0) return null;
-            const cfg = ESTADO_CONFIG[value];
             return (
               <button
                 key={value}
@@ -174,7 +147,7 @@ export default function AdminPedidosClientesPage() {
                 }
                 className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                   filterEstado === value
-                    ? cfg.className + " ring-2 ring-offset-1 ring-current"
+                    ? claseEstado(value) + " ring-2 ring-offset-1 ring-current"
                     : "bg-cream border border-cream-dark text-warm-gray hover:bg-cream-dark"
                 }`}
               >
@@ -196,7 +169,7 @@ export default function AdminPedidosClientesPage() {
           className="px-3 py-2 border border-cream-dark rounded-lg bg-card text-sm focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[40px]"
         >
           <option value="todos">Todos los estados</option>
-          {ESTADOS.map(({ value, label }) => (
+          {ESTADOS_PEDIDO.map(({ value, label }) => (
             <option key={value} value={value}>
               {label}
             </option>
@@ -264,13 +237,13 @@ export default function AdminPedidosClientesPage() {
                     {/* Client info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <EstadoBadge estado={pedido.estado} />
+                        <EstadoPedidoBadge estado={pedido.estado} />
                         <span className="text-xs text-warm-gray">
                           #{pedido.id}
                         </span>
                       </div>
                       <p className="text-sm font-medium text-text">
-                        Cliente #{pedido.cliente_id}
+                        {pedido.cliente_nombre ?? `Cliente #${pedido.cliente_id}`}
                       </p>
                       <p className="text-xs text-warm-gray capitalize mt-1">
                         Entrega: {formatDate(pedido.fecha_entrega)}
@@ -290,7 +263,7 @@ export default function AdminPedidosClientesPage() {
                         }
                         className="text-xs border border-cream-dark rounded-lg px-2 py-1 bg-cream focus:outline-none focus:ring-2 focus:ring-brot/30 min-h-[32px] disabled:opacity-50"
                       >
-                        {ESTADOS.map(({ value, label }) => (
+                        {ESTADOS_PEDIDO.map(({ value, label }) => (
                           <option key={value} value={value}>
                             {label}
                           </option>
@@ -313,7 +286,7 @@ export default function AdminPedidosClientesPage() {
                               className="flex items-center justify-between py-1.5 text-sm gap-3"
                             >
                               <span className="text-text">
-                                {linea.cantidad}× Producto #{linea.producto_id}
+                                {linea.cantidad}× {linea.producto_nombre ?? `Producto #${linea.producto_id}`}
                               </span>
                               <span className="text-warm-gray shrink-0">
                                 {formatPrice(linea.subtotal)}

@@ -6,6 +6,7 @@ import { CustomerNav } from "@/components/CustomerNav";
 import { apiClienteFetch } from "@/lib/api-cliente";
 import { useToast } from "@/components/Toast";
 import { Cliente } from "@/lib/types";
+import { EstadoPedidoBadge } from "@/components/EstadoPedidoBadge";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -57,45 +58,6 @@ function formatPrice(n: number): string {
   }).format(n);
 }
 
-const ESTADO_CONFIG: Record<
-  string,
-  { label: string; className: string }
-> = {
-  pendiente: {
-    label: "Pendiente",
-    className: "bg-yellow-100 text-yellow-800",
-  },
-  confirmado: {
-    label: "Confirmado",
-    className: "bg-blue-100 text-blue-800",
-  },
-  en_proceso: {
-    label: "En proceso",
-    className: "bg-orange-100 text-orange-800",
-  },
-  entregado: {
-    label: "Entregado",
-    className: "bg-green-100 text-green-800",
-  },
-  cancelado: {
-    label: "Cancelado",
-    className: "bg-red-100 text-red-800",
-  },
-};
-
-function EstadoBadge({ estado }: { estado: string }) {
-  const cfg = ESTADO_CONFIG[estado] ?? {
-    label: estado,
-    className: "bg-cream-dark text-warm-gray",
-  };
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${cfg.className}`}
-    >
-      {cfg.label}
-    </span>
-  );
-}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -149,7 +111,7 @@ function MisPedidosList({ cliente }: { cliente: Cliente }) {
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <EstadoBadge estado={pedido.estado} />
+                        <EstadoPedidoBadge estado={pedido.estado} />
                         <span className="text-xs text-warm-gray">
                           #{pedido.id}
                         </span>
