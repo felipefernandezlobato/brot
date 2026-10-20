@@ -48,6 +48,7 @@ from app.models import (
     Proveedor,
     Receta,
 )
+from app.services.importes import importe_linea
 from app.services.costes import costo_receta, receta_incompleta
 
 TOP_N = 10
@@ -164,7 +165,7 @@ def ventas(db: Session, desde: date, hasta: date) -> list[LineaVenta]:
             fecha=e.fecha_entrega, clave_mes=_clave(e.fecha_entrega), canal="b2b",
             cliente_id=e.cliente_b2b_id, producto_id=l.producto_id,
             cantidad=l.cantidad or 0,
-            monto=(l.cantidad or 0) * (l.precio_unitario or 0),
+            monto=importe_linea(l),
             costo_snapshot=l.costo_unitario_snapshot,
         ))
 

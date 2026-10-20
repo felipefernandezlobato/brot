@@ -22,6 +22,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models import EntregaB2B, PedidoCliente, ProductoCatalogo
+from app.services.importes import importe_linea, total_entrega
 from app.schemas import PedidoClienteOut
 
 
@@ -73,11 +74,11 @@ def construir_entrega_out(
 
     **El total se calcula acá y no se lee de ningún sitio**: a diferencia de
     `PedidoCliente.total`, que es una columna, `EntregaB2B` no guarda su
-    importe en ninguna parte. La fórmula es la misma que usa
-    `services/mensual.ventas()` para el canal b2b.
+    importe en ninguna parte. Sale de `services/importes`, que es la única
+    definición de la multiplicación en todo el proyecto.
     """
     nombres = nombres or {}
-    total = sum(l.cantidad * (l.precio_unitario or 0) for l in entrega.lineas)
+    total = total_entrega(entrega)
     return PedidoClienteOut(
         id=entrega.id,
         cliente_id=entrega.cliente_b2b_id,
@@ -95,7 +96,7 @@ def construir_entrega_out(
                 "producto_id": l.producto_id,
                 "cantidad": l.cantidad,
                 "precio_unitario_snapshot": l.precio_unitario or 0,
-                "subtotal": l.cantidad * (l.precio_unitario or 0),
+                "subtotal": importe_linea(l),
                 "producto_nombre": nombres.get(l.producto_id),
             }
             for l in entrega.lineas

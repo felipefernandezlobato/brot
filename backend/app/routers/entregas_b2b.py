@@ -21,6 +21,7 @@ from app.models import (
 )
 from app.services.acceso_cliente import enviar_invitacion
 from app.services.cuenta_cliente import cuenta_de_cliente
+from app.services.importes import total_entrega
 from app.services.email import app_url, enviar_email
 from app.services.costes import costo_receta, receta_incompleta
 from app.services.stock import deducir_congelado_por_catalogo, revertir_consumos
@@ -271,7 +272,10 @@ def list_todas_entregas(
             "fecha_entrega": str(e.fecha_entrega),
             "estado": e.estado,
             "notas": e.notas,
-            "total": sum(l.cantidad * l.precio_unitario for l in e.lineas),
+            # Via services/importes: este sumaba sin proteger el None, asi
+            # que una linea sin precio (el formulario las permite, avisando)
+            # reventaba el endpoint entero con un TypeError.
+            "total": total_entrega(e),
             "lineas": [
                 {
                     "producto_nombre": productos_map.get(l.producto_id, f"#{l.producto_id}"),
@@ -479,6 +483,17 @@ def create_entrega_b2b(
     user: User = require_permission("entregas_b2b", "create"),
     db: Session = Depends(get_db),
 ):
+    # Una entrega sin lineas no es una entrega. El portal ya lo exigia al crear
+    # un pedido y aca no, asi que por API se podia guardar una fila vacia:
+    # contaba como pedido en la ficha del cliente, aportaba 0 al facturado y
+    # diluia el ticket promedio. El formulario de /entregas nunca la manda
+    # (corta en `validLineas.length === 0`), asi que esto no cambia ningun
+    # flujo real, solo cierra la puerta.
+    if not data.lineas:
+        raise HTTPException(
+            status_code=422, detail="La entrega debe tener al menos un producto",
+        )
+
     cliente = db.query(ClienteB2B).filter(ClienteB2B.id == data.cliente_b2b_id).first()
     cliente_nombre = cliente.nombre if cliente else ""
     entrega = EntregaB2B(
@@ -558,6 +573,15 @@ def update_entrega_b2b(
 
     updates = data.model_dump(exclude_unset=True)
     lineas_data = updates.pop("lineas", None)
+
+    # Mismo motivo que al crear: mandar `lineas: []` borraba las que habia y
+    # dejaba la entrega vacia. Ojo con la distincion -- `None` es "no toques
+    # las lineas" (p.ej. un PUT que solo cambia la fecha) y hay que dejarlo
+    # pasar; la lista vacia es "quitalas todas", que es lo que se rechaza.
+    if lineas_data is not None and not lineas_data:
+        raise HTTPException(
+            status_code=422, detail="La entrega debe tener al menos un producto",
+        )
 
     # Editing the lines or the date of a delivered order invalidates what it took
     # out of stock, so undo it and re-apply from the new values.
