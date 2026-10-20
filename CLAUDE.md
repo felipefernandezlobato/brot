@@ -789,6 +789,17 @@ proveedores y se quieren todos). Hay test.
 presentacionales puras: ninguna sabe de roles ni pide datos — el gate de admin
 lo hace la pantalla que las usa, no ellas.
 
+### Un cliente que ya existe y se registra solo crea una ficha DUPLICADA, y pierde su historial (2026-10-20)
+El alta propia del portal (`POST /api/auth/cliente/registro`) **siempre crea un `ClienteB2B` nuevo**. No puede hacer otra cosa: nadie sabe que "Cremé heladeria y pasteleria" escrito por el cliente es la ficha que el obrador llama "Creme". Así que si un cliente de reparto que ya tiene entregas se registra, acaban existiendo dos fichas: la vieja con todo el historial y la nueva vacía. **Aprobar la nueva tal cual deja al cliente mirando un historial en blanco**, porque `_build_entrega_out` mezcla las `EntregaB2B` por `cliente_b2b_id` y las suyas apuntan a la ficha vieja.
+Pasó con Creme el 2026-10-20: ficha 6 ("Creme", sin email, **19 entregas** del 15/08 al 17/10) y ficha 24 ("Cremé heladeria y pasteleria", con email y contraseña, **0 entregas**).
+
+**La dirección correcta de la fusión es mover las CREDENCIALES a la ficha vieja, nunca el historial a la nueva.** Son 2 columnas en 1 fila contra re-apuntar N `EntregaB2B` — y esas filas son la fuente de todas las estadísticas mensuales de facturación. Receta aplicada, toda por endpoints reales:
+1. `DELETE /api/clientes-b2b/{nueva}` — **primero**, porque `_email_libre` rechaza el email mientras otra fila lo tenga. Sus `TokenAccesoCliente` se van en cascada (`ondelete="CASCADE"`), así que no hay violación de FK. Verificar antes que la nueva no tenga entregas ni `PedidoCliente`.
+2. `PUT /api/clientes-b2b/{vieja}` con el email — `update_cliente_b2b` llama a `_email_libre(..., excluir_id=cliente_id)`, así que funciona una vez liberado. Aprovechar para traerse dirección y teléfono: las fichas viejas del obrador suelen tenerlos vacíos, así que lo que el cliente escribió es información nueva.
+3. `POST /api/clientes-b2b/{vieja}/invitar` — el cliente pone la contraseña en la ficha correcta. **Tiene que ponerla otra vez**, porque su hash estaba en la fila borrada; no se copian hashes a mano entre filas.
+- **El `nombre` se deja como estaba.** "Creme" es el que llevan las 19 entregas, los informes y los `referencia_origen` ya escritos (`entrega_b2b:{id}:{nombre}`); renombrar deja el histórico diciendo una cosa y lo nuevo otra. El nombre comercial va en `notas`.
+- **Esto va a repetirse**: Frambuesa (id 5, 14 entregas) y Bodega Iaccarini (id 12, 3 entregas) siguen sin email. Lo que lo evita es **invitarlos desde su ficha** (`PUT` email + `invitar`) antes de que se registren solos.
+
 ### El panadero recibe un correo por cada pedido del portal (2026-10-18)
 Un pedido del portal no avisaba a nadie: quedaba en la base esperando que alguien abriera la pantalla. Daba igual mientras el portal no se usaba, pero desde que Olula pide por ahí, un pedido cargado un viernes a la noche para el sábado podía no verlo nadie hasta después de amasar. `services/avisos_pedido.py` → `avisar_pedido_nuevo()`, enganchado en `create_pedido` (`routers/pedidos_clientes.py`).
 - **El destino sale de `EMAIL_PANADERO`, nunca escrito en el código** — este repo es público y una dirección personal escrita acá queda para siempre en el historial de git y a mano de los recolectores de spam. Admite varias separadas por coma, y manda **un correo por destino** en vez de un `To:` compartido, para que un rebote de uno no se lleve el aviso del otro. Sin configurar no manda nada y lo deja dicho en el log, igual que `services/email.py`.
