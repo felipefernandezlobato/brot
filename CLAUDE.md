@@ -794,6 +794,15 @@ proveedores y se quieren todos). Hay test.
 presentacionales puras: ninguna sabe de roles ni pide datos — el gate de admin
 lo hace la pantalla que las usa, no ellas.
 
+### Los estados de un pedido salen de `EstadoPedidoBadge`, y dos copias los tenían mal (2026-10-20)
+`frontend/src/components/EstadoPedidoBadge.tsx` es el único sitio donde se pintan los estados de un `PedidoCliente`/`EntregaB2B`, y `ESTADOS_PEDIDO` la única lista. Antes estaba copiado en tres pantallas con tres paletas distintas, y **dos de las copias tenían la lista equivocada**: ofrecían `en_proceso` y `cancelado`, que **no existen** en el backend (`VALID_ESTADOS` es `pendiente → confirmado → en_preparacion → listo → entregado`, en `routers/entregas_b2b.py` y `pedidos_clientes.py`), y les faltaban `en_preparacion` y `listo`, que sí.
+
+No era cosmético, estaba roto en vivo por los dos lados:
+- En `/admin/pedidos-clientes`, elegir "En proceso" o "Cancelado" mandaba un estado inválido que el backend rechazaba, y **no había forma de pasar un pedido a "Listo"** desde esa pantalla.
+- En `/cliente/pedidos`, que lo ve **el cliente**, un pedido en preparación salía como una etiqueta gris con el texto crudo `en_preparacion`.
+
+`cancelado` no existe a propósito: un pedido que no va **se borra**, no se marca cancelado. Si algún día hace falta cancelar sin borrar, se agrega en el componente *y* en `VALID_ESTADOS`; cambiar solo uno de los dos es exactamente lo que produjo este fallo. `claseEstado()` está exportada aparte para los chips de filtro del panel, que pintan con el mismo color sin ser un badge.
+
 ### La cuenta de un cliente: `/entregas/clientes/[id]` (2026-10-20)
 `GET /api/clientes-b2b/{id}/cuenta` → `services/cuenta_cliente.py`. **Admin only** (`require_admin`, a diferencia del resto de `clientes_router`, que es `get_current_user`): expone facturación por cliente y el ranking entre ellos, el mismo motivo por el que `/dashboard/mensual` es admin. El staff sigue viendo las entregas del día en `/entregas`, que es lo que necesita para trabajar. La pantalla comprueba el rol además del backend, para no pedir datos que van a devolver 403.
 
