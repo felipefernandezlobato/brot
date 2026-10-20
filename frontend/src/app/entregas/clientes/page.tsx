@@ -499,7 +499,10 @@ export default function ClientesB2BPage() {
                       <p className="text-xs text-warm-gray italic mt-0.5">{c.notas}</p>
                     )}
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  {/* flex-wrap tambien aca dentro: los cuatro botones miden
+                      359px y el ancho util de un movil de 390 son 358. Sin esto
+                      se pasa por dos pixeles y arrastra la pagina entera. */}
+                  <div className="flex flex-wrap gap-2 shrink-0">
                     {/* Solo admin: la ficha enseña facturación por cliente,
                         igual que las estadísticas del inicio. El backend lo
                         bloquea de todos modos; esto evita ofrecer un enlace
