@@ -130,14 +130,17 @@ export default function DateRangeShortcuts({ fechaDesde, fechaHasta, onChange }:
         />
       )}
 
-      {/* Los dos campos llevan min-w-0: un <input type="date"> nativo tiene un
-          ancho minimo propio, asi que dos juntos mas el separador no entran en
-          un movil de 390 y empujaban la pagina 2px en horizontal. `flex-1` sin
-          `min-w-0` no alcanza, porque el min-width por defecto de un item flex
-          es `auto` y eso le impide encoger por debajo de su contenido.
-          Los modos dia/semana/mes tienen un solo campo y no necesitan nada. */}
+      {/* Dos <input type="date"> nativos no entran en un movil de 390: miden
+          161px cada uno y el ancho util son 343, asi que con el separador se
+          pasan y empujaban la pagina 2px en horizontal.
+          Hace falta `flex-wrap`, no basta con `min-w-0 flex-1`: se probo y el
+          campo siguio midiendo 161: el control de fecha nativo tiene un ancho
+          minimo propio dentro de su shadow DOM que `min-width: 0` no vence.
+          Con wrap, el segundo campo baja a su linea cuando no cabe, y solo en
+          ese caso. Los modos dia/semana/mes tienen un campo y no necesitan
+          nada de esto. */}
       {modo === "custom" && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             type="date"
             value={fechaDesde}
