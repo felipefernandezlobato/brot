@@ -173,14 +173,34 @@ function AgregarModal({ recetas, onClose, onSaved }: AgregarModalProps) {
 
 // ---- Price cell: color-coded vs our PVP ----
 
+/** Numera las notas distintas, para citarlas al pie como en un libro.
+ *
+ * Deduplica por TEXTO y no por fila: un mismo aviso se repite en varias celdas
+ * (los cinco precios mayoristas de BRUTO comparten la misma nota), así que
+ * numerar por celda daría trece llamadas para cuatro avisos distintos y la
+ * leyenda sería ilegible.
+ *
+ * El orden es el de aparición recorriendo la tabla, así que la numeración sigue
+ * la lectura: la primera llamada que ves es la 1.
+ */
+function numerarNotas(rows: CompararRow[]): Map<string, number> {
+  const m = new Map<string, number>();
+  rows.forEach((r) =>
+    r.competidores.forEach((c) => {
+      if (c.notas && !m.has(c.notas)) m.set(c.notas, m.size + 1);
+    })
+  );
+  return m;
+}
+
 function PriceCell({
   precio,
   pvp,
-  notas,
+  nota,
 }: {
   precio: number | undefined;
   pvp: number | null;
-  notas?: string;
+  nota?: number;
 }) {
   if (precio === undefined) {
     return <td className="px-3 py-3 text-center text-warm-gray text-sm">—</td>;
@@ -194,7 +214,7 @@ function PriceCell({
         : "text-red-600 font-medium";    // competitor is cheaper → attention
   }
 
-  /* El asterisco es la mitad del valor de esta tabla.
+  /* La llamada al pie es la mitad del valor de esta tabla.
    *
    * Las notas se podian escribir al cargar un precio y NO SE MOSTRABAN EN
    * NINGUN SITIO, asi que todas las advertencias de comparabilidad vivian en
@@ -204,23 +224,33 @@ function PriceCell({
    * numeros en la misma fila parecen comparables cuando no lo son, y la
    * conclusion que saca uno es "puedo triplicar el precio".
    *
-   * Un `title` y no un tooltip propio: es una tabla con scroll horizontal y
-   * un popover se cortaria contra el borde. El asterisco avisa de que hay algo
-   * que leer; el resto lo hace el navegador.
+   * Primero fue un asterisco con `title`, que obligaba a pasar el raton por
+   * trece celdas para saber que decia cada una. Un numero que se explica al
+   * pie se lee de un pantallazo.
    */
   return (
     <td className={`px-3 py-3 text-right tabular-nums text-sm ${colorClass}`}>
       {formatARS(precio)}
-      {notas && (
-        <span
-          className="ml-1 cursor-help text-warm-gray font-normal"
-          title={notas}
-          aria-label={notas}
-        >
-          *
-        </span>
+      {nota && (
+        <sup className="ml-0.5 text-[10px] font-normal text-brot">{nota}</sup>
       )}
     </td>
+  );
+}
+
+/** Las notas al pie de la tabla. */
+function LeyendaNotas({ notas }: { notas: Map<string, number> }) {
+  if (notas.size === 0) return null;
+  const orden = [...notas.entries()].sort((a, b) => a[1] - b[1]);
+  return (
+    <div className="mt-3 space-y-1">
+      {orden.map(([texto, n]) => (
+        <p key={n} className="text-xs text-warm-gray leading-relaxed">
+          <sup className="text-brot mr-1">{n}</sup>
+          {texto}
+        </p>
+      ))}
+    </div>
   );
 }
 
@@ -247,6 +277,7 @@ export default function CompetenciaPage() {
   }, [loadData]);
 
   const competidores = allCompetidores(rows);
+  const notasNumeradas = numerarNotas(rows);
 
   // Build unique list of recetas for the modal
   const recetasParaModal = rows.map((r) => ({
@@ -320,8 +351,7 @@ export default function CompetenciaPage() {
               <tbody>
                 {rows.map((row) => {
                   // La entrada entera y no solo el precio: la celda necesita
-                  // tambien las notas para poder marcar con un asterisco las
-                  // comparaciones que tienen trampa.
+                  // tambien la nota para poder citarla al pie.
                   const competidorMap = new Map(
                     row.competidores.map((c) => [c.competidor_nombre, c])
                   );
@@ -342,7 +372,11 @@ export default function CompetenciaPage() {
                         <PriceCell
                           key={name}
                           precio={competidorMap.get(name)?.precio}
-                          notas={competidorMap.get(name)?.notas}
+                          nota={
+                            notasNumeradas.get(
+                              competidorMap.get(name)?.notas ?? ""
+                            )
+                          }
                           pvp={row.pvp}
                         />
                       ))}
@@ -353,6 +387,11 @@ export default function CompetenciaPage() {
             </table>
           </div>
         )}
+        {/* La leyenda va FUERA del contenedor con scroll horizontal: dentro
+            heredaba el ancho de la tabla y en un movil habia que desplazarse
+            a la derecha para leerla, que es justo lo contrario de lo que
+            tiene que hacer una nota al pie. */}
+        {!loading && rows.length > 0 && <LeyendaNotas notas={notasNumeradas} />}
       </div>
 
       {showModal && (
