@@ -176,9 +176,11 @@ function AgregarModal({ recetas, onClose, onSaved }: AgregarModalProps) {
 function PriceCell({
   precio,
   pvp,
+  notas,
 }: {
   precio: number | undefined;
   pvp: number | null;
+  notas?: string;
 }) {
   if (precio === undefined) {
     return <td className="px-3 py-3 text-center text-warm-gray text-sm">—</td>;
@@ -192,9 +194,32 @@ function PriceCell({
         : "text-red-600 font-medium";    // competitor is cheaper → attention
   }
 
+  /* El asterisco es la mitad del valor de esta tabla.
+   *
+   * Las notas se podian escribir al cargar un precio y NO SE MOSTRABAN EN
+   * NINGUN SITIO, asi que todas las advertencias de comparabilidad vivian en
+   * un campo invisible: que el Pan Bollito se vende por kilo de masa y no por
+   * unidad, que el medio kilo de BRUTO es precio de mostrador y el resto
+   * mayorista, que su integral es multisemilla y el nuestro no. Sin eso, dos
+   * numeros en la misma fila parecen comparables cuando no lo son, y la
+   * conclusion que saca uno es "puedo triplicar el precio".
+   *
+   * Un `title` y no un tooltip propio: es una tabla con scroll horizontal y
+   * un popover se cortaria contra el borde. El asterisco avisa de que hay algo
+   * que leer; el resto lo hace el navegador.
+   */
   return (
     <td className={`px-3 py-3 text-right tabular-nums text-sm ${colorClass}`}>
       {formatARS(precio)}
+      {notas && (
+        <span
+          className="ml-1 cursor-help text-warm-gray font-normal"
+          title={notas}
+          aria-label={notas}
+        >
+          *
+        </span>
+      )}
     </td>
   );
 }
@@ -294,8 +319,11 @@ export default function CompetenciaPage() {
               </thead>
               <tbody>
                 {rows.map((row) => {
+                  // La entrada entera y no solo el precio: la celda necesita
+                  // tambien las notas para poder marcar con un asterisco las
+                  // comparaciones que tienen trampa.
                   const competidorMap = new Map(
-                    row.competidores.map((c) => [c.competidor_nombre, c.precio])
+                    row.competidores.map((c) => [c.competidor_nombre, c])
                   );
                   return (
                     <tr
@@ -313,7 +341,8 @@ export default function CompetenciaPage() {
                       {competidores.map((name) => (
                         <PriceCell
                           key={name}
-                          precio={competidorMap.get(name)}
+                          precio={competidorMap.get(name)?.precio}
+                          notas={competidorMap.get(name)?.notas}
                           pvp={row.pvp}
                         />
                       ))}
