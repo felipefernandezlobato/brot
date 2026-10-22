@@ -931,6 +931,14 @@ Adding a nav item costs ~64px of a budget that is already over; check it on a
 - **This is the same empty-recipe SHAPE as Baston Cinnamon Roll under the PVP section, but not the same case**: that one is empty on purpose (free offcuts), this one is empty only because the product does not exist yet. It is safe *only* while it has no `precio_venta`: give it a price without filling in the lines and the multiplier starts lying. When the product goes into production, load its real lines.
 - Cleaner fix if this recurs: make `receta_id` nullable and add a free-text product name, so competitor-only products stop polluting Escandallos. Offered 2026-09-30, not yet requested.
 
+### Las notas de competencia eran INVISIBLES, y ahora son notas al pie numeradas (2026-10-21)
+`PrecioCompetencia.notas` se podía escribir al cargar un precio y `/competencia` **no lo mostraba en ningún sitio**. O sea que todas las salvedades de comparabilidad —que son la mitad del valor de esa tabla— vivían en un campo que nadie leía: que el Pan Bollito se vende por kilo de masa y no por unidad, que el medio kilo de BRUTO es mostrador mientras el resto es mayorista, que el "integral" de LE MAISON es pan de salvado. Dos números en la misma fila parecían equivalentes sin serlo, y la conclusión que saca uno de eso es "puedo triplicar el precio".
+
+Ahora cada precio con nota lleva un número en superíndice y la explicación va al pie en letra pequeña (`numerarNotas()` + `LeyendaNotas` en `competencia/page.tsx`). Tres decisiones que no son obvias:
+- **Se numera por TEXTO de la nota, no por celda.** Un mismo aviso se repite en varias celdas (los cinco mayoristas de BRUTO comparten nota), así que numerar por celda daba 13 llamadas para 6 avisos. **Corolario al escribir una nota: si el aviso es el mismo, el texto tiene que ser IDÉNTICO**, o se duplica en la leyenda. El primer intento puso un preámbulo largo común con una cola distinta por producto y salieron 10 notas de las que 5 eran casi iguales.
+- **La leyenda va FUERA del `overflow-x-auto` de la tabla.** Dentro heredaba el ancho de la tabla y en un móvil había que desplazarse a la derecha para leer la nota al pie.
+- Primero fue un asterisco con `title`; obligaba a pasar el ratón por 13 celdas, y en un móvil no hay ratón.
+
 ### Competitor price sources and what's actually comparable (loaded 2026-09-29/30)
 Four competitors on record. Prices per unit in ARS.
 - **La Granadina** — from the public ola.click menu (`la-granadina-artesanal.ola.click/products`). Sells **no individual pastry prices**: medialunas are "FACTURAS" surtidas, docena $13.200 / media docena $6.600, both = **$1.100 per factura**. Loaded against Medialuna, Sacramento and Cinnamon Roll — all three named explicitly in that assortment's description. NOT loaded: "PALMERA GRANDE" (size mismatch with our Palmerita), "CREMA PASTELERA" and "CON CHOCOLATE" (too generic to map).
@@ -941,7 +949,21 @@ Four competitors on record. Prices per unit in ARS.
 - **Pan Bollito** (the placeholder above): Granadino $4.000/kg, BRUTO $1.800/kg. More than 2× apart, so check they mean the same thing before pricing off them — La Granadina's menu describes a bollito as "1kg de pan rinde aproximadamente 24 bollitos", i.e. sold as a kilo of dough, not per roll.
 - **"Granadino" and "La Granadina" are two different businesses** — confirmed with Felipe 2026-09-30. The similar names are a coincidence; keep them as separate competitor records and do not merge them. (Their prices differ wildly, which is what prompted the question: medialuna 625 at Granadino vs 1.100 at La Granadina, bollito 4.000 vs BRUTO's 1.800.)
 
-**What the comparison says as of 2026-09-30:** medialuna is at parity with La Granadina (1.110 vs 1.100) but **pan de masa madre is at a third of BRUTO's price** (740 vs 2.500 for the half kilo, 1.330 vs 4.000 for the kilo) — and bread is exactly where the lower ×2.5 multiplier was applied.
+### BRUTO pasó a precio MAYORISTA, y LE MAISON entró en la tabla (2026-10-21)
+
+**El cambio de base de BRUTO es lo importante.** Lo que había cargado era su precio de **mostrador** comparado contra nuestro PVP **B2B** — dos bases distintas, que hacían parecer a BROT mucho más barato de lo que está. Ahora son mayoristas: Croissant **1.900**, Medialuna **1.000**, Pan masa madre 1kg **3.200**, Pan de chocolate **3.200**, Roll de canela **2.800**. Su mayorista está ~24% por debajo de su mostrador, consistente en los tres productos que teníamos de las dos formas, lo que confirma que la lista nueva es mayorista de verdad. **Pan Blanco 0.5kg sigue en mostrador** porque su cotización solo trae el kilo, y lo dice su nota.
+
+**La cotización la pidió Felipe**, pasándole a BRUTO sus propios volúmenes de septiembre para comparar. Importa anotarlo porque las cantidades de ese presupuesto **son las ventas reales de BROT de septiembre** (medialunas 1.180 exactas, croissants 980 contra 979), así que parece que alguien estuviera intentando reemplazar a BROT y no es eso. Lo deduje al revés y Felipe me corrigió.
+
+**Lo que dice la comparación mayorista:** sobre esa misma canasta y con los PVP de hoy, **BRUTO cobra un 42% más** ($5.394.000 contra $3.799.500, o sea $1.594.500 al mes). Pan 1kg blanco +101%, Roll de canela +180%, Pan de chocolate +48%, Croissant +23%. **La medialuna es el único producto donde BROT es más caro** (−10%), y es el segundo volumen de la casa. En multiplicador, el precio de BRUTO implica 6,0× en el pan blanco y 3,7× en el croissant, contra el ×3,0 uniforme de BROT: **BRUTO cobra según el producto y BROT aplica el mismo multiplicador a todo**, que es la diferencia de fondo entre las dos listas.
+
+**`LE MAISON`** — pan **$1.600 el kilo, el mismo precio el blanco y el "integral"**. Primer competidor que no está por encima de BROT en pan: blanco a la par (1.600 contra 1.590) e "integral" un 37% por debajo. **Pero no es el mismo producto**, confirmado con Felipe:
+- Su **"integral" es PAN DE SALVADO**, no integral. El nuestro lleva Harina Integral a 2.400/kg contra 750 del salvado — y **el salvado salió de nuestras recetas el 2026-10-15 justamente para subir la calidad**, o sea que nos movimos a propósito en la dirección contraria. Esos 950 de diferencia no son un problema de precio.
+- **No es de masa madre**, y el nuestro sí. Así que en el blanco, "estar a la par" significa vender un pan más caro de hacer al mismo precio.
+- Que cobren lo mismo por los dos panes ya lo delata: la harina integral cuesta 3× la común.
+- **Sin confirmar si es mostrador o mayorista.** Con BRUTO el mayorista estaba 24% por debajo, así que importa.
+
+**Lo que decía la comparación vieja (2026-09-30), con la base equivocada:** que el pan de masa madre estaba "a un tercio de BRUTO" (740 vs 2.500 el medio kilo). Esa cifra comparaba B2B contra mostrador y el multiplicador del pan era ×2,5; hoy es ×3,0 y la comparación correcta es la de arriba.
 
 ---
 
