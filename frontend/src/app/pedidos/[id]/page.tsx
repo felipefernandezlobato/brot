@@ -454,7 +454,12 @@ export default function PedidoDetailPage() {
                       className="border-b border-gray-50 last:border-0"
                     >
                       <td className="px-6 py-3 font-medium text-text">
-                        {ingredientesMap[l.ingrediente_id] ?? `Ingrediente #${l.ingrediente_id}`}
+                        <Link
+                          href={`/ingredientes/${l.ingrediente_id}`}
+                          className="hover:text-brot hover:underline"
+                        >
+                          {ingredientesMap[l.ingrediente_id] ?? `Ingrediente #${l.ingrediente_id}`}
+                        </Link>
                       </td>
                       <td className="px-6 py-3 text-right tabular-nums">
                         {l.cantidad_pedida}

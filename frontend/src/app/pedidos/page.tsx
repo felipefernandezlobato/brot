@@ -462,7 +462,12 @@ function TabPropuesta({ onCreated }: { onCreated: () => void }) {
                           }`}
                         >
                           <td className="px-4 py-2">
-                            <p className="font-medium text-text">{item.ingrediente}</p>
+                            <Link
+                              href={`/ingredientes/${item.ingrediente_id}`}
+                              className="font-medium text-text hover:text-brot hover:underline"
+                            >
+                              {item.ingrediente}
+                            </Link>
                             <p className="text-xs text-warm-gray">{item.unidad}</p>
                           </td>
                           <td className={`text-right px-3 py-2 tabular-nums ${lowStock ? "text-red-600 font-medium" : "text-text"}`}>
