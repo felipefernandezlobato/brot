@@ -108,6 +108,107 @@ def get_saldo_materia_prima(db: Session, ingrediente_id: int) -> float:
     return reg.cantidad if reg else 0.0
 
 
+# Lo que cuenta como "gastar" materia prima, en un solo sitio. Una recepcion
+# repone, un carga_inicial es una linea base historica y una correccion_conteo
+# ajusta un desvio: ninguno de los tres es consumo. Compartido por el calculo
+# del pedido (/inventario/recomendacion) y por el grafico de la ficha del
+# ingrediente (/api/ingredientes/{id}/evolucion), para que las dos pantallas no
+# puedan discrepar sobre que significa "consumo".
+TIPOS_CONSUMO_MATERIA_PRIMA = ("produccion_consumo", "merma")
+
+SEMANAS_CONSUMO = 8
+
+
+def consumo_semanal_materia_prima(
+    db: Session,
+    ids: list[int],
+    semanas: int = SEMANAS_CONSUMO,
+) -> dict[int, float]:
+    """Consumo medio por semana de cada ingrediente, leido del LEDGER.
+
+    Sustituye a la estimacion que `/inventario/recomendacion` hacia recorriendo
+    filas consecutivas de `InventarioRegistro`. Esa cadena son totales
+    absolutos guardados que nunca se re-secuencian: una produccion cargada
+    tarde pero fechada en el pasado se engancha a la punta que hubiera al
+    escribirla, asi que sus diferencias no miden nada. Medido en produccion el
+    29/10/2026, sobreestimaba entre 1,8x y 109x -- Harina 000 a 547,9 kg/semana
+    contra 96,4 reales, y Manteca a 67,9 contra 19,0, con lo que proponia pedir
+    128 kg de manteca para un gasto de 19.
+
+    Tenia ademas un segundo fallo, independiente de la fuente: solo acumulaba
+    en el denominador los dias en que el stock habia bajado, de modo que una
+    semana tranquila no dividia y la tasa subia sola.
+
+    Tres decisiones tomadas por Felipe el 29/10/2026:
+
+    * **La merma cuenta.** Lo que se tira hay que reponerlo igual. En Harina
+      000 son 100 kg en 8 semanas, un 10% mas de consumo semanal.
+    * **Se divide por las semanas que el ingrediente lleva existiendo**, con
+      tope en `semanas`. Dividir siempre por 8 le da la mitad de su consumo
+      real a un ingrediente nuevo (los de Limpieza y Descartables llevan
+      semanas), justo cuando mas falta hace acertar con el primer pedido.
+      Dividir solo por las semanas CON movimiento es el extremo contrario:
+      multiplicaria por 4 el consumo de la canela, que se usa 2 semanas de 8.
+    * **El par sigue siendo este numero x2**, sin tocar.
+
+    Se NETEA cada ingrediente en vez de sumar solo las cantidades negativas:
+    `revertir_consumos` deja el movimiento original y su devolucion con el
+    mismo `tipo_movimiento`, asi que sumar negativos contaria como gasto real
+    un consumo ya anulado. El resultado se corta en 0 porque una reversion
+    cuyo original cayo fuera de la ventana deja el neto en positivo, y eso no
+    es stock creado.
+    """
+    if not ids:
+        return {}
+
+    desde = date.today() - timedelta(weeks=semanas)
+    movs = (
+        db.query(MovimientoStock)
+        .filter(
+            MovimientoStock.tipo_stock == "materia_prima",
+            MovimientoStock.referencia_producto_id.in_(ids),
+            MovimientoStock.tipo_movimiento.in_(TIPOS_CONSUMO_MATERIA_PRIMA),
+            MovimientoStock.fecha >= desde,
+        )
+        .all()
+    )
+    neto: dict[int, float] = {}
+    for m in movs:
+        neto[m.referencia_producto_id] = neto.get(m.referencia_producto_id, 0.0) + m.cantidad
+
+    # La antiguedad se mide sobre CUALQUIER movimiento, no solo los de consumo:
+    # un ingrediente recibido hace seis semanas y usado por primera vez ayer
+    # lleva seis semanas en la casa, y repartir su gasto sobre un solo dia lo
+    # dispararia.
+    primeros = dict(
+        db.query(
+            MovimientoStock.referencia_producto_id,
+            func.min(MovimientoStock.fecha),
+        )
+        .filter(
+            MovimientoStock.tipo_stock == "materia_prima",
+            MovimientoStock.referencia_producto_id.in_(ids),
+        )
+        .group_by(MovimientoStock.referencia_producto_id)
+        .all()
+    )
+
+    hoy = date.today()
+    out: dict[int, float] = {}
+    for iid in ids:
+        consumo = -neto.get(iid, 0.0)
+        primero = primeros.get(iid)
+        if consumo <= 0 or primero is None:
+            out[iid] = 0.0
+            continue
+        dias_vivo = (hoy - max(primero, desde)).days
+        # Piso de una semana: con menos de 7 dias de vida, extrapolar a un
+        # ritmo semanal a partir de dos dias de datos inventa un pico.
+        semanas_vivo = min(max(dias_vivo / 7, 1.0), float(semanas))
+        out[iid] = round(consumo / semanas_vivo, 2)
+    return out
+
+
 def get_saldos_materia_prima(db: Session, ids: list[int]) -> dict[int, float]:
     """Balance right now per ingrediente_id, read from the ledger.
 
@@ -148,7 +249,7 @@ def get_saldos_materia_prima(db: Session, ids: list[int]) -> dict[int, float]:
     # (orden_visual_dia, confirmed with Felipe: "el inventario es lo que tiene
     # que prevalecer al final de dia"), so today's count wins outright here.
     hoy = str(date.today())
-    for rid, conteos in _conteos_manuales_por_fecha(db, "materia_prima", ids).items():
+    for rid, conteos in conteos_manuales_por_fecha(db, "materia_prima", ids).items():
         if hoy in conteos:
             saldos[rid] = conteos[hoy]
 
@@ -185,7 +286,7 @@ def get_saldo_congelado(db: Session, producto_congelado_id: int) -> float:
     return get_saldos_congelado(db, [producto_congelado_id]).get(producto_congelado_id, 0.0)
 
 
-def _conteos_manuales_por_fecha(db: Session, tipo_stock: str, ids: list[int]) -> dict[int, dict[str, float]]:
+def conteos_manuales_por_fecha(db: Session, tipo_stock: str, ids: list[int]) -> dict[int, dict[str, float]]:
     """The physical count total per (producto, fecha), genuine manual counts
     only (es_conteo_manual) -- what historial_movimientos_acumulado re-anchors
     calculado to from the day AFTER each one.
@@ -382,7 +483,7 @@ def historial_movimientos_acumulado(
         key = str(m.fecha)
         day_map[key] = day_map.get(key, 0.0) + m.cantidad
 
-    anclas = _conteos_manuales_por_fecha(db, tipo_stock, list(by_id_date.keys()))
+    anclas = conteos_manuales_por_fecha(db, tipo_stock, list(by_id_date.keys()))
     referencia = str(fecha_hasta or date.today())
 
     result: dict[int, list[dict]] = {}
@@ -458,7 +559,7 @@ def saldo_despues_por_movimiento(db: Session, tipo_stock: str, referencia_produc
         .all()
     )
     anclas = sorted(
-        _conteos_manuales_por_fecha(db, tipo_stock, [referencia_producto_id])
+        conteos_manuales_por_fecha(db, tipo_stock, [referencia_producto_id])
         .get(referencia_producto_id, {})
         .items()
     )
@@ -1154,7 +1255,7 @@ def ajustar_consumo_padre(
         same referencia, so the record still owns its own effect.
 
     `cantidad_original` is never written, so no manual count and no calculado
-    anchor moves (`_conteos_manuales_por_fecha` reads that field and ignores
+    anchor moves (`conteos_manuales_por_fecha` reads that field and ignores
     `is_active`).
 
     Returns the new consumption movement, or None when there was nothing to

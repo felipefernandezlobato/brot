@@ -70,14 +70,26 @@ interface StockInfo {
   fecha_ultimo_conteo: string | null;
 }
 
-interface StockRecord {
-  id: number;
-  ingrediente_id: number;
-  cantidad: number;
+/** Un punto de `GET /api/ingredientes/{id}/evolucion`: saldo del LEDGER en esa
+ *  fecha y consumo de los 7 dias que la preceden. Sustituye al calculo que se
+ *  hacia aqui restando filas de `/api/inventario`, que son totales guardados y
+ *  no se re-secuencian cuando algo se carga con fecha retroactiva -- el grafico
+ *  llego a dibujar Manteca a -25,3 kg el 19/10 donde el ledger dice 5,10, y
+ *  contradecia a la tabla de movimientos de la misma pantalla. */
+interface PuntoEvolucion {
+  fecha: string;
+  /** Saldo del ledger. null en una fecha que solo tiene conteo fisico. */
+  cantidad: number | null;
+  consumo_7d: number;
+  /** Conteo fisico de ese dia, si lo hubo. En la fecha del propio conteo el
+   *  ledger mantiene a proposito la trayectoria PRE-conteo, asi que los dos
+   *  numeros pueden diferir: esa diferencia es justo lo que hay que ver. */
+  contado: number | null;
+}
+
+interface Evolucion {
   unidad: string;
-  fecha_registro: string;
-  notas: string | null;
-  ubicacion: string | null;
+  puntos: PuntoEvolucion[];
 }
 
 interface Movimiento {
@@ -115,7 +127,7 @@ export default function IngredienteDetailPage() {
   const [recetas, setRecetas] = useState<RecetaUsando[]>([]);
   const [preciosProveedores, setPreciosProveedores] = useState<PrecioProveedor[]>([]);
   const [stockInfo, setStockInfo] = useState<StockInfo | null>(null);
-  const [stockHistory, setStockHistory] = useState<StockRecord[]>([]);
+  const [evolucion, setEvolucion] = useState<PuntoEvolucion[]>([]);
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -135,17 +147,17 @@ export default function IngredienteDetailPage() {
       apiFetch<RecetaUsando[]>(`/api/ingredientes/${id}/recetas`),
       apiFetch<PrecioProveedor[]>(`/api/ingredientes/${id}/precios-proveedores`),
       apiFetch<StockInfo>(`/api/ingredientes/${id}/stock`),
-      apiFetch<StockRecord[]>(`/api/inventario?ingrediente_id=${id}`),
+      apiFetch<Evolucion>(`/api/ingredientes/${id}/evolucion`),
       apiFetch<Movimiento[]>(`/api/ingredientes/${id}/movimientos`),
     ])
-      .then(([ing, hist, cats, recs, precios, stock, stockHist, movs]) => {
+      .then(([ing, hist, cats, recs, precios, stock, evol, movs]) => {
         setIngrediente(ing);
         setHistorial(hist);
         setCategorias(cats);
         setRecetas(recs);
         setPreciosProveedores(precios);
         setStockInfo(stock);
-        setStockHistory(stockHist);
+        setEvolucion(evol.puntos);
         setMovimientos(movs);
         initEditForm(ing);
       })
@@ -406,25 +418,15 @@ export default function IngredienteDetailPage() {
           )}
 
           {/* Stock evolution + consumption chart */}
-          {stockHistory.length > 1 && (() => {
-            const sorted = stockHistory
-              .slice()
-              .sort((a, b) => a.fecha_registro.localeCompare(b.fecha_registro) || a.id - b.id);
-            const byDate = new Map<string, StockRecord>();
-            for (const r of sorted) byDate.set(r.fecha_registro.split("T")[0], r);
-            const deduped = Array.from(byDate.values());
-            const chartData = deduped.map((r, i) => {
-              let consumo = 0;
-              if (i > 0) {
-                const prev = deduped[i - 1];
-                const dias = (new Date(r.fecha_registro).getTime() - new Date(prev.fecha_registro).getTime()) / (1000 * 60 * 60 * 24);
-                if (dias > 0) {
-                  const diff = prev.cantidad - r.cantidad;
-                  consumo = Math.max(0, Math.round((diff / dias) * 7 * 10) / 10);
-                }
-              }
-              return { fecha: r.fecha_registro, stock: Math.round(r.cantidad * 100) / 100, consumo };
-            });
+          {evolucion.length > 1 && (() => {
+            // Ya viene calculado por el backend desde el ledger: aqui solo se
+            // renombran los campos a lo que esperan las series de Recharts.
+            const chartData = evolucion.map((p) => ({
+              fecha: p.fecha,
+              stock: p.cantidad,
+              consumo: p.consumo_7d,
+              contado: p.contado,
+            }));
             return (
             <div className="bg-card rounded-xl border border-cream-dark p-5 mb-4">
               <h2 className="font-medium text-text mb-3">Evolucion de stock y consumo semanal</h2>
@@ -456,6 +458,21 @@ export default function IngredienteDetailPage() {
                     strokeWidth={2}
                     dot={{ r: 3, fill: "#25422a" }}
                     connectNulls
+                  />
+                  {/* Solo puntos, sin unir: son conteos sueltos, no una serie
+                      continua. Donde se separa de la linea verde hay una
+                      discrepancia real entre lo contado y lo que dice el
+                      ledger, que es informacion y no ruido. */}
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="contado"
+                    name="Contado"
+                    stroke="none"
+                    dot={{ r: 4, fill: "#b45309" }}
+                    activeDot={{ r: 5 }}
+                    legendType="circle"
+                    connectNulls={false}
                   />
                 </ComposedChart>
               </ResponsiveContainer>

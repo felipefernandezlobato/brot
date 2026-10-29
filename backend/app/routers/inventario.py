@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,12 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Ingrediente, InventarioRegistro, LineaPedido, Pedido, User
+from app.models import Ingrediente, InventarioRegistro, User
 from app.permissions import require_permission
 from app.schemas import InventarioRegistroCreate, InventarioRegistroOut, InventarioRegistroUpdate
 from app.services.conversiones import convertir
 from app.services.stock import (
     ajustar_correccion_conteo,
+    consumo_semanal_materia_prima,
     es_conteo_manual,
     get_saldos_materia_prima,
     historial_movimientos_acumulado,
@@ -199,61 +200,26 @@ def recomendacion_pedido(
     cantidad_sugerida = max(0, par_level - stock_actual)
 
     Par level = average weekly consumption * 2 weeks (safety buffer).
-    Consumption estimated from inventory record differences over last 8 weeks.
+
+    Both numbers come from the ledger. Consumption used to be estimated by
+    walking consecutive `InventarioRegistro` rows, which are stored absolute
+    totals that never re-sequence when something is logged with a backdated
+    date -- so their differences measure nothing. It overestimated 1.8x to
+    109x (Harina 000 at 547,9 kg/week against 96,4 real; Manteca at 67,9
+    against 19,0, proposing a 128 kg butter order for a 19 kg/week habit).
+    See `consumo_semanal_materia_prima`, which is also what the ingredient
+    detail chart reads, so the two screens cannot disagree.
     """
     ingredientes = db.query(Ingrediente).filter(Ingrediente.activo.is_(True)).all()
-    # Ledger-backed (see get_saldos_materia_prima). The consumption estimate
-    # below still walks the snapshots -- a separate, known overestimate, left
-    # alone on purpose.
-    stock_map = get_saldos_materia_prima(db, [ing.id for ing in ingredientes])
+    ids = [ing.id for ing in ingredientes]
+    stock_map = get_saldos_materia_prima(db, ids)
+    consumo_map = consumo_semanal_materia_prima(db, ids)
 
-    # Estimate weekly consumption from last 8 weeks of inventory data
-    hace_8_semanas = date.today() - timedelta(weeks=8)
     items = []
 
     for ing in ingredientes:
         stock_actual = stock_map.get(ing.id, 0)
-
-        # Get all records for this ingredient in last 8 weeks, oldest first
-        records = (
-            db.query(InventarioRegistro)
-            .filter(
-                InventarioRegistro.ingrediente_id == ing.id,
-                InventarioRegistro.fecha_registro >= hace_8_semanas,
-            )
-            .order_by(InventarioRegistro.fecha_registro, InventarioRegistro.id)
-            .all()
-        )
-
-        # Calculate consumption from consecutive snapshots
-        consumo_total = 0
-        dias_total = 0
-        for i in range(1, len(records)):
-            prev_r = records[i - 1]
-            curr_r = records[i]
-            dias = (curr_r.fecha_registro - prev_r.fecha_registro).days
-            if dias <= 0:
-                continue
-
-            # Received orders between these two dates
-            recibido = (
-                db.query(func.coalesce(func.sum(LineaPedido.cantidad_recibida), 0))
-                .join(Pedido, Pedido.id == LineaPedido.pedido_id)
-                .filter(
-                    LineaPedido.ingrediente_id == ing.id,
-                    Pedido.estado == "recibido",
-                    Pedido.fecha_recepcion > prev_r.fecha_registro,
-                    Pedido.fecha_recepcion <= curr_r.fecha_registro,
-                )
-                .scalar()
-            ) or 0
-
-            consumo = prev_r.cantidad + recibido - curr_r.cantidad
-            if consumo > 0:
-                consumo_total += consumo
-                dias_total += dias
-
-        consumo_semanal = (consumo_total / dias_total * 7) if dias_total > 0 else 0
+        consumo_semanal = consumo_map.get(ing.id, 0.0)
         par_level = consumo_semanal * 2
         cantidad_sugerida = max(0, round(par_level - stock_actual, 1))
 

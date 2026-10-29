@@ -377,7 +377,7 @@ def test_conteo_repetido_el_mismo_dia_no_se_suma(db):
     earlier lots) -- only this function disagreed with it.
     """
     from app.models import Categoria, ProductoCongelado, Receta, StockCongelado
-    from app.services.stock import _conteos_manuales_por_fecha
+    from app.services.stock import conteos_manuales_por_fecha
 
     cat = Categoria(nombre="Bollería", tipo="receta")
     db.add(cat)
@@ -399,7 +399,7 @@ def test_conteo_repetido_el_mismo_dia_no_se_suma(db):
         ))
     db.commit()
 
-    anclas = _conteos_manuales_por_fecha(db, "congelado", [prod.id])
+    anclas = conteos_manuales_por_fecha(db, "congelado", [prod.id])
     assert anclas[prod.id][str(hoy)] == 555.0
 
 
@@ -409,7 +409,7 @@ def test_lotes_con_vencimiento_el_mismo_dia_si_se_suman(db):
     anchor has to keep adding those -- the supersede rule above must not
     swallow this case."""
     from app.models import Categoria, ProductoCongelado, Receta, StockCongelado
-    from app.services.stock import _conteos_manuales_por_fecha
+    from app.services.stock import conteos_manuales_por_fecha
 
     cat = Categoria(nombre="Panes", tipo="receta")
     db.add(cat)
@@ -431,5 +431,5 @@ def test_lotes_con_vencimiento_el_mismo_dia_si_se_suman(db):
         ))
     db.commit()
 
-    anclas = _conteos_manuales_por_fecha(db, "congelado", [prod.id])
+    anclas = conteos_manuales_por_fecha(db, "congelado", [prod.id])
     assert anclas[prod.id][str(hoy)] == 20.0

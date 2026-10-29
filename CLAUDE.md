@@ -913,7 +913,85 @@ Portal orders never touched stock: the estado handler was a bare `pedido.estado 
 - **A count taken TODAY overrides the ledger.** `historial_movimientos_acumulado` only re-anchors from the day AFTER a count (on the count's own date it keeps the pre-count trajectory, which is what makes the gap visible in the historial pivot). Reading its last point raw made a count entered today invisible until tomorrow — and count-then-order is the normal workflow, so every suggestion on count day would be computed against the numbers the count just replaced. `get_saldos_materia_prima` therefore overlays today's manual count on top. Caught in review before shipping; there is a test for it.
 - `get_saldo_materia_prima` (singular) is **deliberately left as-is** — it is the write-path base every consumption/reception chains off. Its `(fecha_registro, id)` ordering is load-bearing there as a hazard to work around, not a protection: because a later `fecha_registro` always wins, `revertir_consumos()` has to date its give-back with the record's own date or it would outrank a backdated re-apply.
 - `/inventario/alertas` and `/inventario/recomendacion` read the ledger now; `/inventario/actual` deliberately still returns the stored rows (it exists to hand the historial/edit UI the actual `InventarioRegistro` records). `/alertas` fires on `<= 0`, not just exactly zero — negative stock is allowed on purpose here and is a stronger signal than empty.
-- **Still on the snapshot chain and still wrong:** `/recomendacion`'s par-level estimate walks consecutive `InventarioRegistro` rows including the automatic and reversal ones, counting every upward bounce as consumption again. It overestimates 2-6x (Harina 00 Pizza par 331 kg vs 56 by the ledger; Manteca 164 vs 41). Left alone on purpose — an inflated par suggests ordering too much, which is the safe direction to be wrong.
+- ~~**Still on the snapshot chain and still wrong:** `/recomendacion`'s par-level estimate~~ — **arreglado el 2026-10-29**, ver la sección siguiente. Aquel "left alone on purpose" (un par inflado pide de más, que es el lado seguro por el que equivocarse) dejó de valer cuando se midió el tamaño real del error: no era 2-6× sino hasta 109×, y proponía pedir 128 kg de manteca para un gasto de 19.
+
+### El consumo semanal sale del ledger, y con él la propuesta de pedido (2026-10-29)
+
+`services/stock.py::consumo_semanal_materia_prima(db, ids, semanas=8)` es **la
+única definición** de cuánto se gasta de un ingrediente por semana, compartida
+por `/inventario/recomendacion` y por el gráfico de la ficha del ingrediente.
+`TIPOS_CONSUMO_MATERIA_PRIMA = ("produccion_consumo", "merma")` es la única
+definición de qué cuenta como gasto. Tests en `tests/test_consumo_semanal.py`.
+
+**Eran DOS fallos superpuestos, y el segundo no tiene nada que ver con la
+fuente de datos.** El numerador recorría filas consecutivas de
+`InventarioRegistro`; el denominador (`if consumo > 0: dias_total += dias`)
+**solo sumaba los días en que el stock había bajado**, así que una semana
+tranquila no dividía y la tasa subía sola. Arreglar solo la fuente habría
+dejado la mitad del error en pie.
+
+Medido en producción el 29/10: sobreestimaba entre **1,8× y 109×** — Harina 000
+547,9 kg/semana contra 96,4 reales, Harina 00 Pizza 234,5 contra 24,6, Manteca
+67,9 contra 19,0. La propuesta pasó de 9 ingredientes a 4, y la manteca de
+pedir 128,5 kg a 30,8.
+
+Tres decisiones de Felipe (29/10), que son las que hay que respetar si esto se
+toca otra vez:
+1. **La merma cuenta como consumo** — hay que reponerla. En Harina 000 son 100
+   kg en 8 semanas, un +10%.
+2. **Se divide por las semanas que el ingrediente lleva existiendo, con tope en
+   8.** Dividir siempre por 8 le da la mitad de su consumo real a un
+   ingrediente nuevo (los de Limpieza y Descartables llevan semanas), justo
+   cuando más falta hace acertar con el primer pedido. Dividir solo por las
+   semanas CON movimiento es el extremo contrario: multiplicaría por 4 el
+   consumo de la canela, que se usa 2 semanas de 8.
+3. **El par sigue siendo ese número ×2** para todos. Lo de hacerlo configurable
+   por ingrediente quedó sin hacer: la harina se compra en palés de 750-1.025
+   kg cada ~6 semanas, así que un par de 2 semanas (193 kg) no describe cómo se
+   compra de verdad. Usar `lead_time`/`ciclo_pedido` del proveedor tampoco
+   serviría hoy — los 10 proveedores tienen `lead_time` 2 y ninguno tiene
+   `ciclo_pedido`.
+
+**Se NETEA por ingrediente en vez de sumar las cantidades negativas.**
+`revertir_consumos` deja el movimiento original y su devolución con el MISMO
+`tipo_movimiento`, así que sumar negativos contaría como gasto real un consumo
+ya anulado. Y el resultado se corta en 0, porque una reversión cuya original
+cayó fuera de la ventana deja el neto en positivo — eso no es stock creado.
+
+**`GET /api/ingredientes/{id}/evolucion`** (nuevo) devuelve el saldo del ledger
+por fecha más el consumo de los 7 días previos a cada punto. El gráfico de
+`/ingredientes/[id]` lo construía en el navegador restando filas de
+`/api/inventario`: dibujaba **Manteca a −25,3 kg el 19/10 donde el ledger dice
+5,10**, y Harina 000 a 1.022,8 kg el 21/10, tres días antes de que llegasen los
+1.025 — contradiciendo a la tabla de movimientos de la misma pantalla, que sí
+replica el ledger vía `saldo_despues_por_movimiento`. La ventana es móvil de 7
+días y no semanas de calendario para que las barras compartan eje con la línea.
+
+**El gráfico pinta DOS series, y hace falta que sean dos.** En la fecha de un
+conteo, `historial_movimientos_acumulado` mantiene a propósito la trayectoria
+PRE-conteo (solo re-ancla al día siguiente), mientras que la tarjeta "Stock
+actual" aplica el conteo de hoy. Con una sola serie eso deja dos números
+distintos en la misma pantalla sin forma de saber por qué: medido al montarlo,
+Harina 000 daba tarjeta 1.046,8 contra un último punto de 1.049,0. Esos 2,2 kg
+son una discrepancia real. Así que el payload lleva `contado` además de
+`cantidad`, y se dibuja como puntos sueltos (sin unir: son conteos, no una
+serie continua) — la misma convención "calculado (contado)" de los pivots de
+`/stock` y `/congelados`. El eje son las fechas del ledger **unidas** a las de
+los conteos, en un solo bucle: calcular los días de conteo aparte dejaba su
+ventana de consumo en 0 aunque hubiera habido gasto esos 7 días.
+`conteos_manuales_por_fecha` dejó de ser privada por esto (segundo consumidor).
+
+**`GET /api/ingredientes/{id}/stock` también se pasó al ledger**, en la misma
+tanda y por el mismo motivo: era la última fila de `InventarioRegistro`, así que
+arreglar solo el gráfico habría puesto la tarjeta "Stock actual" de arriba a
+discrepar con el gráfico de abajo en la misma pantalla. Discrepaba en 1 de 28
+ingredientes al medirlo (Leche, 23,00 contra 23,50). `unidad` y
+`fecha_ultimo_conteo` siguen saliendo de la fila, que es donde viven.
+
+**Lo que esto NO arregla:** Papa Deshidratada sale con consumo ~0 porque tiene
+**un solo consumo en 8 semanas** (125 g el 10/10), cuando la Focaccia que lo usa
+debería hacerse cada viernes/sábado. Eso es producción sin registrar, no un
+fallo del cálculo, y es el mismo agujero que CLAUDE.md ya anota para el pan.
 
 ### Pedidos historial pivots by reception date, not order date (fixed 2026-09-28)
 `TabHistorial` in `frontend/src/app/pedidos/page.tsx` grouped received orders by `Pedido.fecha` (when the order was *loaded*) instead of `fecha_recepcion`. Orders are routinely loaded days after the delivery arrives, so most recent entries sat in the wrong column — the 750 kg Forzani flour delivery showed under 05/09 when it arrived 22/09. Uses `fecha_recepcion ?? fecha` now, the same date the `InventarioRegistro`/`MovimientoStock` rows already carry.

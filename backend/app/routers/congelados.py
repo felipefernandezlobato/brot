@@ -412,7 +412,7 @@ def update_stock_congelado(
 
     Correcting `cantidad` also updates `cantidad_original` to match -- that
     field is what the historial pivot's calculado anchors to (see
-    _conteos_manuales_por_fecha), and it's meant to always equal "what this
+    conteos_manuales_por_fecha), and it's meant to always equal "what this
     count actually said" the same way it does at creation. Leaving it stale
     here would mean fixing a mistyped count silently stops applying to
     calculado for every date after it -- the exact case this endpoint exists

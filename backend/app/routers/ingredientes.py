@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
@@ -25,7 +27,15 @@ from app.schemas import (
 )
 from app.services.costes import costo_por_unidad_uso
 from app.services.produccion_registro import movimiento_no_revertido, nombre_origen_movimiento
-from app.services.stock import conteos_manuales_movimientos, orden_visual_dia, saldo_despues_por_movimiento
+from app.services.stock import (
+    TIPOS_CONSUMO_MATERIA_PRIMA,
+    conteos_manuales_movimientos,
+    conteos_manuales_por_fecha,
+    get_saldos_materia_prima,
+    historial_movimientos_acumulado,
+    orden_visual_dia,
+    saldo_despues_por_movimiento,
+)
 
 router = APIRouter(prefix="/api/ingredientes", tags=["ingredientes"])
 
@@ -238,17 +248,120 @@ def get_stock_ingrediente(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Stock actual de un ingrediente, leido del LEDGER.
+
+    `stock_actual` salia de la ultima fila de `InventarioRegistro` por
+    `(fecha_registro, id)`, que es la cadena de totales guardados que no se
+    re-secuencia -- la misma fuente que acaba de dejar de usar el grafico de
+    esta misma pantalla. Dejarla aqui ponia la tarjeta de arriba a discrepar
+    con el grafico de abajo en cuanto hubiera una carga retroactiva, que es
+    rutina (recepciones y producciones se cargan tarde). Medido al cambiarlo:
+    discrepaba en 1 de 28 ingredientes (Leche, 23,00 contra 23,50).
+
+    `unidad` y `fecha_ultimo_conteo` siguen saliendo de la fila, que es donde
+    viven: el ledger no las tiene.
+    """
     latest = (
         db.query(InventarioRegistro)
         .filter(InventarioRegistro.ingrediente_id == ing_id)
         .order_by(InventarioRegistro.fecha_registro.desc(), InventarioRegistro.id.desc())
         .first()
     )
+    saldo = get_saldos_materia_prima(db, [ing_id]).get(ing_id)
     return {
-        "stock_actual": latest.cantidad if latest else 0,
+        "stock_actual": saldo if saldo is not None else (latest.cantidad if latest else 0),
         "unidad": latest.unidad if latest else "",
         "fecha_ultimo_conteo": str(latest.fecha_registro) if latest else None,
     }
+
+
+@router.get("/{ing_id}/evolucion")
+def get_evolucion_ingrediente(
+    ing_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Stock over time + rolling 7-day consumption, both from the LEDGER.
+
+    Exists because the ingredient detail chart used to be built in the browser
+    from `GET /api/inventario?ingrediente_id=`, i.e. raw `InventarioRegistro`
+    rows, and those are stored absolute totals that never re-sequence. A
+    consumption logged late but dated in the past chains off whatever row was
+    the tip at write time (`get_saldo_materia_prima` orders by
+    `fecha_registro, id`), so as a time series the column is simply wrong --
+    see "Two parallel ways to read materia prima stock" in CLAUDE.md.
+
+    Measured on production the day this was written: the chart had Manteca at
+    -25,3 kg on 19/10 where the ledger says 5,10, because the reception row for
+    pedido #92 got a higher id than the production that preceded it. Harina 000
+    showed 1.022,8 kg on 21/10 -- three days before the 1.025 kg actually
+    arrived. The movements table right below the chart disagreed with it on the
+    same screen, because that one replays the ledger via
+    `saldo_despues_por_movimiento`.
+
+    The consumption figure is a trailing 7-day window at each point rather than
+    calendar weeks, so it stays one value per stock point and the bars keep
+    sharing the line's x axis. It nets `produccion_consumo` + `merma` rather
+    than summing only negatives: a reversal keeps the tipo_movimiento of what
+    it cancels (see `revertir_consumos`), so netting makes a reverted pair
+    cancel out, where summing negatives would count the original twice.
+
+    NOT reused for `/api/inventario/recomendacion`'s par level, which has its
+    own snapshot-walking estimate that over-counts 2-6x. CLAUDE.md records that
+    as a deliberate leave-alone (an inflated par orders too much, the safe
+    direction), so changing it is a separate decision, not a drive-by.
+    """
+    ing = db.query(Ingrediente).filter(Ingrediente.id == ing_id).first()
+    if not ing:
+        raise HTTPException(status_code=404, detail="Ingrediente no encontrado")
+
+    puntos = historial_movimientos_acumulado(db, "materia_prima", ids=[ing_id]).get(ing_id, [])
+
+    # El conteo fisico va como segunda serie, misma convencion que los pivots de
+    # /stock y /congelados ("calculado (contado)"). Sin el, el ultimo punto del
+    # grafico parece pelearse con la tarjeta "Stock actual" de arriba: esta
+    # aplica el conteo de HOY (get_saldos_materia_prima) mientras que
+    # historial_movimientos_acumulado mantiene a proposito la trayectoria
+    # PRE-conteo en el dia del propio conteo, y solo re-ancla al dia siguiente.
+    # Medido al montarlo: Harina 000 daba tarjeta 1.046,8 contra un ultimo punto
+    # de 1.049,0. Esos 2,2 kg son una discrepancia real que hay que ver, no un
+    # fallo que tapar -- pero hay que poder verla, no deducirla.
+    conteos = conteos_manuales_por_fecha(db, "materia_prima", [ing_id]).get(ing_id, {})
+
+    salidas: dict[str, float] = {}
+    for m in (
+        db.query(MovimientoStock)
+        .filter(
+            MovimientoStock.tipo_stock == "materia_prima",
+            MovimientoStock.referencia_producto_id == ing_id,
+            MovimientoStock.tipo_movimiento.in_(TIPOS_CONSUMO_MATERIA_PRIMA),
+        )
+        .all()
+    ):
+        salidas[str(m.fecha)] = salidas.get(str(m.fecha), 0.0) + m.cantidad
+
+    # Un conteo puede caer en una fecha sin movimientos, asi que el eje son las
+    # fechas del ledger MAS las de los conteos. Un solo bucle sobre la union:
+    # calcular los dias de conteo aparte dejaba su ventana de consumo en 0
+    # cuando si hubo gasto en esos 7 dias.
+    saldos = {p["fecha"]: p["cantidad"] for p in puntos}
+    out = []
+    for f in sorted(set(saldos) | set(conteos)):
+        hasta = date.fromisoformat(f)
+        desde = hasta - timedelta(days=6)
+        consumo = -sum(c for fm, c in salidas.items() if str(desde) <= fm <= str(hasta))
+        saldo = saldos.get(f)
+        conteo = conteos.get(f)
+        out.append({
+            "fecha": f,
+            "cantidad": round(saldo, 3) if saldo is not None else None,
+            # Clamped at zero only for display: a window whose net is positive
+            # means a reversal landed in it, not that stock was created.
+            "consumo_7d": round(max(0.0, consumo), 2),
+            "contado": round(conteo, 3) if conteo is not None else None,
+        })
+
+    return {"unidad": ing.unidad_uso, "puntos": out}
 
 
 @router.get("/{ing_id}/movimientos")
