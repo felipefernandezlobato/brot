@@ -22,6 +22,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
   Legend,
+  ReferenceLine,
 } from "recharts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -463,6 +464,10 @@ export default function RecetaCompletoPage() {
               <Tooltip labelFormatter={(v) => formatDate(String(v))}
                 contentStyle={{ borderRadius: "8px", border: "1px solid #dfd2bf", fontSize: "13px" }} />
               <Legend wrapperStyle={{ fontSize: "12px" }} />
+              {/* El cero, siempre visible: el stock puede ser negativo a
+                  proposito (ver deducir_congelado_fifo / deducir_materia_prima)
+                  y eso es justo la senal que hay que poder ver de un vistazo. */}
+              <ReferenceLine yAxisId="left" y={0} stroke="#3a2a26" strokeWidth={1.5} />
               <Bar yAxisId="right" dataKey="consumo" name="Consumo/sem" fill="#dc2626" opacity={0.3} barSize={16} />
               <Line yAxisId="left" type="monotone" dataKey="stock" name="Stock" stroke="#25422a" strokeWidth={2} dot={{ r: 3 }} connectNulls />
             </ComposedChart>

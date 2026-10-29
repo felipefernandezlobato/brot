@@ -16,6 +16,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
   Legend,
+  ReferenceLine,
 } from "recharts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -1064,6 +1065,10 @@ function TabHistorial({ ingredientes }: { ingredientes: Ingrediente[] }) {
                     }}
                   />
                   <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  {/* El cero, siempre visible: el stock puede ser negativo a
+                      proposito (ver deducir_congelado_fifo / deducir_materia_prima)
+                      y eso es justo la senal que hay que poder ver de un vistazo. */}
+                  <ReferenceLine yAxisId="left" y={0} stroke="#3a2a26" strokeWidth={1.5} />
                   <Bar yAxisId="right" dataKey="consumo" name="Consumo/sem" fill="#dc2626" opacity={0.3} barSize={16} />
                   {chartNames.map((name, idx) => (
                     <Line
