@@ -631,6 +631,53 @@ de un conteo). El script snapshotea la tabla `StockCongelado` completa antes de
 escribir y **hace rollback si algún saldo no coincide con lo predicho** — que es
 exactamente lo que pasó en el primer intento.
 
+### La manteca de laminado del hojaldre estaba en la masa, no en el bastón (2026-10-29)
+
+`Masa de Hojaldre` (receta 3) llevaba Manteca **dos veces**: 900 g (la de la
+masa, correcta) y 3.000 g que en realidad son **3 kg de Manteca Laminada** y se
+usan al laminar el bastón. Es literalmente el mismo fallo que
+`scripts/corregir_manteca_laminado.py` arregló en su día en Masa de Croissant
+(9.000 g) y Masa de Medialuna (6.000 g); **Hojaldre se quedó fuera de aquel
+arreglo** y sobrevivió un año. Los números encajan con sus hermanas: 3.000 g ÷ 3
+bastones por lote = **1 kg de Manteca Laminado por bastón**, igual que
+Croissant y Medialuna. Corregido con `scripts/corregir_manteca_laminado_hojaldre.py`.
+
+**Cómo se detectó, que es lo reutilizable:** Felipe vio en `/ingredientes/10`
+dos movimientos del mismo día con la etiqueta idéntica "Consumido para Masa de
+Hojaldre", −0,9 y −3 kg, y preguntó de dónde salía el de 3. Los dos eran del
+MISMO `RegistroProduccion` (463): cuando una receta tiene el mismo ingrediente
+en dos líneas, el feed de movimientos las muestra como dos entradas
+indistinguibles. Tras este arreglo **ninguna receta tiene ya un ingrediente
+repetido en dos líneas** (comprobado sobre las 49), así que el síntoma no
+debería reaparecer — pero si reaparece, ese es su significado.
+
+**El histórico se corrigió SOLO LEDGER, y la razón importa más que el arreglo.**
+Había que tocar dos registros, el 463 (24/10, la masa) y el 471 (26/10, los 3
+bastones). `revertir_efectos` + `aplicar_efectos` habría sido destructivo y aquí
+está medido, no supuesto: **los cuatro productos implicados tienen conteo físico
+del 29/10**, posterior a ambos registros — Masa Hojaldre (lote 2174), Baston
+Hojaldre (2182), Manteca Laminado (2179) y Manteca (IR 1959). Reaplicar crea
+lotes de salida con id alto y fecha vieja que `reconciliar_lotes_tras_conteo` ya
+no puede barrer: habría inflado Masa Hojaldre +1 y Baston Hojaldre +3. Es el
+incidente del 13/10 otra vez.
+
+Así que se usó el mismo régimen que `ajustar_consumo_padre` aplica cuando
+`_conteo_posterior` da true: se anuló el movimiento de −3 kg de Manteca con el
+retag `:rev` + compensación de `revertir_consumos` (sobre **un** movimiento, no
+sobre todo el registro — el resto de efectos del 463 son correctos), y se añadió
+el consumo de −3 u de Manteca Laminado del 471 **con `NOTA_SIN_LOTES`**, sin
+tocar ningún lote. Ningún saldo físico se movió, que es lo esperado: el conteo
+del 29/10 ya mandaba sobre todo lo anterior. Lo que cambia es la historia entre
+el 22 y el 29, no el estante.
+
+**El costo apenas se mueve y eso es correcto**, no una señal de que el cambio no
+hizo nada: el bastón pasa de 21.277,38 a 21.357,38 (**+80, +0,38%**), porque 1 kg
+de Manteca Laminado (14.930) es casi lo mismo que 1 kg de manteca cruda (14.850)
+— la diferencia es la harina del empaste. Banda, Cremadets y Palmerita suben ese
+mismo 0,4%. Los tres quedan a multi ×2,80 y no ×3,0, pero **eso es anterior a
+este cambio**: la manteca subió un 7,5% el 23/10 (13.814 → 14.850) y los PVP no
+se han repreciado desde entonces.
+
 ### Correcting a past manual stock count (added 2026-08-21)
 `PUT /api/inventario/{id}` (new) and `PUT /api/congelados/{id}` (existed, was ledger-blind before) let a person fix a mistyped quantity, a kg/g mix-up, or a wrong date on an existing manual count row.
 
