@@ -965,6 +965,50 @@ Four competitors on record. Prices per unit in ARS.
 
 **Lo que decía la comparación vieja (2026-09-30), con la base equivocada:** que el pan de masa madre estaba "a un tercio de BRUTO" (740 vs 2.500 el medio kilo). Esa cifra comparaba B2B contra mostrador y el multiplicador del pan era ×2,5; hoy es ×3,0 y la comparación correcta es la de arriba.
 
+### Panadería Belén y Le Boulanger: la bollería de BROT es la cara, el pan el barato (2026-10-29)
+
+Dos presupuestos del 28/10/2026, **los dos mayoristas** — Le Boulanger lo dice
+en su propia cabecera y lo de Belén lo confirmó Felipe ("el que nos harían como
+obrador todo"). Cargados con `scripts/cargar_competencia_belen_boulanger.py`
+(dry-run por defecto; valida que cada `receta_id` escrito a mano corresponda al
+nombre esperado antes de escribir nada).
+
+**La tabla se parte en dos mitades que dicen cosas opuestas**, y esto es nuevo:
+hasta ahora todos los competidores estaban por encima de BROT en casi todo.
+- **Bollería: BROT es el más caro de los tres, en todo.** Croissant 1.550
+  contra 900 (Belén, −42%) y 1.100 (Le Boulanger, −29%). Pan de chocolate 2.160
+  contra 1.500 (−31%). Cinnamon Roll 1.000 contra 583 (−42%).
+- **Pan: BROT es muchísimo más barato.** Pan Blanco 1kg 1.590 contra 4.500 de
+  Belén (**+183%**); Integral 1kg 2.550 contra 4.800 (+88%). Le Boulanger en
+  medio kilo: 890 contra 1.300 (+46%) y 1.420 contra 1.800 (+27%).
+
+**La medialuna ya no es un caso aislado, es el patrón.** Con BRUTO era el único
+producto donde BROT salía más caro (−10%) y parecía una excepción. Con estos
+dos: Belén 500, Le Boulanger 583, Granadino 625, BRUTO 1.000, La Granadina
+1.100 — **BROT a 1.110 es la medialuna más cara de las seis**, y es el segundo
+volumen de la casa. Cuatro de cinco competidores están a la mitad o menos.
+
+**Tres salvedades que van en las notas al pie y sin las cuales los números
+mienten:**
+- El **pan de chocolate y el cinnamon roll de Le Boulanger son TAMAÑO
+  MEDIALUNA** (lo aclara su propia nota). Los nuestros son más grandes
+  (confirmado con Felipe), así que ese −73% del pan de chocolate es diferencia
+  de tamaño, no de precio. Se cargaron igual por decisión de Felipe, con la
+  salvedad visible — el precedente viejo de no cargar los desajustes de tamaño
+  (la "PALMERA GRANDE" de La Granadina) es anterior a que las notas se vieran.
+- **No sabemos si el pan de ninguna de las dos es de masa madre.** Es
+  exactamente lo que invalidó la comparación con LE MAISON, y aquí pesa más
+  porque el pan es la mitad donde BROT parece ganar por goleada.
+- Las medialunas (y los dos de arriba) **se cotizan por docena**; en la tabla va
+  el precio por unidad, que es la base del resto. De ahí el 583,33.
+
+**El Cinnamon Roll de Belén no está cargado**: su lista dice "a cotizar", no hay
+precio que poner.
+
+Le Boulanger además **incluye el reparto en el precio**, trabaja domingos y
+feriados, y pide 24 h de antelación en pedidos recurrentes (3 días el primero).
+Eso va en su nota porque un precio con envío incluido no compara igual.
+
 ---
 
 ## API Design
