@@ -1134,6 +1134,50 @@ Le Boulanger además **incluye el reparto en el precio**, trabaja domingos y
 feriados, y pide 24 h de antelación en pedidos recurrentes (3 días el primero).
 Eso va en su nota porque un precio con envío incluido no compara igual.
 
+### La Granadina pasó de menú público a presupuesto, y su factura BAJÓ (2026-11-04)
+
+Presupuesto propio (a nombre de Maximiliano, IVA incluido) en lugar de lo que
+había, que estaba raspado del menú público de ola.click del 29/09.
+`scripts/cargar_competencia_granadina_1104.py`. Tres cosas cambian:
+
+1. **La factura baja de $1.100 a $791,67** (docena a $9.500). Las tres filas que
+   ya existían — Medialuna, Sacramento, Cinnamon Roll — se **ACTUALIZAN, no se
+   duplican**: `comparar_competencia` devuelve TODAS las filas y
+   `competencia/page.tsx` las mete en un `new Map()` por nombre de competidor,
+   así que de dos filas del mismo competidor y receta **solo se ve una y la otra
+   desaparece sin avisar**. No hay vista histórica de precios de competencia; el
+   precio viejo queda en git y acá, no en la tabla.
+2. **El croissant ya es comparable.** El menú público listaba "CROISSANT $8.000",
+   que su descripción revelaba como una bandeja de 2 croissants rellenos de jamón
+   y queso — por eso no se había cargado. El presupuesto cotiza "Croissant /
+   Unidad / $1.200", que sí es nuestro mismo producto.
+3. **Primer precio de pan de La Granadina**, que antes publicaba el pan con
+   `availability` pero sin `price`.
+
+**Mayorista o minorista: dice "Venta Mayorista / Minorista" sin aclarar cuál**,
+que es justo la duda que invalidó la comparación con LE MAISON. Hay un indicio
+fuerte de que es mayorista: la factura baja un **28%** contra su propio menú
+público, casi la misma brecha (24%) que BRUTO tiene entre mostrador y mayorista.
+Indicio, no confirmación, y por eso va en la nota al pie.
+
+**El pan se cotiza POR KILO, así que solo se carga contra los de 1 kg.** Contra
+los de medio kilo habría que partir el precio a la mitad, que es un número
+derivado y no cotizado — y nuestro medio kilo lleva el 55,6% de la masa del kilo
+pero se vende a la mitad exacta, así que la división tampoco sería limpia del
+lado nuestro.
+
+**Confirma el patrón de Belén/Boulanger, no lo contradice:** BROT es el más caro
+en bollería (croissant +29%, medialuna +40%, sacramento +29%, cinnamon roll +26%)
+y el más barato en pan (ellos +108% en el blanco de 1 kg, +57% en el integral).
+Y **la medialuna de BROT a 1.110 es ahora la más cara de SEIS** competidores
+(Belén 500, Le Boulanger 583, Granadino 625, La Granadina 792, BRUTO 1.000),
+siendo el segundo volumen de la casa.
+
+Los dos panes comparten **una sola nota** que lleva las dos salvedades juntas
+(sin confirmar masa madre, sin confirmar si su integral es integral o salvado).
+Dos notas con un preámbulo largo común y una cola distinta es exactamente lo que
+infló la leyenda en el primer intento de Belén.
+
 ---
 
 ## API Design
