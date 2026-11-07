@@ -504,6 +504,7 @@ function TabCalendario({
                         <p className="text-xs text-warm-gray">{e.lineas.length} producto{e.lineas.length !== 1 ? "s" : ""}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-sm font-medium text-text tabular-nums">{formatARS(e.total)}</span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                           e.estado === "entregado" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
                         }`}>
@@ -572,9 +573,12 @@ function TabCalendario({
                     <p className="font-medium text-text text-sm">{e.cliente_nombre}</p>
                     <p className="text-xs text-warm-gray">{formatDate(e.fecha_entrega)} · {e.lineas.length} productos</p>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                    {e.estado}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-medium text-text tabular-nums">{formatARS(e.total)}</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                      {e.estado}
+                    </span>
+                  </div>
                 </div>
               </button>
             ))}
@@ -789,6 +793,7 @@ function TabEntregas({
                     <p className="text-xs text-warm-gray">{formatDate(e.fecha_entrega)} · {e.lineas.length} productos</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-medium text-text tabular-nums">{formatARS(e.total)}</span>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       e.estado === "entregado" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
                     }`}>

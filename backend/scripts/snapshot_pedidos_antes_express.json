@@ -1,0 +1,1200 @@
+{
+  "tomado_at": "2026-11-07T21:21:26.936723",
+  "alembic_version": "e5b73f2a91c4",
+  "tablas": {
+    "pedidos_clientes": [
+      {
+        "id": 7,
+        "cliente_id": 4,
+        "fecha_pedido": "2026-09-29T13:35:05.930039",
+        "fecha_entrega": "2026-09-30",
+        "estado": "entregado",
+        "notas": null,
+        "total": 265900.0,
+        "pedido_recurrente_id": null
+      },
+      {
+        "id": 8,
+        "cliente_id": 4,
+        "fecha_pedido": "2026-10-06T02:37:41.400593",
+        "fecha_entrega": "2026-10-07",
+        "estado": "entregado",
+        "notas": null,
+        "total": 518070.0,
+        "pedido_recurrente_id": null
+      },
+      {
+        "id": 9,
+        "cliente_id": 4,
+        "fecha_pedido": "2026-10-09T01:22:29.538578",
+        "fecha_entrega": "2026-10-10",
+        "estado": "entregado",
+        "notas": null,
+        "total": 407790.0,
+        "pedido_recurrente_id": null
+      },
+      {
+        "id": 10,
+        "cliente_id": 4,
+        "fecha_pedido": "2026-10-16T02:58:03.695040",
+        "fecha_entrega": "2026-10-17",
+        "estado": "entregado",
+        "notas": null,
+        "total": 647600.0,
+        "pedido_recurrente_id": null
+      },
+      {
+        "id": 13,
+        "cliente_id": 4,
+        "fecha_pedido": "2026-10-20T02:10:46.224147",
+        "fecha_entrega": "2026-10-21",
+        "estado": "entregado",
+        "notas": null,
+        "total": 522430.0,
+        "pedido_recurrente_id": null
+      },
+      {
+        "id": 15,
+        "cliente_id": 6,
+        "fecha_pedido": "2026-10-22T18:06:20.409664",
+        "fecha_entrega": "2026-10-24",
+        "estado": "entregado",
+        "notas": null,
+        "total": 38750.0,
+        "pedido_recurrente_id": null
+      },
+      {
+        "id": 16,
+        "cliente_id": 6,
+        "fecha_pedido": "2026-10-27T02:05:54.212223",
+        "fecha_entrega": "2026-10-28",
+        "estado": "entregado",
+        "notas": null,
+        "total": 31000.0,
+        "pedido_recurrente_id": null
+      },
+      {
+        "id": 17,
+        "cliente_id": 4,
+        "fecha_pedido": "2026-10-27T02:42:48.170692",
+        "fecha_entrega": "2026-10-28",
+        "estado": "entregado",
+        "notas": null,
+        "total": 421090.0,
+        "pedido_recurrente_id": null
+      },
+      {
+        "id": 18,
+        "cliente_id": 4,
+        "fecha_pedido": "2026-10-30T02:21:31.565932",
+        "fecha_entrega": "2026-10-31",
+        "estado": "entregado",
+        "notas": null,
+        "total": 501660.0,
+        "pedido_recurrente_id": null
+      },
+      {
+        "id": 19,
+        "cliente_id": 6,
+        "fecha_pedido": "2026-11-02T21:43:31.738745",
+        "fecha_entrega": "2026-11-04",
+        "estado": "entregado",
+        "notas": null,
+        "total": 34180.0,
+        "pedido_recurrente_id": null
+      },
+      {
+        "id": 20,
+        "cliente_id": 6,
+        "fecha_pedido": "2026-11-06T00:21:19.790547",
+        "fecha_entrega": "2026-11-07",
+        "estado": "pendiente",
+        "notas": null,
+        "total": 32590.0,
+        "pedido_recurrente_id": null
+      }
+    ],
+    "lineas_pedido_cliente": [
+      {
+        "id": 18,
+        "pedido_cliente_id": 7,
+        "producto_id": 1,
+        "cantidad": 62.0,
+        "precio_unitario_snapshot": 1110.0,
+        "subtotal": 68820.0,
+        "costo_unitario_snapshot": 368.4900833333333
+      },
+      {
+        "id": 19,
+        "pedido_cliente_id": 7,
+        "producto_id": 2,
+        "cantidad": 40.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 62000.0,
+        "costo_unitario_snapshot": 518.2010233918129
+      },
+      {
+        "id": 20,
+        "pedido_cliente_id": 7,
+        "producto_id": 3,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 1000.0,
+        "subtotal": 20000.0,
+        "costo_unitario_snapshot": null
+      },
+      {
+        "id": 21,
+        "pedido_cliente_id": 7,
+        "producto_id": 4,
+        "cantidad": 2.0,
+        "precio_unitario_snapshot": 2300.0,
+        "subtotal": 4600.0,
+        "costo_unitario_snapshot": 765.2260802469136
+      },
+      {
+        "id": 22,
+        "pedido_cliente_id": 7,
+        "producto_id": 5,
+        "cantidad": 16.0,
+        "precio_unitario_snapshot": 540.0,
+        "subtotal": 8640.0,
+        "costo_unitario_snapshot": 202.19692763157894
+      },
+      {
+        "id": 23,
+        "pedido_cliente_id": 7,
+        "producto_id": 8,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 2160.0,
+        "subtotal": 8640.0,
+        "costo_unitario_snapshot": 719.0431286549708
+      },
+      {
+        "id": 24,
+        "pedido_cliente_id": 7,
+        "producto_id": 9,
+        "cantidad": 9.0,
+        "precio_unitario_snapshot": 1120.0,
+        "subtotal": 10080.0,
+        "costo_unitario_snapshot": 373.9469696969697
+      },
+      {
+        "id": 25,
+        "pedido_cliente_id": 7,
+        "producto_id": 13,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 1620.0,
+        "subtotal": 9720.0,
+        "costo_unitario_snapshot": 538.6644144144144
+      },
+      {
+        "id": 26,
+        "pedido_cliente_id": 7,
+        "producto_id": 14,
+        "cantidad": 14.0,
+        "precio_unitario_snapshot": 1330.0,
+        "subtotal": 18620.0,
+        "costo_unitario_snapshot": 531.7625
+      },
+      {
+        "id": 27,
+        "pedido_cliente_id": 7,
+        "producto_id": 15,
+        "cantidad": 14.0,
+        "precio_unitario_snapshot": 740.0,
+        "subtotal": 10360.0,
+        "costo_unitario_snapshot": 295.4236111111111
+      },
+      {
+        "id": 28,
+        "pedido_cliente_id": 7,
+        "producto_id": 16,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 2030.0,
+        "subtotal": 20300.0,
+        "costo_unitario_snapshot": 810.5125
+      },
+      {
+        "id": 29,
+        "pedido_cliente_id": 7,
+        "producto_id": 17,
+        "cantidad": 12.0,
+        "precio_unitario_snapshot": 1130.0,
+        "subtotal": 13560.0,
+        "costo_unitario_snapshot": 450.28472222222223
+      },
+      {
+        "id": 30,
+        "pedido_cliente_id": 7,
+        "producto_id": 20,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 1010.0,
+        "subtotal": 6060.0,
+        "costo_unitario_snapshot": 335.46
+      },
+      {
+        "id": 31,
+        "pedido_cliente_id": 7,
+        "producto_id": 26,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 750.0,
+        "subtotal": 4500.0,
+        "costo_unitario_snapshot": 248.48888888888888
+      },
+      {
+        "id": 32,
+        "pedido_cliente_id": 8,
+        "producto_id": 1,
+        "cantidad": 130.0,
+        "precio_unitario_snapshot": 1110.0,
+        "subtotal": 144300.0,
+        "costo_unitario_snapshot": 368.4900833333333
+      },
+      {
+        "id": 33,
+        "pedido_cliente_id": 8,
+        "producto_id": 2,
+        "cantidad": 80.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 124000.0,
+        "costo_unitario_snapshot": 518.2010233918129
+      },
+      {
+        "id": 34,
+        "pedido_cliente_id": 8,
+        "producto_id": 3,
+        "cantidad": 26.0,
+        "precio_unitario_snapshot": 1000.0,
+        "subtotal": 26000.0,
+        "costo_unitario_snapshot": null
+      },
+      {
+        "id": 35,
+        "pedido_cliente_id": 8,
+        "producto_id": 4,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 2300.0,
+        "subtotal": 13800.0,
+        "costo_unitario_snapshot": 765.2260802469136
+      },
+      {
+        "id": 36,
+        "pedido_cliente_id": 8,
+        "producto_id": 5,
+        "cantidad": 23.0,
+        "precio_unitario_snapshot": 540.0,
+        "subtotal": 12420.0,
+        "costo_unitario_snapshot": 202.19692763157894
+      },
+      {
+        "id": 37,
+        "pedido_cliente_id": 8,
+        "producto_id": 6,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 15500.0,
+        "costo_unitario_snapshot": 518.2010233918129
+      },
+      {
+        "id": 38,
+        "pedido_cliente_id": 8,
+        "producto_id": 7,
+        "cantidad": 17.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 26350.0,
+        "costo_unitario_snapshot": 518.2010233918129
+      },
+      {
+        "id": 39,
+        "pedido_cliente_id": 8,
+        "producto_id": 8,
+        "cantidad": 9.0,
+        "precio_unitario_snapshot": 2160.0,
+        "subtotal": 19440.0,
+        "costo_unitario_snapshot": 719.0431286549708
+      },
+      {
+        "id": 40,
+        "pedido_cliente_id": 8,
+        "producto_id": 9,
+        "cantidad": 11.0,
+        "precio_unitario_snapshot": 1120.0,
+        "subtotal": 12320.0,
+        "costo_unitario_snapshot": 373.9469696969697
+      },
+      {
+        "id": 41,
+        "pedido_cliente_id": 8,
+        "producto_id": 10,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 1020.0,
+        "subtotal": 4080.0,
+        "costo_unitario_snapshot": 340.1446923076923
+      },
+      {
+        "id": 42,
+        "pedido_cliente_id": 8,
+        "producto_id": 13,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 1620.0,
+        "subtotal": 6480.0,
+        "costo_unitario_snapshot": 538.6644144144144
+      },
+      {
+        "id": 43,
+        "pedido_cliente_id": 8,
+        "producto_id": 20,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 1010.0,
+        "subtotal": 4040.0,
+        "costo_unitario_snapshot": 335.46
+      },
+      {
+        "id": 44,
+        "pedido_cliente_id": 8,
+        "producto_id": 14,
+        "cantidad": 26.0,
+        "precio_unitario_snapshot": 1330.0,
+        "subtotal": 34580.0,
+        "costo_unitario_snapshot": 531.7625
+      },
+      {
+        "id": 45,
+        "pedido_cliente_id": 8,
+        "producto_id": 15,
+        "cantidad": 22.0,
+        "precio_unitario_snapshot": 740.0,
+        "subtotal": 16280.0,
+        "costo_unitario_snapshot": 295.4236111111111
+      },
+      {
+        "id": 46,
+        "pedido_cliente_id": 8,
+        "producto_id": 16,
+        "cantidad": 14.0,
+        "precio_unitario_snapshot": 2030.0,
+        "subtotal": 28420.0,
+        "costo_unitario_snapshot": 810.5125
+      },
+      {
+        "id": 47,
+        "pedido_cliente_id": 8,
+        "producto_id": 17,
+        "cantidad": 16.0,
+        "precio_unitario_snapshot": 1130.0,
+        "subtotal": 18080.0,
+        "costo_unitario_snapshot": 450.28472222222223
+      },
+      {
+        "id": 48,
+        "pedido_cliente_id": 8,
+        "producto_id": 18,
+        "cantidad": 2.0,
+        "precio_unitario_snapshot": 570.0,
+        "subtotal": 1140.0,
+        "costo_unitario_snapshot": 189.79791666666665
+      },
+      {
+        "id": 49,
+        "pedido_cliente_id": 8,
+        "producto_id": 19,
+        "cantidad": 2.0,
+        "precio_unitario_snapshot": 820.0,
+        "subtotal": 1640.0,
+        "costo_unitario_snapshot": 272.61041666666665
+      },
+      {
+        "id": 50,
+        "pedido_cliente_id": 8,
+        "producto_id": 26,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 750.0,
+        "subtotal": 3000.0,
+        "costo_unitario_snapshot": 248.48888888888888
+      },
+      {
+        "id": 51,
+        "pedido_cliente_id": 8,
+        "producto_id": 11,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 6200.0,
+        "costo_unitario_snapshot": 518.2010233918129
+      },
+      {
+        "id": 52,
+        "pedido_cliente_id": 9,
+        "producto_id": 1,
+        "cantidad": 70.0,
+        "precio_unitario_snapshot": 1110.0,
+        "subtotal": 77700.0,
+        "costo_unitario_snapshot": 368.4900833333333
+      },
+      {
+        "id": 53,
+        "pedido_cliente_id": 9,
+        "producto_id": 2,
+        "cantidad": 78.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 120900.0,
+        "costo_unitario_snapshot": 518.2010233918129
+      },
+      {
+        "id": 54,
+        "pedido_cliente_id": 9,
+        "producto_id": 3,
+        "cantidad": 13.0,
+        "precio_unitario_snapshot": 1000.0,
+        "subtotal": 13000.0,
+        "costo_unitario_snapshot": null
+      },
+      {
+        "id": 55,
+        "pedido_cliente_id": 9,
+        "producto_id": 4,
+        "cantidad": 5.0,
+        "precio_unitario_snapshot": 2300.0,
+        "subtotal": 11500.0,
+        "costo_unitario_snapshot": 765.2260802469136
+      },
+      {
+        "id": 56,
+        "pedido_cliente_id": 9,
+        "producto_id": 5,
+        "cantidad": 14.0,
+        "precio_unitario_snapshot": 540.0,
+        "subtotal": 7560.0,
+        "costo_unitario_snapshot": 202.19692763157894
+      },
+      {
+        "id": 57,
+        "pedido_cliente_id": 9,
+        "producto_id": 6,
+        "cantidad": 15.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 23250.0,
+        "costo_unitario_snapshot": 518.2010233918129
+      },
+      {
+        "id": 58,
+        "pedido_cliente_id": 9,
+        "producto_id": 7,
+        "cantidad": 13.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 20150.0,
+        "costo_unitario_snapshot": 518.2010233918129
+      },
+      {
+        "id": 59,
+        "pedido_cliente_id": 9,
+        "producto_id": 8,
+        "cantidad": 9.0,
+        "precio_unitario_snapshot": 2160.0,
+        "subtotal": 19440.0,
+        "costo_unitario_snapshot": 719.0431286549708
+      },
+      {
+        "id": 60,
+        "pedido_cliente_id": 9,
+        "producto_id": 9,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 1120.0,
+        "subtotal": 6720.0,
+        "costo_unitario_snapshot": 373.9469696969697
+      },
+      {
+        "id": 61,
+        "pedido_cliente_id": 9,
+        "producto_id": 13,
+        "cantidad": 8.0,
+        "precio_unitario_snapshot": 1620.0,
+        "subtotal": 12960.0,
+        "costo_unitario_snapshot": 538.6644144144144
+      },
+      {
+        "id": 62,
+        "pedido_cliente_id": 9,
+        "producto_id": 20,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 1010.0,
+        "subtotal": 4040.0,
+        "costo_unitario_snapshot": 335.46
+      },
+      {
+        "id": 63,
+        "pedido_cliente_id": 9,
+        "producto_id": 14,
+        "cantidad": 17.0,
+        "precio_unitario_snapshot": 1330.0,
+        "subtotal": 22610.0,
+        "costo_unitario_snapshot": 531.7625
+      },
+      {
+        "id": 64,
+        "pedido_cliente_id": 9,
+        "producto_id": 15,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 740.0,
+        "subtotal": 14800.0,
+        "costo_unitario_snapshot": 295.4236111111111
+      },
+      {
+        "id": 65,
+        "pedido_cliente_id": 9,
+        "producto_id": 16,
+        "cantidad": 12.0,
+        "precio_unitario_snapshot": 2030.0,
+        "subtotal": 24360.0,
+        "costo_unitario_snapshot": 810.5125
+      },
+      {
+        "id": 66,
+        "pedido_cliente_id": 9,
+        "producto_id": 17,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 1130.0,
+        "subtotal": 22600.0,
+        "costo_unitario_snapshot": 450.28472222222223
+      },
+      {
+        "id": 67,
+        "pedido_cliente_id": 9,
+        "producto_id": 18,
+        "cantidad": 8.0,
+        "precio_unitario_snapshot": 570.0,
+        "subtotal": 4560.0,
+        "costo_unitario_snapshot": 189.79791666666665
+      },
+      {
+        "id": 68,
+        "pedido_cliente_id": 9,
+        "producto_id": 19,
+        "cantidad": 2.0,
+        "precio_unitario_snapshot": 820.0,
+        "subtotal": 1640.0,
+        "costo_unitario_snapshot": 272.61041666666665
+      },
+      {
+        "id": 69,
+        "pedido_cliente_id": 10,
+        "producto_id": 14,
+        "cantidad": 35.0,
+        "precio_unitario_snapshot": 1330.0,
+        "subtotal": 46550.0,
+        "costo_unitario_snapshot": 531.7625
+      },
+      {
+        "id": 70,
+        "pedido_cliente_id": 10,
+        "producto_id": 15,
+        "cantidad": 35.0,
+        "precio_unitario_snapshot": 740.0,
+        "subtotal": 25900.0,
+        "costo_unitario_snapshot": 295.4236111111111
+      },
+      {
+        "id": 71,
+        "pedido_cliente_id": 10,
+        "producto_id": 17,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 1130.0,
+        "subtotal": 22600.0,
+        "costo_unitario_snapshot": 473.2013888888889
+      },
+      {
+        "id": 72,
+        "pedido_cliente_id": 10,
+        "producto_id": 16,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 2030.0,
+        "subtotal": 40600.0,
+        "costo_unitario_snapshot": 851.7625
+      },
+      {
+        "id": 73,
+        "pedido_cliente_id": 10,
+        "producto_id": 18,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 570.0,
+        "subtotal": 3420.0,
+        "costo_unitario_snapshot": 189.79791666666665
+      },
+      {
+        "id": 74,
+        "pedido_cliente_id": 10,
+        "producto_id": 19,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 820.0,
+        "subtotal": 4920.0,
+        "costo_unitario_snapshot": 289.79791666666665
+      },
+      {
+        "id": 75,
+        "pedido_cliente_id": 10,
+        "producto_id": 26,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 750.0,
+        "subtotal": 3000.0,
+        "costo_unitario_snapshot": 248.48888888888888
+      },
+      {
+        "id": 76,
+        "pedido_cliente_id": 10,
+        "producto_id": 1,
+        "cantidad": 130.0,
+        "precio_unitario_snapshot": 1110.0,
+        "subtotal": 144300.0,
+        "costo_unitario_snapshot": 368.4900833333333
+      },
+      {
+        "id": 77,
+        "pedido_cliente_id": 10,
+        "producto_id": 2,
+        "cantidad": 120.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 186000.0,
+        "costo_unitario_snapshot": 516.8852339181287
+      },
+      {
+        "id": 78,
+        "pedido_cliente_id": 10,
+        "producto_id": 3,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 1000.0,
+        "subtotal": 20000.0,
+        "costo_unitario_snapshot": null
+      },
+      {
+        "id": 79,
+        "pedido_cliente_id": 10,
+        "producto_id": 4,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 2300.0,
+        "subtotal": 23000.0,
+        "costo_unitario_snapshot": 763.8371913580247
+      },
+      {
+        "id": 80,
+        "pedido_cliente_id": 10,
+        "producto_id": 5,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 540.0,
+        "subtotal": 10800.0,
+        "costo_unitario_snapshot": 202.19692763157894
+      },
+      {
+        "id": 81,
+        "pedido_cliente_id": 10,
+        "producto_id": 7,
+        "cantidad": 15.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 23250.0,
+        "costo_unitario_snapshot": 516.8852339181287
+      },
+      {
+        "id": 82,
+        "pedido_cliente_id": 10,
+        "producto_id": 8,
+        "cantidad": 16.0,
+        "precio_unitario_snapshot": 2160.0,
+        "subtotal": 34560.0,
+        "costo_unitario_snapshot": 717.7273391812865
+      },
+      {
+        "id": 83,
+        "pedido_cliente_id": 10,
+        "producto_id": 6,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 15500.0,
+        "costo_unitario_snapshot": 516.8852339181287
+      },
+      {
+        "id": 84,
+        "pedido_cliente_id": 10,
+        "producto_id": 9,
+        "cantidad": 15.0,
+        "precio_unitario_snapshot": 1120.0,
+        "subtotal": 16800.0,
+        "costo_unitario_snapshot": 373.9469696969697
+      },
+      {
+        "id": 85,
+        "pedido_cliente_id": 10,
+        "producto_id": 10,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 1020.0,
+        "subtotal": 10200.0,
+        "costo_unitario_snapshot": 340.1446923076923
+      },
+      {
+        "id": 86,
+        "pedido_cliente_id": 10,
+        "producto_id": 13,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 1620.0,
+        "subtotal": 16200.0,
+        "costo_unitario_snapshot": 538.6644144144144
+      },
+      {
+        "id": 90,
+        "pedido_cliente_id": 13,
+        "producto_id": 1,
+        "cantidad": 122.0,
+        "precio_unitario_snapshot": 1110.0,
+        "subtotal": 135420.0,
+        "costo_unitario_snapshot": 368.4900833333333
+      },
+      {
+        "id": 91,
+        "pedido_cliente_id": 13,
+        "producto_id": 2,
+        "cantidad": 130.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 201500.0,
+        "costo_unitario_snapshot": 516.8852339181287
+      },
+      {
+        "id": 92,
+        "pedido_cliente_id": 13,
+        "producto_id": 3,
+        "cantidad": 23.0,
+        "precio_unitario_snapshot": 1000.0,
+        "subtotal": 23000.0,
+        "costo_unitario_snapshot": null
+      },
+      {
+        "id": 93,
+        "pedido_cliente_id": 13,
+        "producto_id": 4,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 2300.0,
+        "subtotal": 13800.0,
+        "costo_unitario_snapshot": 763.8371913580247
+      },
+      {
+        "id": 94,
+        "pedido_cliente_id": 13,
+        "producto_id": 5,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 610.0,
+        "subtotal": 12200.0,
+        "costo_unitario_snapshot": 202.19692763157894
+      },
+      {
+        "id": 95,
+        "pedido_cliente_id": 13,
+        "producto_id": 7,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 15500.0,
+        "costo_unitario_snapshot": 516.8852339181287
+      },
+      {
+        "id": 96,
+        "pedido_cliente_id": 13,
+        "producto_id": 9,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 1120.0,
+        "subtotal": 11200.0,
+        "costo_unitario_snapshot": 373.9469696969697
+      },
+      {
+        "id": 97,
+        "pedido_cliente_id": 13,
+        "producto_id": 13,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 1620.0,
+        "subtotal": 9720.0,
+        "costo_unitario_snapshot": 538.6644144144144
+      },
+      {
+        "id": 98,
+        "pedido_cliente_id": 13,
+        "producto_id": 11,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 6200.0,
+        "costo_unitario_snapshot": 516.8852339181287
+      },
+      {
+        "id": 99,
+        "pedido_cliente_id": 13,
+        "producto_id": 14,
+        "cantidad": 25.0,
+        "precio_unitario_snapshot": 1590.0,
+        "subtotal": 39750.0,
+        "costo_unitario_snapshot": 531.7625
+      },
+      {
+        "id": 100,
+        "pedido_cliente_id": 13,
+        "producto_id": 15,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 890.0,
+        "subtotal": 17800.0,
+        "costo_unitario_snapshot": 295.4236111111111
+      },
+      {
+        "id": 101,
+        "pedido_cliente_id": 13,
+        "producto_id": 17,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 1420.0,
+        "subtotal": 5680.0,
+        "costo_unitario_snapshot": 473.2013888888889
+      },
+      {
+        "id": 102,
+        "pedido_cliente_id": 13,
+        "producto_id": 16,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 2550.0,
+        "subtotal": 25500.0,
+        "costo_unitario_snapshot": 851.7625
+      },
+      {
+        "id": 103,
+        "pedido_cliente_id": 13,
+        "producto_id": 18,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 570.0,
+        "subtotal": 3420.0,
+        "costo_unitario_snapshot": 189.79791666666665
+      },
+      {
+        "id": 104,
+        "pedido_cliente_id": 13,
+        "producto_id": 19,
+        "cantidad": 2.0,
+        "precio_unitario_snapshot": 870.0,
+        "subtotal": 1740.0,
+        "costo_unitario_snapshot": 289.79791666666665
+      },
+      {
+        "id": 107,
+        "pedido_cliente_id": 15,
+        "producto_id": 2,
+        "cantidad": 25.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 38750.0,
+        "costo_unitario_snapshot": 516.8852339181287
+      },
+      {
+        "id": 108,
+        "pedido_cliente_id": 16,
+        "producto_id": 2,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 31000.0,
+        "costo_unitario_snapshot": 549.6010233918129
+      },
+      {
+        "id": 109,
+        "pedido_cliente_id": 17,
+        "producto_id": 1,
+        "cantidad": 100.0,
+        "precio_unitario_snapshot": 1110.0,
+        "subtotal": 111000.0,
+        "costo_unitario_snapshot": 389.7856388888889
+      },
+      {
+        "id": 110,
+        "pedido_cliente_id": 17,
+        "producto_id": 2,
+        "cantidad": 64.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 99200.0,
+        "costo_unitario_snapshot": 549.6010233918129
+      },
+      {
+        "id": 111,
+        "pedido_cliente_id": 17,
+        "producto_id": 3,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 1000.0,
+        "subtotal": 10000.0,
+        "costo_unitario_snapshot": null
+      },
+      {
+        "id": 112,
+        "pedido_cliente_id": 17,
+        "producto_id": 6,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 9300.0,
+        "costo_unitario_snapshot": 549.6010233918129
+      },
+      {
+        "id": 113,
+        "pedido_cliente_id": 17,
+        "producto_id": 7,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 15500.0,
+        "costo_unitario_snapshot": 549.6010233918129
+      },
+      {
+        "id": 114,
+        "pedido_cliente_id": 17,
+        "producto_id": 8,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 2160.0,
+        "subtotal": 12960.0,
+        "costo_unitario_snapshot": 750.4431286549707
+      },
+      {
+        "id": 115,
+        "pedido_cliente_id": 17,
+        "producto_id": 9,
+        "cantidad": 8.0,
+        "precio_unitario_snapshot": 1120.0,
+        "subtotal": 8960.0,
+        "costo_unitario_snapshot": 398.4342424242424
+      },
+      {
+        "id": 116,
+        "pedido_cliente_id": 17,
+        "producto_id": 13,
+        "cantidad": 3.0,
+        "precio_unitario_snapshot": 1620.0,
+        "subtotal": 4860.0,
+        "costo_unitario_snapshot": 575.0644144144145
+      },
+      {
+        "id": 117,
+        "pedido_cliente_id": 17,
+        "producto_id": 14,
+        "cantidad": 30.0,
+        "precio_unitario_snapshot": 1590.0,
+        "subtotal": 47700.0,
+        "costo_unitario_snapshot": 531.7625
+      },
+      {
+        "id": 118,
+        "pedido_cliente_id": 17,
+        "producto_id": 16,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 2550.0,
+        "subtotal": 51000.0,
+        "costo_unitario_snapshot": 851.7625
+      },
+      {
+        "id": 119,
+        "pedido_cliente_id": 17,
+        "producto_id": 17,
+        "cantidad": 15.0,
+        "precio_unitario_snapshot": 1420.0,
+        "subtotal": 21300.0,
+        "costo_unitario_snapshot": 473.2013888888889
+      },
+      {
+        "id": 120,
+        "pedido_cliente_id": 17,
+        "producto_id": 19,
+        "cantidad": 3.0,
+        "precio_unitario_snapshot": 870.0,
+        "subtotal": 2610.0,
+        "costo_unitario_snapshot": 289.79791666666665
+      },
+      {
+        "id": 121,
+        "pedido_cliente_id": 17,
+        "producto_id": 15,
+        "cantidad": 30.0,
+        "precio_unitario_snapshot": 890.0,
+        "subtotal": 26700.0,
+        "costo_unitario_snapshot": 295.4236111111111
+      },
+      {
+        "id": 122,
+        "pedido_cliente_id": 18,
+        "producto_id": 14,
+        "cantidad": 30.0,
+        "precio_unitario_snapshot": 1590.0,
+        "subtotal": 47700.0,
+        "costo_unitario_snapshot": 531.7625
+      },
+      {
+        "id": 123,
+        "pedido_cliente_id": 18,
+        "producto_id": 15,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 890.0,
+        "subtotal": 17800.0,
+        "costo_unitario_snapshot": 295.4236111111111
+      },
+      {
+        "id": 124,
+        "pedido_cliente_id": 18,
+        "producto_id": 16,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 2550.0,
+        "subtotal": 51000.0,
+        "costo_unitario_snapshot": 851.7625
+      },
+      {
+        "id": 125,
+        "pedido_cliente_id": 18,
+        "producto_id": 17,
+        "cantidad": 25.0,
+        "precio_unitario_snapshot": 1420.0,
+        "subtotal": 35500.0,
+        "costo_unitario_snapshot": 473.2013888888889
+      },
+      {
+        "id": 126,
+        "pedido_cliente_id": 18,
+        "producto_id": 18,
+        "cantidad": 10.0,
+        "precio_unitario_snapshot": 570.0,
+        "subtotal": 5700.0,
+        "costo_unitario_snapshot": 189.79791666666665
+      },
+      {
+        "id": 127,
+        "pedido_cliente_id": 18,
+        "producto_id": 1,
+        "cantidad": 100.0,
+        "precio_unitario_snapshot": 1110.0,
+        "subtotal": 111000.0,
+        "costo_unitario_snapshot": 389.7856388888889
+      },
+      {
+        "id": 128,
+        "pedido_cliente_id": 18,
+        "producto_id": 2,
+        "cantidad": 70.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 108500.0,
+        "costo_unitario_snapshot": 549.6010233918129
+      },
+      {
+        "id": 129,
+        "pedido_cliente_id": 18,
+        "producto_id": 3,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 1000.0,
+        "subtotal": 20000.0,
+        "costo_unitario_snapshot": null
+      },
+      {
+        "id": 130,
+        "pedido_cliente_id": 18,
+        "producto_id": 4,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 2300.0,
+        "subtotal": 9200.0,
+        "costo_unitario_snapshot": 798.370524691358
+      },
+      {
+        "id": 131,
+        "pedido_cliente_id": 18,
+        "producto_id": 5,
+        "cantidad": 30.0,
+        "precio_unitario_snapshot": 610.0,
+        "subtotal": 18300.0,
+        "costo_unitario_snapshot": 202.19692763157894
+      },
+      {
+        "id": 132,
+        "pedido_cliente_id": 18,
+        "producto_id": 6,
+        "cantidad": 5.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 7750.0,
+        "costo_unitario_snapshot": 549.6010233918129
+      },
+      {
+        "id": 133,
+        "pedido_cliente_id": 18,
+        "producto_id": 7,
+        "cantidad": 13.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 20150.0,
+        "costo_unitario_snapshot": 549.6010233918129
+      },
+      {
+        "id": 134,
+        "pedido_cliente_id": 18,
+        "producto_id": 8,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 2160.0,
+        "subtotal": 8640.0,
+        "costo_unitario_snapshot": 750.4431286549707
+      },
+      {
+        "id": 135,
+        "pedido_cliente_id": 18,
+        "producto_id": 9,
+        "cantidad": 14.0,
+        "precio_unitario_snapshot": 1120.0,
+        "subtotal": 15680.0,
+        "costo_unitario_snapshot": 399.8887878787879
+      },
+      {
+        "id": 136,
+        "pedido_cliente_id": 18,
+        "producto_id": 10,
+        "cantidad": 6.0,
+        "precio_unitario_snapshot": 1020.0,
+        "subtotal": 6120.0,
+        "costo_unitario_snapshot": 359.80212820512827
+      },
+      {
+        "id": 137,
+        "pedido_cliente_id": 18,
+        "producto_id": 13,
+        "cantidad": 9.0,
+        "precio_unitario_snapshot": 1620.0,
+        "subtotal": 14580.0,
+        "costo_unitario_snapshot": 577.2265765765766
+      },
+      {
+        "id": 138,
+        "pedido_cliente_id": 18,
+        "producto_id": 20,
+        "cantidad": 4.0,
+        "precio_unitario_snapshot": 1010.0,
+        "subtotal": 4040.0,
+        "costo_unitario_snapshot": 335.46
+      },
+      {
+        "id": 139,
+        "pedido_cliente_id": 19,
+        "producto_id": 14,
+        "cantidad": 2.0,
+        "precio_unitario_snapshot": 1590.0,
+        "subtotal": 3180.0,
+        "costo_unitario_snapshot": 531.7625
+      },
+      {
+        "id": 140,
+        "pedido_cliente_id": 19,
+        "producto_id": 2,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 31000.0,
+        "costo_unitario_snapshot": 549.6010233918129
+      },
+      {
+        "id": 141,
+        "pedido_cliente_id": 20,
+        "producto_id": 14,
+        "cantidad": 1.0,
+        "precio_unitario_snapshot": 1590.0,
+        "subtotal": 1590.0,
+        "costo_unitario_snapshot": null
+      },
+      {
+        "id": 142,
+        "pedido_cliente_id": 20,
+        "producto_id": 2,
+        "cantidad": 20.0,
+        "precio_unitario_snapshot": 1550.0,
+        "subtotal": 31000.0,
+        "costo_unitario_snapshot": null
+      }
+    ]
+  }
+}
