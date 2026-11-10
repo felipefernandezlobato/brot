@@ -61,10 +61,12 @@ def _entrega(db, cliente, fecha, lineas, estado="entregado"):
     return e
 
 
-def _pedido_portal(db, cliente, fecha, lineas, estado="entregado"):
-    total = sum(c * p for _, c, p in lineas)
+def _pedido_portal(db, cliente, fecha, lineas, estado="entregado", recargo=0.0):
+    total = sum(c * p for _, c, p in lineas) + recargo
     ped = PedidoCliente(cliente_id=cliente.id, fecha_entrega=fecha, estado=estado,
-                        total=total, fecha_pedido=datetime.now(timezone.utc))
+                        total=total, recargo_monto=recargo,
+                        recargo_pct=5.0 if recargo else 0.0,
+                        fecha_pedido=datetime.now(timezone.utc))
     db.add(ped)
     db.flush()
     for prod, cant, precio in lineas:
@@ -296,3 +298,55 @@ def test_una_entrega_entregada_sin_lineas_no_diluye_el_ticket(client, db):
     assert cuenta["resumen"]["ticket_promedio_ars"] == pytest.approx(2000)
     # Pero existe, asi que se sigue viendo en el historial.
     assert len(cuenta["historial"]) == 2
+
+
+def test_el_recargo_express_entra_en_el_facturado_del_cliente(client, db):
+    """Es plata que el cliente pago, asi que cuenta como facturacion.
+
+    Vive en la cabecera del pedido y no en una linea, asi que `ventas()` no lo
+    ve: si `cuenta_de_cliente` no sumara `recargos()` aparte, la ficha diria
+    1.000 por un pedido de 1.050 que el cliente efectivamente pago.
+    """
+    token = _admin(client, db)
+    c = _cliente(db)
+    pan = _producto(db, "Pan", 1000)
+    db.commit()
+
+    _pedido_portal(db, c, HOY, [(pan, 1, 1000)], recargo=50.0)
+    db.commit()
+
+    cuenta = _cuenta(client, token, c.id).json()
+    assert cuenta["resumen"]["facturado_ars"] == pytest.approx(1050)
+    # Un solo pedido: el recargo viaja DENTRO de el, no es un pedido mas.
+    assert cuenta["resumen"]["pedidos"] == 1
+
+
+def test_el_recargo_no_aparece_como_un_producto(client, db):
+    """El motivo por el que `recargos()` es su propio tipo y no una LineaVenta
+    con producto_id nulo: no debe ensuciar "que le vendemos mas a este"."""
+    token = _admin(client, db)
+    c = _cliente(db)
+    pan = _producto(db, "Pan", 1000)
+    db.commit()
+
+    _pedido_portal(db, c, HOY, [(pan, 1, 1000)], recargo=50.0)
+    db.commit()
+
+    top = _cuenta(client, token, c.id).json()["top_productos"]
+    assert len(top) == 1
+    assert top[0]["producto"] == "Pan"
+    assert top[0]["monto_ars"] == pytest.approx(1000)
+    assert all(f["producto_id"] is not None for f in top)
+
+
+def test_el_recargo_de_un_pedido_no_entregado_no_se_factura(client, db):
+    """Mismo criterio que una venta: si el pedido no salio, no se cobro."""
+    token = _admin(client, db)
+    c = _cliente(db)
+    pan = _producto(db, "Pan", 1000)
+    db.commit()
+
+    _pedido_portal(db, c, HOY, [(pan, 1, 1000)], estado="pendiente", recargo=50.0)
+    db.commit()
+
+    assert _cuenta(client, token, c.id).json()["resumen"]["facturado_ars"] == pytest.approx(0)

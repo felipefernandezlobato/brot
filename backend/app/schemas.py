@@ -929,7 +929,12 @@ class PedidoClienteOut(BaseModel):
     fecha_entrega: date
     estado: str
     notas: Optional[str] = None
+    # `total` ya incluye el recargo express; el subtotal de productos es
+    # `total - recargo_monto`. Una EntregaB2B siempre trae los dos en 0: el
+    # recargo es del portal, el obrador no se autocobra por pedir tarde.
     total: float
+    recargo_pct: float = 0.0
+    recargo_monto: float = 0.0
     pedido_recurrente_id: Optional[int] = None
     lineas: list[LineaPedidoClienteOut] = []
     # "portal" = lo pidio el cliente desde la web; "entrega" = se la cargo el

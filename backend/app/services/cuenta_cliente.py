@@ -27,7 +27,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.models import ClienteB2B
-from app.services.mensual import ventas
+from app.services.mensual import recargos, ventas
 from app.services.pedidos_vista import historial_de_cliente, nombres_productos
 
 # El rango por defecto es "todo", y por eso el tope es una fecha absurda en vez
@@ -51,7 +51,7 @@ class _Agregado:
     ultima: date | None
 
 
-def _resumen(lineas, entregados) -> _Agregado:
+def _resumen(lineas, entregados, recargos_cliente=()) -> _Agregado:
     """La plata sale de las líneas de venta; el número de pedidos, del historial.
 
     Son dos fuentes a propósito, y no por descuido. `ventas()` da líneas
@@ -69,7 +69,11 @@ def _resumen(lineas, entregados) -> _Agregado:
     divisor: el ticket promedio saldría diluido por pedidos que no facturaron
     nada. Hoy no hay ninguna así en producción.
     """
-    facturado = sum(l.monto or 0 for l in lineas)
+    # El recargo express se le facturo al cliente igual que un producto, asi
+    # que entra en el facturado. No entra en `top_productos` (no es un
+    # producto) ni cambia el conteo de pedidos: viaja DENTRO de un pedido que
+    # el historial ya conto.
+    facturado = sum(l.monto or 0 for l in lineas) + sum(r.monto for r in recargos_cliente)
     fechas = sorted(l.fecha for l in lineas)
     return _Agregado(
         facturado=round(facturado, 2),
@@ -122,6 +126,7 @@ def cuenta_de_cliente(
     hasta = hasta or HASTA_SIEMPRE
 
     mias = [l for l in ventas(db, desde, hasta) if l.cliente_id == cliente.id]
+    mis_recargos = [r for r in recargos(db, desde, hasta) if r.cliente_id == cliente.id]
     nombres = nombres_productos(db)
     historial = historial_de_cliente(db, cliente.id)
     # Mismo filtro que `ventas()` por los dos lados: entregado, y dentro del
@@ -130,7 +135,7 @@ def cuenta_de_cliente(
         p for p in historial
         if p.estado == "entregado" and desde <= p.fecha_entrega <= hasta
     ]
-    agg = _resumen(mias, entregados)
+    agg = _resumen(mias, entregados, mis_recargos)
 
     return {
         "cliente": {

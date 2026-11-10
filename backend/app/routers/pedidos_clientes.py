@@ -16,6 +16,13 @@ from app.models import (
 )
 from app.schemas import PedidoClienteOut
 from app.services.avisos_pedido import avisar_pedido_nuevo
+from app.services.pedido_express import (
+    DIAS_ANTICIPACION_NORMAL,
+    RECARGO_EXPRESS_PCT,
+    calcular_recargo,
+    evaluar,
+    hoy_arg,
+)
 from app.services.pedidos_vista import construir_pedido_out, historial_de_cliente
 
 router = APIRouter(prefix="/api/cliente/pedidos", tags=["pedidos-clientes"])
@@ -23,6 +30,17 @@ router = APIRouter(prefix="/api/cliente/pedidos", tags=["pedidos-clientes"])
 # Wednesday=2, Saturday=5  (Python weekday: Mon=0 … Sun=6)
 VALID_DELIVERY_DAYS = {2, 5}
 VALID_ESTADOS = {"pendiente", "confirmado", "en_preparacion", "listo", "entregado"}
+
+
+def _hoy() -> date:
+    """El "hoy" contra el que se mide la antelacion, en hora de Argentina.
+
+    Es una dependencia de FastAPI y no una llamada directa para que los tests
+    puedan fijarlo (`app.dependency_overrides[_hoy] = lambda: date(...)`). Sin
+    eso, el camino express solo se podria ejercitar los martes y los viernes,
+    que es cuando "manana" cae en dia de entrega.
+    """
+    return hoy_arg()
 
 
 class _LineaIn(BaseModel):
@@ -42,6 +60,7 @@ def create_pedido(
     tareas: BackgroundTasks,
     cliente: ClienteB2B = Depends(get_cliente_aprobado),
     db: Session = Depends(get_db),
+    hoy: date = Depends(_hoy),
 ):
     if data.fecha_entrega.weekday() not in VALID_DELIVERY_DAYS:
         raise HTTPException(
@@ -49,10 +68,24 @@ def create_pedido(
             detail="La fecha de entrega debe ser miércoles o sábado",
         )
 
+    # Hasta el 2026-11-07 esto no se validaba en el servidor: la regla de las
+    # 48h vivia solo en el calendario del portal, asi que un POST armado a
+    # mano pedia para manana sin consecuencia. Ahora que ese tramo cuesta un
+    # 5%, dejarlo sin validar seria dejar el recargo a eleccion del cliente.
+    anticipacion = evaluar(data.fecha_entrega, hoy)
+    if not anticipacion.se_puede_pedir:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Ya no se puede pedir para esa fecha: hace falta al menos "
+                "1 día de anticipación. Elegí la siguiente fecha disponible."
+            ),
+        )
+
     if not data.lineas:
         raise HTTPException(status_code=422, detail="El pedido debe tener al menos una línea")
 
-    total = 0.0
+    subtotal_productos = 0.0
     lineas_db: list[LineaPedidoCliente] = []
     para_el_aviso: list[tuple[str, float]] = []
 
@@ -69,7 +102,7 @@ def create_pedido(
                 detail=f"Producto '{producto.nombre}' no está disponible",
             )
         subtotal = round(linea.cantidad * producto.precio, 2)
-        total += subtotal
+        subtotal_productos += subtotal
         lineas_db.append(
             LineaPedidoCliente(
                 producto_id=linea.producto_id,
@@ -82,11 +115,16 @@ def create_pedido(
         # corre despues de responder y ya no puede ir a buscarlo.
         para_el_aviso.append((producto.nombre, linea.cantidad))
 
+    subtotal_productos = round(subtotal_productos, 2)
+    recargo_monto = calcular_recargo(subtotal_productos, anticipacion)
+
     pedido = PedidoCliente(
         cliente_id=cliente.id,
         fecha_entrega=data.fecha_entrega,
         notas=data.notas,
-        total=round(total, 2),
+        total=round(subtotal_productos + recargo_monto, 2),
+        recargo_pct=anticipacion.recargo_pct,
+        recargo_monto=recargo_monto,
         estado="pendiente",
     )
     db.add(pedido)
@@ -112,9 +150,43 @@ def create_pedido(
         fecha_pedido=pedido.fecha_pedido,
         lineas=para_el_aviso,
         total=pedido.total,
+        recargo_monto=pedido.recargo_monto,
         notas=pedido.notas,
     )
     return construir_pedido_out(pedido)
+
+
+class _ConfigPedidosOut(BaseModel):
+    recargo_express_pct: float
+    dias_anticipacion_normal: int
+    hoy: date
+
+
+@router.get("/config", response_model=_ConfigPedidosOut)
+def get_config_pedidos(
+    cliente: ClienteB2B = Depends(get_cliente_aprobado),
+    hoy: date = Depends(_hoy),
+):
+    """Lo que el portal necesita para avisar del recargo ANTES de confirmar.
+
+    Existe para que el porcentaje no quede escrito tambien en el frontend. El
+    numero va a cambiar, y una copia en el navegador es una copia que el dia
+    del cambio sigue diciendo 5 mientras el servidor ya cobra 7.
+
+    `hoy` viaja tambien a proposito: si el calendario clasificara los dias con
+    el reloj del dispositivo, un cliente con la hora mal puesta -- o
+    simplemente en otro huso -- veria habilitadas fechas que el backend va a
+    rechazar. Mandando el mismo "hoy" que usa la validacion, las dos mitades
+    no pueden discrepar.
+
+    Registrado ANTES de `/{pedido_id}` para que "config" no entre por esa ruta
+    e intente parsearse como int.
+    """
+    return _ConfigPedidosOut(
+        recargo_express_pct=RECARGO_EXPRESS_PCT,
+        dias_anticipacion_normal=DIAS_ANTICIPACION_NORMAL,
+        hoy=hoy,
+    )
 
 
 @router.get("", response_model=list[PedidoClienteOut])

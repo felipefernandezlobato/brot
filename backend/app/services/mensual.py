@@ -113,6 +113,20 @@ class LineaVenta:
 
 
 @dataclass
+class LineaRecargo:
+    """Un recargo express cobrado. Es plata, pero NO es un producto: no lleva
+    producto_id ni cantidad a proposito, para que no pueda colarse en los
+    rankings de productos ni en el conteo de unidades vendidas."""
+
+    fecha: date
+    clave_mes: str
+    cliente_id: int | None
+    pedido_id: int
+    monto: float
+    pct: float
+
+
+@dataclass
 class _LineaCompra:
     clave_mes: str
     pedido_id: int
@@ -189,6 +203,46 @@ def ventas(db: Session, desde: date, hasta: date) -> list[LineaVenta]:
             costo_snapshot=l.costo_unitario_snapshot,
         ))
     return out
+
+
+def recargos(db: Session, desde: date, hasta: date) -> list[LineaRecargo]:
+    """Los recargos express facturados. Publica por el mismo motivo que ventas().
+
+    Mismo filtro que `ventas()` -- solo `entregado`, agrupado por
+    `fecha_entrega` -- porque el recargo de un pedido que nunca salio tampoco
+    se cobro. Solo mira el portal: una `EntregaB2B` no tiene recargo, el
+    obrador no se autocobra por cargar una entrega tarde.
+
+    **Por que esto y no una `LineaVenta` mas con `producto_id = None`.** Esa
+    alternativa es menos codigo, pero obliga a que TODO consumidor de
+    `ventas()` -- los de hoy y los que vengan -- sepa saltearse una linea que
+    no es un producto antes de agrupar. El que se olvide va a meter un recargo
+    dentro de "que producto vendemos mas" sin que nadie lo note. Un recargo no
+    es un producto: no tiene unidades, no tiene receta y no tiene costo. Darle
+    su propio tipo lo deja imposible de confundir, al precio de repetir el
+    filtro de "que cuenta como entregado", que son tres lineas a la vista.
+    """
+    filas = (
+        db.query(PedidoCliente)
+        .filter(
+            PedidoCliente.estado == "entregado",
+            PedidoCliente.recargo_monto > 0,
+            PedidoCliente.fecha_entrega >= desde,
+            PedidoCliente.fecha_entrega <= hasta,
+        )
+        .all()
+    )
+    return [
+        LineaRecargo(
+            fecha=p.fecha_entrega,
+            clave_mes=_clave(p.fecha_entrega),
+            cliente_id=p.cliente_id,
+            pedido_id=p.id,
+            monto=p.recargo_monto,
+            pct=p.recargo_pct,
+        )
+        for p in filas
+    ]
 
 
 def _compras(db: Session, desde: date, hasta: date) -> list[_LineaCompra]:
@@ -405,6 +459,7 @@ class _Acum:
     # cost would inflate the margin instead of flagging the gap.
     ventas_costeadas: float = 0.0
     lineas_sin_costo: int = 0
+    recargos_express: float = 0.0
     mermas: float = 0.0
     mermas_count: int = 0
 
@@ -415,6 +470,7 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
     desde, hasta = rangos[0].inicio, rangos[-1].fin
 
     lineas_venta = ventas(db, desde, hasta)
+    lineas_recargo = recargos(db, desde, hasta)
     mermas = (
         db.query(MermaRegistro)
         .filter(MermaRegistro.fecha >= desde, MermaRegistro.fecha <= hasta)
@@ -457,6 +513,23 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
             a.cogs += cu * v.cantidad
             a.ventas_costeadas += v.monto
 
+    for r in lineas_recargo:
+        a = acum[r.clave_mes]
+        # Entra como venta del portal, que es el canal donde se cobro, y suma
+        # al facturado del cliente. NO toca `unidades` ni `por_producto`: no
+        # es una pieza vendida, y contarla ahi inflaria el ranking de
+        # productos con algo que no se produce.
+        a.ventas_portal += r.monto
+        a.recargos_express += r.monto
+        if r.cliente_id:
+            a.por_cliente[r.cliente_id] += r.monto
+        # Margen 100% y, lo que importa mas, COSTEADO: el recargo no tiene
+        # costo de mercaderia, y eso es un hecho, no un dato que falte. Si
+        # quedara fuera de `ventas_costeadas` se leeria como una linea sin
+        # costear y castigaria `cobertura_pct`, que existe para avisar de
+        # recetas incompletas. `cogs` no se toca.
+        a.ventas_costeadas += r.monto
+
     for m in mermas:
         a = acum[_clave(m.fecha)]
         a.mermas += m.coste_total or 0
@@ -478,6 +551,9 @@ def resumen_mensual(db: Session, *, meses: int = 6, hoy: date | None = None) -> 
                 "total_ars": round(ventas_total, 2),
                 "b2b_ars": round(a.ventas_b2b, 2),
                 "portal_ars": round(a.ventas_portal, 2),
+                # Ya incluido en portal_ars y en total_ars; va aparte para
+                # poder responder "cuanto vino de recargos" sin restar a mano.
+                "recargos_express_ars": round(a.recargos_express, 2),
                 "unidades": round(a.unidades, 2),
             },
             "compras_total_ars": compras["compras_total_ars"],

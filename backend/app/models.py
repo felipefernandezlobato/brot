@@ -543,7 +543,16 @@ class PedidoCliente(Base):
     fecha_entrega: Mapped[date] = mapped_column(sa.Date)
     estado: Mapped[str] = mapped_column(sa.String(20), default="pendiente")
     notas: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
+    # OJO: `total` YA INCLUYE el recargo express -- es lo que el cliente paga.
+    # Lo leen /entregas-b2b/todas, la ficha de cliente, el portal y el mail al
+    # panadero, y los cuatro quieren el cobrado, no la suma de lineas. El
+    # subtotal de productos se deriva como `total - recargo_monto`.
     total: Mapped[float] = mapped_column(sa.Float, default=0)
+    # Congelados al crear el pedido, igual que precio_unitario_snapshot: si
+    # manana el recargo sube al 7%, un pedido viejo tiene que seguir diciendo
+    # lo que de verdad se le cobro. Ver services/pedido_express.py.
+    recargo_pct: Mapped[float] = mapped_column(sa.Float, default=0, server_default="0")
+    recargo_monto: Mapped[float] = mapped_column(sa.Float, default=0, server_default="0")
     pedido_recurrente_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("pedidos_recurrentes.id"), nullable=True
     )

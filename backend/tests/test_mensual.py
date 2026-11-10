@@ -15,8 +15,10 @@ from app.models import (
     Ingrediente,
     LineaEntregaB2B,
     LineaPedido,
+    LineaPedidoCliente,
     LineaReceta,
     Pedido,
+    PedidoCliente,
     ProductoCatalogo,
     Proveedor,
     Receta,
@@ -685,3 +687,93 @@ def test_mermas_como_porcentaje_de_ventas(db):
     m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")["mermas"]
     assert m["total_ars"] == 250.0
     assert m["pct_sobre_ventas"] == 5.0
+
+
+# ── recargo express ──────────────────────────────────────────────────────────
+
+
+def _pedido_portal_con_recargo(db, producto, cliente, fecha, *, cantidad=10,
+                               precio=500, recargo=0.0, estado="entregado"):
+    subtotal = cantidad * precio
+    ped = PedidoCliente(
+        cliente_id=cliente.id, fecha_entrega=fecha, estado=estado,
+        total=subtotal + recargo, recargo_monto=recargo,
+        recargo_pct=5.0 if recargo else 0.0,
+    )
+    db.add(ped)
+    db.flush()
+    db.add(LineaPedidoCliente(
+        pedido_cliente_id=ped.id, producto_id=producto.id, cantidad=cantidad,
+        precio_unitario_snapshot=precio, subtotal=subtotal,
+    ))
+    db.flush()
+    return ped
+
+
+def test_el_recargo_express_cuenta_como_venta_del_portal(db):
+    _, _, producto, cliente = _setup(db)
+    _pedido_portal_con_recargo(db, producto, cliente, HOY, recargo=250.0)
+    db.commit()
+
+    m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")
+
+    assert m["ventas"]["portal_ars"] == 5250.0   # 5000 de producto + 250
+    assert m["ventas"]["total_ars"] == 5250.0
+    assert m["ventas"]["recargos_express_ars"] == 250.0
+
+
+def test_el_recargo_no_suma_unidades_ni_entra_en_top_productos(db):
+    """No es una pieza vendida. Contarlo como unidad inflaria el conteo y
+    meterlo en el ranking haria aparecer un "producto" que no se produce."""
+    _, _, producto, cliente = _setup(db)
+    _pedido_portal_con_recargo(db, producto, cliente, HOY, cantidad=10, recargo=250.0)
+    db.commit()
+
+    m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")
+
+    assert m["ventas"]["unidades"] == 10.0
+    assert len(m["top_productos"]) == 1
+    assert m["top_productos"][0]["monto_ars"] == 5000.0
+
+
+def test_el_recargo_es_margen_puro_y_no_castiga_la_cobertura(db):
+    """No tiene costo de mercaderia, y eso es un hecho, no un dato faltante.
+
+    Si quedara fuera de `ventas_costeadas` se leeria como una linea sin
+    costear y bajaria `cobertura_pct`, que existe para avisar de recetas
+    incompletas -- un falso positivo por cada pedido express.
+    """
+    _, _, producto, cliente = _setup(db)
+    _pedido_portal_con_recargo(db, producto, cliente, HOY, recargo=250.0)
+    db.commit()
+
+    m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")
+
+    assert m["margen"]["cobertura_pct"] == 100.0
+    assert m["margen"]["lineas_sin_costo"] == 0
+    # El costo no se movio: 10 unidades a 100 de costo (1000/10 porciones).
+    assert m["margen"]["cogs_ars"] == 1000.0
+    assert m["margen"]["bruto_ars"] == 4250.0   # 5250 - 1000
+
+
+def test_el_recargo_de_un_pedido_pendiente_no_se_factura(db):
+    _, _, producto, cliente = _setup(db)
+    _pedido_portal_con_recargo(db, producto, cliente, HOY, recargo=250.0, estado="pendiente")
+    db.commit()
+
+    m = _mes(resumen_mensual(db, meses=1, hoy=HOY), "2026-10")
+
+    assert m["ventas"]["recargos_express_ars"] == 0.0
+    assert m["ventas"]["total_ars"] == 0.0
+
+
+def test_recargos_respeta_el_rango_de_fechas(db):
+    _, _, producto, cliente = _setup(db)
+    _pedido_portal_con_recargo(db, producto, cliente, date(2026, 9, 30), recargo=100.0)
+    _pedido_portal_con_recargo(db, producto, cliente, date(2026, 10, 1), recargo=200.0)
+    db.commit()
+
+    res = resumen_mensual(db, meses=2, hoy=HOY)
+
+    assert _mes(res, "2026-09")["ventas"]["recargos_express_ars"] == 100.0
+    assert _mes(res, "2026-10")["ventas"]["recargos_express_ars"] == 200.0

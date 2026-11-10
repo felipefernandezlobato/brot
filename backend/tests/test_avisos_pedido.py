@@ -148,3 +148,57 @@ def test_formato_cantidad_no_pone_decimales_de_mas():
     assert avisos_pedido.formato_cantidad(24) == "24"
     assert avisos_pedido.formato_cantidad(24.0) == "24"
     assert avisos_pedido.formato_cantidad(1.5) == "1,50"
+
+
+# ── pedidos express ──────────────────────────────────────────────────────────
+
+
+def _hacer_pedido_express(client, db):
+    """Un pedido con 1 dia de antelacion, con "hoy" fijado.
+
+    `NEXT_WEDNESDAY` tiene un piso de 2 dias justamente para que el resto de
+    los tests NO caigan en el tramo express; aca hace falta lo contrario, y
+    por eso se fija el dia en vez de buscar una fecha que sirva.
+    """
+    from datetime import date, timedelta
+
+    from app.main import app
+    from app.routers import pedidos_clientes
+
+    entrega = date.fromisoformat(NEXT_WEDNESDAY)
+    app.dependency_overrides[pedidos_clientes._hoy] = lambda: entrega - timedelta(days=1)
+
+    admin_tok = _admin_token(client, db)
+    croissant = _create_catalog_product(client, admin_tok, nombre="Croissant", precio=1000)
+    tok = _register_and_login_cliente(client, db, email="express@test.com", nombre="Olula")
+    res = client.post(
+        "/api/cliente/pedidos",
+        json={"fecha_entrega": NEXT_WEDNESDAY,
+              "lineas": [{"producto_id": croissant["id"], "cantidad": 10}]},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert res.status_code == 201, res.text
+    return res.json()
+
+
+def test_un_pedido_express_se_marca_en_el_asunto(client, db, correos, monkeypatch):
+    """El panadero tiene que verlo sin abrir el correo: un express entra con un
+    dia de margen y es justo el que no puede esperar en la bandeja."""
+    monkeypatch.setenv("EMAIL_PANADERO", "panadero@example.com")
+    pedido = _hacer_pedido_express(client, db)
+
+    _, asunto, cuerpo = correos[0]
+    assert asunto.startswith("EXPRESS - ")
+    assert pedido["recargo_monto"] == 500.0  # 5% de 10.000
+    # El total ya lleva el recargo, y el cuerpo explica de donde sale.
+    assert "10.500,00" in cuerpo
+    assert "500,00 de recargo" in cuerpo
+
+
+def test_un_pedido_normal_no_menciona_el_recargo(client, db, correos, monkeypatch):
+    monkeypatch.setenv("EMAIL_PANADERO", "panadero@example.com")
+    _hacer_pedido(client, db)
+
+    _, asunto, cuerpo = correos[0]
+    assert not asunto.startswith("EXPRESS")
+    assert "recargo" not in cuerpo.lower()

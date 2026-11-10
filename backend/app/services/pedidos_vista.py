@@ -44,6 +44,8 @@ def construir_pedido_out(
         estado=pedido.estado,
         notas=pedido.notas,
         total=pedido.total,
+        recargo_pct=pedido.recargo_pct,
+        recargo_monto=pedido.recargo_monto,
         pedido_recurrente_id=pedido.pedido_recurrente_id,
         origen="portal",
         lineas=[
@@ -87,6 +89,10 @@ def construir_entrega_out(
         estado=entrega.estado,
         notas=entrega.notas,
         total=total,
+        # Explicitos y no por defecto: que se lea como decision ("una entrega
+        # del obrador nunca es express") y no como un campo que se olvidaron.
+        recargo_pct=0.0,
+        recargo_monto=0.0,
         pedido_recurrente_id=None,
         origen="entrega",
         lineas=[

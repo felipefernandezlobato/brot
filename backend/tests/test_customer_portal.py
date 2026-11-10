@@ -15,6 +15,7 @@ from app.models import (
     StockCongelado,
     User,
 )
+from app.services.pedido_express import DIAS_ANTICIPACION_NORMAL
 from app.routers import (
     catalogo,
     catalogo_admin,
@@ -37,11 +38,24 @@ app.include_router(entregas_b2b.router)
 # Date helpers
 # ---------------------------------------------------------------------------
 
-def _next_weekday(weekday: int) -> str:
-    """Return YYYY-MM-DD of the next occurrence of `weekday` (Mon=0 … Sun=6)."""
+def _next_weekday(weekday: int, dias_minimos: int = DIAS_ANTICIPACION_NORMAL) -> str:
+    """Return YYYY-MM-DD of the next occurrence of `weekday` (Mon=0 … Sun=6),
+    at least `dias_minimos` days out.
+
+    The floor exists because of the express surcharge. The literal "next"
+    occurrence can land TOMORROW -- next Wednesday is tomorrow if today is
+    Tuesday -- which is now a 1-day-ahead express order and gets charged 5%.
+    Every test here that asserts an exact total (and three in
+    test_avisos_pedido.py) would then fail on Tuesdays and Fridays only: a
+    2-in-7 flake with nothing in the failure pointing at the day of the week.
+
+    Tests that WANT the express path pin "today" via the `_hoy` dependency
+    override instead of hoping the suite runs on the right weekday -- see
+    tests/test_recargo_express.py.
+    """
     today = date.today()
     days_ahead = weekday - today.weekday()
-    if days_ahead <= 0:
+    while days_ahead < dias_minimos:
         days_ahead += 7
     return (today + timedelta(days=days_ahead)).isoformat()
 

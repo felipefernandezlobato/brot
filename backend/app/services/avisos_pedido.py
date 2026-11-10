@@ -62,6 +62,7 @@ def avisar_pedido_nuevo(
     fecha_pedido: datetime,
     lineas: list[tuple[str, float]],
     total: float,
+    recargo_monto: float = 0.0,
     notas: str | None = None,
 ) -> bool:
     """Le avisa al panadero de un pedido nuevo del portal.
@@ -101,6 +102,14 @@ Lo que hay que preparar:
 
   Total: $ {formato_pesos(total)}
 """
+    if recargo_monto:
+        # Sin esta linea el total no cuadra con la suma a ojo de las
+        # cantidades y el panadero se queda pensando de donde sale la
+        # diferencia.
+        cuerpo += (
+            f"  (incluye $ {formato_pesos(recargo_monto)} de recargo por pedido"
+            " express, con 1 dia de anticipacion)\n"
+        )
     if notas:
         cuerpo += f"\nNota del cliente:\n  {notas}\n"
     cuerpo += f"""
@@ -114,7 +123,11 @@ BROT La Panaderia
     resultados = [
         enviar_email(
             destino,
-            f"Pedido de {cliente} para el {formato_fecha(fecha_entrega)}",
+            # El prefijo va en el asunto para que se vea sin abrir el correo:
+            # un express entra con un dia de margen y es justo el que no puede
+            # esperar a que alguien lea la bandeja con calma.
+            ("EXPRESS - " if recargo_monto else "")
+            + f"Pedido de {cliente} para el {formato_fecha(fecha_entrega)}",
             cuerpo,
         )
         for destino in destinos
