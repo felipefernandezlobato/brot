@@ -27,6 +27,16 @@ interface CartItem {
   cantidad: number;
 }
 
+/** Lo que manda GET /api/cliente/pedidos/config. El porcentaje NO se escribe
+ *  aca: viene del backend, que es el que lo cobra. `hoy` tambien, para que el
+ *  calendario no clasifique los dias con el reloj del dispositivo -- un reloj
+ *  mal puesto habilitaria fechas que el servidor va a rechazar. */
+interface PedidoConfig {
+  recargo_express_pct: number;
+  dias_anticipacion_normal: number;
+  hoy: string;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function toLocalISODate(d: Date): string {
@@ -41,11 +51,26 @@ function isDeliveryDay(d: Date): boolean {
   return dow === 3 || dow === 6; // Wed or Sat
 }
 
-function getMinDeliveryDate(): Date {
-  const d = new Date();
-  d.setHours(d.getHours() + 48);
-  d.setHours(0, 0, 0, 0);
-  return d;
+/** Dias enteros entre dos fechas ISO. Via Date.UTC para que ningun cambio de
+ *  huso ni de horario de verano pueda convertir una diferencia de 1 dia en
+ *  0,958. */
+function margenDias(iso: string, hoyIso: string): number {
+  const [hy, hm, hd] = hoyIso.split("-").map(Number);
+  const [y, m, d] = iso.split("-").map(Number);
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(hy, hm - 1, hd)) / 86400000);
+}
+
+type Tramo = "pasada" | "express" | "normal";
+
+/** Los mismos tres tramos que `evaluar()` en services/pedido_express.py. El
+ *  umbral de dias y el "hoy" llegan desde el backend (`/pedidos/config`) para
+ *  que las dos mitades no puedan discrepar; lo unico que se repite aca es la
+ *  comparacion, que es aritmetica de UI. */
+function tramoDe(iso: string, hoyIso: string, diasNormal: number): Tramo {
+  const margen = margenDias(iso, hoyIso);
+  if (margen < 1) return "pasada";
+  if (margen < diasNormal) return "express";
+  return "normal";
 }
 
 function buildCalendarWeeks(): Date[][] {
@@ -105,6 +130,7 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
   const [fechaEntrega, setFechaEntrega] = useState("");
   const [showCart, setShowCart] = useState(false);
   const [placing, setPlacing] = useState(false);
+  const [config, setConfig] = useState<PedidoConfig | null>(null);
 
   const calendarWeeks = useMemo(() => buildCalendarWeeks(), []);
 
@@ -114,19 +140,27 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
     return d;
   }, []);
 
-  const minDelivery = useMemo(() => getMinDeliveryDate(), []);
+  // El "hoy" y el umbral salen del backend; mientras no llegue la respuesta se
+  // usa el reloj del navegador y 2 dias, que es como se comportaba antes de
+  // que existiera el tramo express. Asi un /config caido (Render free tier
+  // duerme y el primer request tarda) deja el portal funcionando como siempre
+  // en vez de bloquear el alta de pedidos.
+  const hoyIso = config?.hoy ?? toLocalISODate(today);
+  const diasNormal = config?.dias_anticipacion_normal ?? 2;
 
-  // Auto-select first available delivery date (48h minimum)
+  // Auto-selecciona la primera fecha SIN recargo. El express tiene que ser una
+  // eleccion del cliente, nunca un default que se encuentre ya puesto.
   useEffect(() => {
     for (const week of calendarWeeks) {
       for (const day of week) {
-        if (isDeliveryDay(day) && day >= minDelivery) {
-          setFechaEntrega(toLocalISODate(day));
+        const iso = toLocalISODate(day);
+        if (isDeliveryDay(day) && tramoDe(iso, hoyIso, diasNormal) === "normal") {
+          setFechaEntrega(iso);
           return;
         }
       }
     }
-  }, [calendarWeeks, minDelivery]);
+  }, [calendarWeeks, hoyIso, diasNormal]);
 
   const loadProductos = useCallback(() => {
     setLoadingProductos(true);
@@ -142,6 +176,23 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
   useEffect(() => {
     loadProductos();
   }, [loadProductos]);
+
+  const cargarConfig = useCallback(
+    () =>
+      apiClienteFetch<PedidoConfig>("/api/cliente/pedidos/config")
+        .then(setConfig)
+        // Sin toast: el portal sigue andando con los valores por defecto (ver
+        // `hoyIso`/`diasNormal`), asi que no hay nada que el cliente pueda
+        // hacer con el aviso salvo preocuparse. Lo que si cambia es que el
+        // tramo express queda deshabilitado, porque sin el porcentaje no se le
+        // puede decir cuanto va a pagar.
+        .catch(() => setConfig(null)),
+    []
+  );
+
+  useEffect(() => {
+    cargarConfig();
+  }, [cargarConfig]);
 
   // Group products by category
   const productsByCategory = useMemo(() => {
@@ -187,6 +238,15 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
     [cart]
   );
 
+  // El tramo de la fecha elegida, y lo que cuesta. El numero autoritativo lo
+  // calcula el backend al crear el pedido; esto es la vista previa, con el
+  // mismo porcentaje que el servidor va a usar y nunca un 0,05 escrito aca.
+  const esExpress =
+    fechaEntrega !== "" && tramoDe(fechaEntrega, hoyIso, diasNormal) === "express";
+  const recargoPct = config?.recargo_express_pct ?? 0;
+  const recargoMonto = esExpress ? Math.round(cartTotal * recargoPct) / 100 : 0;
+  const totalConRecargo = cartTotal + recargoMonto;
+
   const handlePlaceOrder = async () => {
     if (cart.length === 0) {
       toast("Agrega al menos un producto", "error");
@@ -195,6 +255,19 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
     if (!fechaEntrega) {
       toast("Selecciona una fecha de entrega", "error");
       return;
+    }
+    // Segunda capa sobre el aviso del calendario: el cliente pudo elegir la
+    // fecha y seguir comprando un rato, con el aviso ya fuera de pantalla.
+    // Nadie deberia enterarse del recargo al ver la factura.
+    if (esExpress) {
+      const ok = window.confirm(
+        `Pedido express para el ${formatDateShort(fechaEntrega)}.\n\n` +
+          `Productos: ${formatPrice(cartTotal)}\n` +
+          `Recargo express (${recargoPct}%): ${formatPrice(recargoMonto)}\n` +
+          `Total: ${formatPrice(totalConRecargo)}\n\n` +
+          `¿Confirmas el pedido?`
+      );
+      if (!ok) return;
     }
     setPlacing(true);
     try {
@@ -216,6 +289,12 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error al realizar el pedido";
       toast(msg, "error");
+      // Borde real: la pestana quedo abierta y cruzo la medianoche, asi que la
+      // fecha elegida ya no tiene la antelacion que tenia al elegirla. Se
+      // relee el "hoy" del servidor y se suelta la fecha, para que el cliente
+      // tenga que elegir una vigente en vez de reintentar contra la rechazada.
+      cargarConfig();
+      setFechaEntrega("");
     } finally {
       setPlacing(false);
     }
@@ -275,24 +354,38 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
                 const iso = toLocalISODate(day);
                 const delivery = isDeliveryDay(day);
                 const past = day < today;
-                const tooSoon = day < minDelivery;
+                const tramo = tramoDe(iso, hoyIso, diasNormal);
                 const selected = iso === fechaEntrega;
-                const selectable = delivery && !past && !tooSoon;
+                // Un dia express no se habilita hasta saber el porcentaje: es
+                // preferible esperar a /config unos milisegundos antes que
+                // dejar confirmar un recargo que nunca se le mostro.
+                const expressDisponible = tramo === "express" && config !== null;
+                const selectable =
+                  delivery && (tramo === "normal" || expressDisponible);
 
                 return (
                   <button
                     key={iso}
                     disabled={!selectable}
                     onClick={() => selectable && setFechaEntrega(iso)}
+                    title={
+                      expressDisponible
+                        ? `Entrega express: +${recargoPct}% de recargo`
+                        : undefined
+                    }
                     className={`
                       py-2 rounded-lg text-sm transition-colors min-h-[40px]
                       ${selected
-                        ? "bg-brot text-white font-semibold"
-                        : selectable
-                          ? "bg-brot/10 text-brot font-medium hover:bg-brot/20"
-                          : past
-                            ? "text-warm-gray/20"
-                            : "text-warm-gray/40"
+                        ? expressDisponible
+                          ? "bg-amber-500 text-white font-semibold"
+                          : "bg-brot text-white font-semibold"
+                        : expressDisponible
+                          ? "bg-amber-100 text-amber-800 font-medium hover:bg-amber-200"
+                          : selectable
+                            ? "bg-brot/10 text-brot font-medium hover:bg-brot/20"
+                            : past
+                              ? "text-warm-gray/20"
+                              : "text-warm-gray/40"
                       }
                       ${toLocalISODate(day) === toLocalISODate(today) ? "ring-1 ring-warm-gray/30" : ""}
                     `}
@@ -308,6 +401,23 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
             <p className="text-sm text-brot font-medium mt-3 capitalize">
               Entrega: {formatDateShort(fechaEntrega)}
             </p>
+          )}
+
+          {/* Visible todo el tiempo que la fecha este elegida, no un toast que
+              se pierde: el cliente puede elegir el dia y bajar al carrito un
+              rato despues. */}
+          {esExpress && (
+            <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <p className="text-sm font-medium text-amber-900">
+                Pedido express &middot; recargo del {recargoPct}%
+              </p>
+              <p className="text-xs text-amber-800 mt-1">
+                Estas pidiendo con un dia de anticipacion. Se suma un{" "}
+                {recargoPct}% al total
+                {cartTotal > 0 && <> ({formatPrice(recargoMonto)} sobre tu pedido actual)</>}.
+                Para no pagarlo, elegi una fecha con {diasNormal} dias o mas.
+              </p>
+            </div>
           )}
         </div>
 
@@ -433,7 +543,18 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
               </span>
               {showCart ? "Ocultar carrito" : "Ver carrito"}
             </button>
-            <span className="font-semibold text-brot">{formatPrice(cartTotal)}</span>
+            {esExpress ? (
+              <span className="text-right leading-tight">
+                <span className="block font-semibold text-brot">
+                  {formatPrice(totalConRecargo)}
+                </span>
+                <span className="block text-xs text-amber-700">
+                  incluye +{recargoPct}% express
+                </span>
+              </span>
+            ) : (
+              <span className="font-semibold text-brot">{formatPrice(cartTotal)}</span>
+            )}
             <button
               onClick={handlePlaceOrder}
               disabled={placing}
@@ -485,6 +606,24 @@ function ClienteDashboard({ cliente }: { cliente: Cliente }) {
                   </div>
                 ))}
               </div>
+              {/* Desglose solo cuando hay recargo: si no, el total de arriba
+                  ya es la suma de las lineas y repetirlo no agrega nada. */}
+              {esExpress && (
+                <div className="mt-2 pt-2 border-t border-cream-dark space-y-1 text-sm">
+                  <div className="flex justify-between text-warm-gray">
+                    <span>Productos</span>
+                    <span className="tabular-nums">{formatPrice(cartTotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-amber-700">
+                    <span>Recargo express ({recargoPct}%)</span>
+                    <span className="tabular-nums">+{formatPrice(recargoMonto)}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-text">
+                    <span>Total</span>
+                    <span className="tabular-nums">{formatPrice(totalConRecargo)}</span>
+                  </div>
+                </div>
+              )}
               {fechaEntrega && (
                 <p className="text-xs text-warm-gray mt-2 capitalize">
                   Entrega: {formatDateShort(fechaEntrega)}
