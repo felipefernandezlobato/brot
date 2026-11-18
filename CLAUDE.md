@@ -1024,6 +1024,57 @@ The 24 duplicate rows were removed through `DELETE /api/congelados/{id}` (all in
 
 **Open, not fixed:** logging production dated BEFORE an existing count inflates the saldo. `reconciliar_lotes_tras_conteo` only sweeps lots with `id < nuevo_lote.id`, so a backdated production entered *after* a count is never swept even though its `fecha_entrada` precedes the count — the count already reflected that stock. Found 2026-10-01 on Barra Blanca Cocinado: counted 17 on 01/10, then 27 units dated 29/09 logged at 16:53, leaving saldo 44 against a correct calculado of 17.
 
+### Un conteo de congelado que llega DÍAS tarde se carga como registro, no como lote (2026-11-18)
+
+El conteo semanal del 12/11 llegó el 17. Cargarlo por `add_stock_congelado`
+fechado el 12 **infla la estantería en 874 unidades** — Medialunas 254 → 524,
+Croissant 193 → 383, Ensaimada Amasada 91 → 159. Medido con una simulación con
+rollback (`db.commit = db.flush` para neutralizar el commit del endpoint),
+no deducido.
+
+**El mecanismo, con el Croissant, porque la explicación obvia es la
+equivocada.** El lote del 10/11 entró con 225 y le quedan 39: las 186 que
+salieron del 14 al 18 están restadas *adentro* de ese lote. Entra el conteo del
+12 y `reconciliar_lotes_tras_conteo` apaga el lote del 10 — y eso **está bien**,
+el conteo del 12 ya incluía esos 225. Lo que se pierde no es la producción del
+10, es **la salida del 14**: su resta se va con el lote apagado y nadie la
+vuelve a aplicar sobre los 229 nuevos. Queda `229 + 79 + 75 = 383`.
+
+O sea: **el calculado sí recalcula desde la base nueva** (re-ancla al día
+siguiente del conteo y re-aplica cada movimiento), **la pila de lotes no
+recalcula nunca** — apaga lo viejo, apila lo nuevo y sigue. Nunca mordió antes
+porque todos los conteos se cargaron el mismo día o al siguiente, cuando no
+había nada después que re-aplicar. Es la misma familia que el incidente del
+13/10 y se arregla igual de mal: solo contando otra vez.
+
+**La forma que sí sirve** (`scripts/cargar_conteo_1211.py`): la fila se escribe
+con `cantidad=0`, `cantidad_original=lo contado`, `is_active=False`. No es una
+forma nueva — es exactamente la que tienen hoy las 47 filas del conteo del
+05/11, porque un lote de conteo termina en 0 e inactivo en cuanto el FIFO se lo
+come; la única diferencia es que este nace así, que es la verdad (su stock lleva
+seis días consumido). Con eso:
+- queda en el historial, con su `(contado)` en el pivot de ese día;
+- **`conteos_manuales_por_fecha` NO filtra por `is_active`**, así que el
+  calculado re-ancla igual — esa es la pieza que hace que esto funcione;
+- `get_saldos_congelado` **sí** filtra por `is_active`, así que la estantería no
+  se mueve ni un gramo.
+Re-anclar la estantería es trabajo del próximo conteo físico, que es el
+mecanismo que existe para eso.
+
+**La materia prima no tiene nada de esto y se carga normal, fechada al día
+real.** No hay lotes: `get_saldo_materia_prima` (escritura) se queda con la fila
+de `fecha_registro` más alta, y como ya hay filas posteriores el conteo
+backdateado no pasa a ser la punta; `get_saldos_materia_prima` (lectura) va por
+el ledger y re-ancla sola. El stock de hoy queda en "lo contado + lo que se
+movió desde el día siguiente", que es lo correcto.
+
+**Lo que el conteo del 12/11 reveló, de paso:** el calculado coincidía con lo
+contado en 44 de 47 congelados y en 22 de 22 ingredientes salvo centésimas. Las
+diferencias reales eran Cinnamon Roll Cocinado 18 contra 44 (**faltan 26**),
+Medialunas −1, Pan de Choco −1, Harina Salvado −2,2 kg, Harina Integral +1 kg y
+Sal −0,49 kg. Tras la carga esas tres quedan como discrepancia visible entre
+calculado y estantería, que es exactamente para lo que sirve contar.
+
 ### Typed quantities go through `parseCantidad`, never a bare `parseFloat` (fixed 2026-10-01)
 Saving a stock count failed with a raw Pydantic dump (`"Input should be a valid number", input: null`) that never said WHICH ingredient — brutal with ~29 boxes in a long grid. The submit filter only dropped empty strings, so any non-numeric text passed, `parseFloat` returned `NaN`, and `JSON.stringify` turned it into `null`.
 `parseCantidad` / `limpiarCantidad` in `lib/format.ts` are now the single place a typed quantity is interpreted. The input accepts only digits and one dot (still taking the Argentine comma and intermediate states like `"0."`), and every submit validates first and names the offending rows.
